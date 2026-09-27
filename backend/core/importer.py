@@ -1,0 +1,465 @@
+"""CSV / Excel import: upload → match columns → check rows and duplicates → import.
+
+The parsed file is kept on disk under DATA_DIR/imports/<token>.json between steps.
+Cell text is turned into the same shape the API accepts, then validated with the same
+rules as the forms, so an imported record is indistinguishable from a typed one.
+"""
+
+from __future__ import annotations
+
+import csv
+import datetime as dt
+import io
+import json
+import re
+import secrets
+import time
+
+from django.conf import settings
+from django.contrib.auth import get_user_model
+
+from .models import ChoiceList, ChoiceOption
+from .records import FieldError, apply_values, clean_values
+from .registry import CURRENCIES, FieldDef, ModuleDef
+
+User = get_user_model()
+
+MAX_ROWS = 20_000
+TOKEN_TTL = 24 * 3600
+CU_SUFFIX = ":cu"  # mapping target for a column holding a money field's currency + unit ("INR Cr")
+
+
+class ImportError_(Exception):
+    pass
+
+
+# ---------------------------------------------------------------- reading files
+
+
+def _cell_to_str(v):
+    if v is None:
+        return ""
+    if isinstance(v, dt.datetime):
+        return v.date().isoformat() if v.time() == dt.time() else v.isoformat()
+    if isinstance(v, dt.date):
+        return v.isoformat()
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v).strip()
+
+
+def read_rows(filename: str, data: bytes) -> list[list[str]]:
+    name = filename.lower()
+    if name.endswith(".xlsx") or name.endswith(".xlsm"):
+        from openpyxl import load_workbook
+
+        try:
+            wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+        except Exception:
+            raise ImportError_("This Excel file couldn't be opened. Save it as .xlsx and try again.")
+        ws = wb.worksheets[0]
+        rows = [[_cell_to_str(c) for c in row] for row in ws.iter_rows(values_only=True)]
+        wb.close()
+    elif name.endswith(".csv") or name.endswith(".txt"):
+        for enc in ("utf-8-sig", "cp1252", "latin-1"):
+            try:
+                text = data.decode(enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        try:
+            dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;\t")
+        except csv.Error:
+            dialect = csv.excel
+        rows = [[c.strip() for c in r] for r in csv.reader(io.StringIO(text), dialect)]
+    elif name.endswith(".xls"):
+        raise ImportError_("Old .xls files aren't supported. Save the sheet as .xlsx or .csv and try again.")
+    else:
+        raise ImportError_("Upload a .csv or .xlsx file.")
+
+    rows = [r for r in rows if any(c for c in r)]
+    if not rows:
+        raise ImportError_("The file is empty.")
+    width = max(len(r) for r in rows)
+    rows = [r + [""] * (width - len(r)) for r in rows]
+    # Drop columns that are empty all the way down (including the header).
+    keep = [i for i in range(width) if any(r[i] for r in rows)]
+    rows = [[r[i] for i in keep] for r in rows]
+    if len(rows) - 1 > MAX_ROWS:
+        raise ImportError_(f"Files are limited to {MAX_ROWS:,} rows. Split the file and import in parts.")
+    return rows
+
+
+# ---------------------------------------------------------------- storing between steps
+
+
+def _path(token):
+    if not re.fullmatch(r"[A-Za-z0-9_-]{20,64}", token or ""):
+        raise ImportError_("This import has expired. Upload the file again.")
+    return settings.IMPORT_DIR / f"{token}.json"
+
+
+def save_upload(module_key: str, user, filename: str, rows) -> str:
+    settings.IMPORT_DIR.mkdir(parents=True, exist_ok=True)
+    now = time.time()
+    for old in settings.IMPORT_DIR.glob("*.json"):
+        if now - old.stat().st_mtime > TOKEN_TTL:
+            old.unlink(missing_ok=True)
+    token = secrets.token_urlsafe(24)
+    _path(token).write_text(
+        json.dumps({"module": module_key, "user": user.pk, "filename": filename, "rows": rows})
+    )
+    return token
+
+
+def load_upload(token: str, module_key: str, user) -> dict:
+    p = _path(token)
+    if not p.exists():
+        raise ImportError_("This import has expired. Upload the file again.")
+    data = json.loads(p.read_text())
+    if data["module"] != module_key or data["user"] != user.pk:
+        raise ImportError_("This import belongs to someone else.")
+    return data
+
+
+def discard_upload(token: str):
+    try:
+        _path(token).unlink(missing_ok=True)
+    except ImportError_:
+        pass
+
+
+# ---------------------------------------------------------------- column matching
+
+
+def _norm(s: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+
+
+_CUR_WORDS = {
+    "₹": "INR", "rs": "INR", "inr": "INR", "rupees": "INR",
+    "$": "USD", "usd": "USD", "us$": "USD",
+    "€": "EUR", "eur": "EUR", "£": "GBP", "gbp": "GBP",
+}
+for _code, _sym in CURRENCIES:
+    _CUR_WORDS.setdefault(_code.lower(), _code)
+    _CUR_WORDS.setdefault(_sym.lower(), _code)
+
+_UNIT_WORDS = {
+    "k": "K", "thousand": "K", "thousands": "K", "000s": "K",
+    "lakh": "Lakh", "lakhs": "Lakh", "lac": "Lakh", "lacs": "Lakh", "l": "Lakh",
+    "mn": "Mn", "m": "Mn", "million": "Mn", "millions": "Mn", "mm": "Mn",
+    "cr": "Cr", "crore": "Cr", "crores": "Cr", "crs": "Cr",
+    "bn": "Bn", "b": "Bn", "billion": "Bn", "billions": "Bn",
+}
+
+
+def money_hint(text: str) -> dict:
+    """Currency and unit found in text like 'Min ticket ($ Mn)' or 'INR Cr'."""
+    low = (text or "").lower()
+    cur = ""
+    for sym in ("us$", "₹", "$", "€", "£"):
+        if sym in low:
+            cur = _CUR_WORDS[sym]
+            break
+    tokens = re.findall(r"[a-z$€£₹]+", low)
+    if not cur:
+        for t in tokens:
+            if t in _CUR_WORDS and len(t) > 1:
+                cur = _CUR_WORDS[t]
+                break
+    unit = ""
+    for t in tokens:
+        if t in _UNIT_WORDS and not (t in ("m", "b", "l") and len(tokens) > 3):
+            unit = _UNIT_WORDS[t]
+    return {"currency": cur, "unit": unit}
+
+
+def suggest_mapping(mod: ModuleDef, headers: list[str], enabled: dict) -> list[dict]:
+    """One entry per column: {field, currency, unit} (field may be None = don't import)."""
+    candidates = {}
+    for f in mod.fields:
+        if not enabled.get(f.key, True):
+            continue
+        for name in [f.label, f.key, *f.aliases]:
+            candidates.setdefault(_norm(name), f.key)
+    used = set()
+    out = []
+    for h in headers:
+        n = _norm(re.sub(r"\(.*?\)", "", h)) or _norm(h)
+        key = candidates.get(n) or candidates.get(_norm(h))
+        if not key:
+            # A companion "… currency" column for a money field we already matched.
+            m = re.match(r"(.*?)(currency|unit|currencyunit)$", n)
+            if m and candidates.get(m.group(1)) and mod.field_map[candidates[m.group(1)]].type == "money":
+                cu = candidates[m.group(1)] + CU_SUFFIX
+                if cu not in used:
+                    used.add(cu)
+                    out.append({"field": cu, "currency": "", "unit": ""})
+                    continue
+        if key and key not in used:
+            used.add(key)
+            hint = money_hint(h) if mod.field_map[key].type == "money" else {"currency": "", "unit": ""}
+            out.append({"field": key, **hint})
+        else:
+            out.append({"field": None, "currency": "", "unit": ""})
+    return out
+
+
+# ---------------------------------------------------------------- cell → API value
+
+
+def _split(raw: str) -> list[str]:
+    return [p.strip() for p in re.split(r"[;,\n|]", raw) if p.strip()]
+
+
+def parse_money(raw: str, default_currency="", default_unit="") -> dict:
+    s = raw.strip()
+    if not s:
+        return {"amount": None, "currency": "", "unit": ""}
+    num = re.search(r"-?\d[\d,]*(\.\d+)?|-?\.\d+", s)
+    if not num:
+        raise FieldError(f"“{raw}” isn't an amount.")
+    amount = num.group(0).replace(",", "")
+    rest = (s[: num.start()] + " " + s[num.end():]).strip()
+    hint = money_hint(rest)
+    return {
+        "amount": amount,
+        "currency": hint["currency"] or default_currency,
+        "unit": hint["unit"] or default_unit,
+    }
+
+
+_MONTHS = {m: i for i, m in enumerate(
+    ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], start=1)}
+
+
+def parse_date(raw: str, user_format: str) -> str:
+    s = raw.strip()
+    if not s:
+        return ""
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}.*", s):
+        return s[:10]
+    m = re.fullmatch(r"(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})", s)
+    if m:
+        a, b, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if y < 100:
+            y += 2000
+        d, mo = (b, a) if user_format == "MM/DD/YYYY" else (a, b)
+        try:
+            return dt.date(y, mo, d).isoformat()
+        except ValueError:
+            raise FieldError(f"“{raw}” isn't a valid date.")
+    m = re.fullmatch(r"(\d{1,2})[\s-]([A-Za-z]{3,9})[\s,-]+(\d{2,4})", s)
+    if m and m.group(2)[:3].lower() in _MONTHS:
+        y = int(m.group(3)) + (2000 if len(m.group(3)) == 2 else 0)
+        try:
+            return dt.date(y, _MONTHS[m.group(2)[:3].lower()], int(m.group(1))).isoformat()
+        except ValueError:
+            pass
+    m = re.fullmatch(r"([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{4})", s)
+    if m and m.group(1)[:3].lower() in _MONTHS:
+        try:
+            return dt.date(int(m.group(3)), _MONTHS[m.group(1)[:3].lower()], int(m.group(2))).isoformat()
+        except ValueError:
+            pass
+    if re.fullmatch(r"\d{5}(\.\d+)?", s):  # Excel serial number that slipped through as text
+        return (dt.date(1899, 12, 30) + dt.timedelta(days=int(float(s)))).isoformat()
+    raise FieldError(f"“{raw}” isn't a date we can read.")
+
+
+class RowContext:
+    """Lookups shared by all rows of one import."""
+
+    def __init__(self, mod: ModuleDef, user, add_missing_options: bool):
+        self.mod = mod
+        self.user = user
+        self.add_missing = add_missing_options and user.has_flag("manage_settings")
+        self.options: dict[str, dict[str, ChoiceOption]] = {}
+        for f in mod.fields:
+            if f.type == "dropdown" and f.choice_list not in self.options:
+                self.options[f.choice_list] = {
+                    o.label.strip().lower(): o
+                    for o in ChoiceOption.objects.filter(choice_list__key=f.choice_list).order_by("-is_active")
+                }
+        self.users = {}
+        for u in User.objects.all():
+            self.users[u.full_name.strip().lower()] = u
+            self.users[u.email.lower()] = u
+        self.pending_new: dict[str, set[str]] = {}
+
+    def option(self, f: FieldDef, label: str, warnings: list, commit: bool):
+        key = label.strip().lower()
+        opt = self.options[f.choice_list].get(key)
+        if opt and opt.is_active:
+            return opt.pk
+        if opt and not opt.is_active:
+            warnings.append(f"{f.label}: “{label}” was removed from the list, left blank.")
+            return None
+        if self.add_missing:
+            if commit:
+                cl = ChoiceList.objects.get(key=f.choice_list)
+                last = cl.options.order_by("-order").first()
+                opt = ChoiceOption.objects.create(
+                    choice_list=cl, label=label.strip()[:120], order=(last.order + 1) if last else 0
+                )
+                self.options[f.choice_list][key] = opt
+                return opt.pk
+            self.pending_new.setdefault(f.label, set()).add(label.strip())
+            return None
+        warnings.append(f"{f.label}: “{label}” isn't in the list, left blank.")
+        return None
+
+
+def row_to_data(row: list[str], mapping: list[dict], ctx: RowContext, commit=False):
+    """Turn one row of cells into API-shaped data. Returns (data, errors, warnings)."""
+    data, errors, warnings = {}, {}, []
+    cu_values = {}
+    for i, m in enumerate(mapping):
+        target = m.get("field")
+        if target and target.endswith(CU_SUFFIX) and i < len(row):
+            cu_values[target[: -len(CU_SUFFIX)]] = money_hint(row[i])
+    for i, m in enumerate(mapping):
+        key = m.get("field")
+        if not key or key.endswith(CU_SUFFIX) or i >= len(row):
+            continue
+        raw = row[i]
+        f = ctx.mod.field_map[key]
+        try:
+            if f.type == "money":
+                # currency/unit priority: in the cell → companion column → column default
+                cu = cu_values.get(key, {})
+                val = parse_money(raw, cu.get("currency") or m.get("currency", ""), cu.get("unit") or m.get("unit", ""))
+                if val["amount"] is not None and not val["currency"]:
+                    raise FieldError("No currency. Set one for this column in the matching step.")
+                data[key] = val
+            elif f.type == "dropdown":
+                labels = _split(raw) if f.multi else ([raw.strip()] if raw.strip() else [])
+                ids = [pk for lbl in labels if (pk := ctx.option(f, lbl, warnings, commit))]
+                data[key] = ids if f.multi else (ids[0] if ids else None)
+            elif f.type == "user":
+                if raw.strip():
+                    u = ctx.users.get(raw.strip().lower())
+                    if u:
+                        data[key] = u.pk
+                    else:
+                        warnings.append(f"{f.label}: no user called “{raw}”, left blank.")
+                        data[key] = None
+                else:
+                    data[key] = None
+            elif f.type == "date":
+                data[key] = parse_date(raw, ctx.user.date_format)
+            elif f.type == "tags":
+                data[key] = _split(raw)
+            elif f.type in ("integer", "decimal", "percent"):
+                data[key] = raw.replace("%", "").replace(",", "").strip()
+            else:
+                data[key] = raw
+        except FieldError as e:
+            errors[key] = str(e)
+    return data, errors, warnings
+
+
+# ---------------------------------------------------------------- check and import
+
+
+def _existing_keys(mod: ModuleDef) -> dict[str, list[tuple[int, str]]]:
+    index: dict[str, list[tuple[int, str]]] = {}
+    if not mod.duplicate_keys:
+        return index
+    text_fields = [f.key for f in mod.fields if f.type in ("text", "url", "email", "phone")]
+    for rec in mod.model.objects.filter(archived_at__isnull=True).values("pk", *text_fields):
+        for k in mod.duplicate_keys(rec):
+            index.setdefault(k, []).append((rec["pk"], rec[mod.title_field]))
+    return index
+
+
+def check_rows(mod: ModuleDef, rows, mapping, user, enabled, add_missing_options=False) -> dict:
+    ctx = RowContext(mod, user, add_missing_options)
+    existing = _existing_keys(mod)
+    seen_in_file: dict[str, int] = {}
+    results = []
+    for n, row in enumerate(rows, start=2):  # row 1 is the header
+        data, errors, warnings = row_to_data(row, mapping, ctx)
+        _, v_errors = clean_values(mod, {k: v for k, v in data.items() if k not in errors}, enabled=enabled)
+        for k, msg in v_errors.items():
+            errors.setdefault(k, msg)
+        dup_of, dup_row = [], None
+        if mod.duplicate_keys:
+            for k in mod.duplicate_keys({key: v for key, v in data.items() if isinstance(v, str)}):
+                for pk, title in existing.get(k, []):
+                    if all(d["id"] != pk for d in dup_of):
+                        dup_of.append({"id": pk, "title": title})
+                if k in seen_in_file and dup_row is None:
+                    dup_row = seen_in_file[k]
+                seen_in_file.setdefault(k, n)
+        results.append(
+            {
+                "row": n,
+                "title": data.get(mod.title_field) or "",
+                "errors": {mod.field_map[k].label if k in mod.field_map else k: v for k, v in errors.items()},
+                "warnings": warnings,
+                "duplicate_of": dup_of,
+                "duplicate_of_row": dup_row,
+            }
+        )
+    summary = {
+        "total": len(results),
+        "ok": sum(1 for r in results if not r["errors"] and not r["duplicate_of"] and not r["duplicate_of_row"]),
+        "with_errors": sum(1 for r in results if r["errors"]),
+        "duplicates": sum(1 for r in results if not r["errors"] and (r["duplicate_of"] or r["duplicate_of_row"])),
+        "new_options": {k: sorted(v) for k, v in ctx.pending_new.items()},
+    }
+    return {"summary": summary, "rows": results}
+
+
+def commit_rows(mod: ModuleDef, rows, mapping, user, enabled, include_rows: set[int], add_missing_options=False):
+    """Create a record for every row number in include_rows that validates."""
+    ctx = RowContext(mod, user, add_missing_options)
+    created, failed = 0, []
+    for n, row in enumerate(rows, start=2):
+        if n not in include_rows:
+            continue
+        data, errors, _ = row_to_data(row, mapping, ctx, commit=True)
+        values, v_errors = clean_values(mod, {k: v for k, v in data.items() if k not in errors}, enabled=enabled)
+        errors.update(v_errors)
+        if errors:
+            failed.append({"row": n, "errors": errors})
+            continue
+        apply_values(mod.model(), mod, values, user)
+        created += 1
+    return {"created": created, "failed": failed, "skipped": len(rows) - created - len(failed)}
+
+
+def validate_mapping(mod: ModuleDef, mapping, width: int, enabled: dict) -> list[dict]:
+    if not isinstance(mapping, list) or len(mapping) != width:
+        raise ImportError_("Column matching doesn't fit this file. Upload it again.")
+    clean, used = [], set()
+    for m in mapping:
+        key = (m or {}).get("field") or None
+        if key:
+            base = key[: -len(CU_SUFFIX)] if key.endswith(CU_SUFFIX) else key
+            if base not in mod.field_map or not enabled.get(base, True):
+                raise ImportError_(f"Unknown field {key}.")
+            if key.endswith(CU_SUFFIX) and mod.field_map[base].type != "money":
+                raise ImportError_(f"Unknown field {key}.")
+            if key in used:
+                raise ImportError_(f"Two columns are matched to {mod.field_map[base].label}. Pick one.")
+            used.add(key)
+        clean.append({"field": key, "currency": (m or {}).get("currency", ""), "unit": (m or {}).get("unit", "")})
+    if mod.title_field not in used:
+        raise ImportError_(f"Match a column to {mod.field_map[mod.title_field].label}; it's required.")
+    return clean
+
+
+def importable_fields(mod: ModuleDef, enabled: dict) -> list[dict]:
+    out = []
+    for f in mod.fields:
+        if not enabled.get(f.key, True):
+            continue
+        out.append({"key": f.key, "label": f.label, "type": f.type, "required": f.required})
+        if f.type == "money":
+            out.append({"key": f.key + CU_SUFFIX, "label": f"{f.label} – currency & unit", "type": "money_cu",
+                        "required": False})
+    return out
+
