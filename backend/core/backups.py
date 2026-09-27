@@ -168,6 +168,10 @@ def restore_backup(fileobj) -> dict:
         safety = create_backup("pre-restore")
         with _Lock():
             with transaction.atomic():
+                if connection.vendor == "postgresql":
+                    # Postgres refuses TRUNCATE while deferred FK checks are pending in the transaction.
+                    with connection.cursor() as c:
+                        c.execute("SET CONSTRAINTS ALL IMMEDIATE")
                 call_command("flush", interactive=False, verbosity=0)
                 call_command("loaddata", str(data_file), verbosity=0)
             media = Path(settings.MEDIA_ROOT)

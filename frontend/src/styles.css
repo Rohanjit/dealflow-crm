@@ -1,0 +1,45 @@
+body {
+  background: var(--mantine-color-gray-0);
+}
+
+.df-table th {
+  white-space: nowrap;
+  font-size: var(--mantine-font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--mantine-color-dimmed);
+}
+
+.df-table td {
+  vertical-align: top;
+}
+
+.df-row-link {
+  cursor: pointer;
+}
+
+.df-sort {
+  cursor: pointer;
+  user-select: none;
+}
+
+.df-field-label {
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.df-prewrap {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.df-auth-bg {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: linear-gradient(160deg, #1f3a5f 0%, #285495 55%, #4fb3a0 140%);
+}

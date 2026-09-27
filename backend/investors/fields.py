@@ -64,8 +64,18 @@ FIELDS = [
 ]
 
 
+# Words that don't tell two firms apart ("Blume" and "Blume Ventures" are the same firm).
+_GENERIC = {
+    "ventures", "venture", "capital", "partners", "partner", "advisors", "advisers", "advisory", "fund", "funds",
+    "llp", "ltd", "limited", "pvt", "private", "inc", "llc", "management", "investments", "investment",
+    "group", "holdings", "india", "the", "co", "company", "asset", "assets", "alternate", "alternative",
+}
+
+
 def _norm_name(name: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", (name or "").lower())
+    words = re.findall(r"[a-z0-9]+", (name or "").lower())
+    core = [w for w in words if w not in _GENERIC]
+    return "".join(core or words)
 
 
 def _domain(url: str) -> str:

@@ -52,7 +52,7 @@ class ImportFlowTests(APITestBase):
     def test_full_flow(self):
         f = xlsx([
             ["Investor Name", "Type", "City", "Sector", "Min ticket (INR Cr)", "Max ticket", "Owner", "Last contact", "Random"],
-            ["Blume", "VC", "Mumbai", "Fintech", 5, "₹ 40 Cr", "Bob Banker", "03/04/2026", "x"],   # dup (website below? no: name differs)
+            ["Blume", "VC", "Mumbai", "Fintech", 5, "₹ 40 Cr", "Bob Banker", "03/04/2026", "x"],   # dup: generic words ignored
             ["Blume Ventures", "VC", "Mumbai", "Fintech; Space", 5, "₹ 40 Cr", "", "", ""],        # dup of existing by name
             ["Kotak Alt", "PE", "Mumbai", "Healthcare, Fintech", 50, "₹ 300 Cr", "bob@firm.com", "2026-01-15", ""],
             ["", "VC", "Delhi", "", "", "", "", "", ""],                                             # missing name
@@ -70,12 +70,14 @@ class ImportFlowTests(APITestBase):
         r = self.client.post(BASE + "check/", {"token": up["token"], "mapping": m}, format="json").json()
         rows = {x["row"]: x for x in r["rows"]}
         self.assertEqual(rows[2]["errors"], {})
+        self.assertEqual(rows[2]["duplicate_of"][0]["title"], "Blume Ventures")
         self.assertEqual(rows[3]["duplicate_of"][0]["title"], "Blume Ventures")
         self.assertTrue(any("Space" in w for w in rows[3]["warnings"]))
         self.assertIn("Firm name", rows[5]["errors"])
         self.assertIn("Min ticket size", rows[6]["errors"])
         self.assertEqual(rows[6]["duplicate_of_row"], 4)
-        self.assertEqual(r["summary"]["ok"], 2)
+        self.assertEqual(r["summary"]["ok"], 1)
+        self.assertEqual(r["summary"]["duplicates"], 2)
 
         r = self.client.post(BASE + "commit/", {"token": up["token"], "mapping": m, "include_rows": [2, 4]}, format="json")
         self.assertEqual(r.json()["created"], 2, r.content)

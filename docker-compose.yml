@@ -1,0 +1,45 @@
+# Dealflow — one command to run:   docker compose up -d
+# Then open http://localhost:8000 and follow the setup wizard.
+#
+# Postgres instead of SQLite: set DATABASE_URL in .env (see .env.example) and run
+#   docker compose --profile postgres up -d
+
+x-app: &app
+  image: dealflow:latest
+  build: .
+  restart: unless-stopped
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    TZ: ${TZ:-Asia/Kolkata}
+  volumes:
+    - dealflow-data:/data
+
+services:
+  app:
+    <<: *app
+    command: web
+    ports:
+      - "${DEALFLOW_PORT:-8000}:8000"
+
+  scheduler:
+    <<: *app
+    command: scheduler
+    depends_on:
+      - app
+
+  db:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dealflow
+      POSTGRES_USER: dealflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - dealflow-db:/var/lib/postgresql/data
+
+volumes:
+  dealflow-data:
+  dealflow-db:
