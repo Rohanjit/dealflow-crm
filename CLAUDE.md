@@ -5,7 +5,7 @@ Read this first in every session. The full product scope is in `docs/scope-v1.md
 ## Working model
 
 - Shobhit (product owner, ex-investment banker) makes product decisions and answers questions. He does not write code.
-- Claude writes all code, tests it, and pushes to this repo.
+- Claude writes all code, tests it, and pushes to this repo. Each module is built on its own branch and Claude merges it into `main` once it's tested (Shobhit's call, 29 Sep 2026); no pull request review step.
 - Ask product questions **one at a time**. Technical choices are Claude's to make, but record them in this file.
 - The repo stays **private** until all six V1 modules are done.
 - Build order (finish each before the next): Foundation + Investors → Contacts → Outreach → Active Deals → Tasks & Reminders → Vault.
