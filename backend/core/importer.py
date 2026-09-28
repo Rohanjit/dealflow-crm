@@ -20,7 +20,7 @@ from django.contrib.auth import get_user_model
 
 from .models import ChoiceList, ChoiceOption
 from .records import FieldError, apply_values, clean_values
-from .registry import CURRENCIES, FieldDef, ModuleDef
+from .registry import CURRENCIES, FieldDef, ModuleDef, active_targets, get_module, name_key
 
 User = get_user_model()
 
@@ -176,18 +176,32 @@ def money_hint(text: str) -> dict:
 
 
 def suggest_mapping(mod: ModuleDef, headers: list[str], enabled: dict) -> list[dict]:
-    """One entry per column: {field, currency, unit} (field may be None = don't import)."""
-    candidates = {}
+    """One entry per column: {field, currency, unit} (field may be None = don't import).
+
+    A field is matched to at most one column, except text fields with part aliases
+    ("First name" + "Last name" → Full name), which take every part column when no
+    column holds the whole value."""
+    candidates, parts = {}, {}
     for f in mod.fields:
         if not enabled.get(f.key, True):
             continue
         for name in [f.label, f.key, *f.aliases]:
             candidates.setdefault(_norm(name), f.key)
+        for name in f.part_aliases:
+            parts.setdefault(_norm(name), f.key)
+
+    def match(h):
+        n = _norm(re.sub(r"\(.*?\)", "", h)) or _norm(h)
+        return n, candidates.get(n) or candidates.get(_norm(h)), parts.get(n) or parts.get(_norm(h))
+
+    whole = {key for h in headers if (key := match(h)[1])}
     used = set()
     out = []
     for h in headers:
-        n = _norm(re.sub(r"\(.*?\)", "", h)) or _norm(h)
-        key = candidates.get(n) or candidates.get(_norm(h))
+        n, key, part = match(h)
+        if not key and part and part not in whole:
+            out.append({"field": part, "currency": "", "unit": ""})
+            continue
         if not key:
             # A companion "… currency" column for a money field we already matched.
             m = re.match(r"(.*?)(currency|unit|currencyunit)$", n)
@@ -268,13 +282,61 @@ def parse_date(raw: str, user_format: str) -> str:
     raise FieldError(f"“{raw}” isn't a date we can read.")
 
 
+def parse_birthday(raw: str, user_format: str) -> str:
+    """'12 Mar', 'March 12', '12/03', '12/03/1985', '1985-03-12' → 'MM-DD' or 'YYYY-MM-DD'."""
+    s = raw.strip()
+    if not s:
+        return ""
+    year = None
+    m = re.fullmatch(r"(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T].*)?", s)
+    if m:
+        year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    else:
+        m = re.fullmatch(r"(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?", s)
+        if m:
+            a, b = int(m.group(1)), int(m.group(2))
+            day, month = (b, a) if user_format == "MM/DD/YYYY" else (a, b)
+            if m.group(3):
+                year = int(m.group(3))
+                year += 1900 if 30 <= year < 100 else (2000 if year < 30 else 0)
+        else:
+            m = re.fullmatch(r"(\d{1,2})(?:st|nd|rd|th)?[\s-]+([A-Za-z]{3,9})\.?(?:[\s,-]+(\d{4}))?", s) or None
+            if m and m.group(2)[:3].lower() in _MONTHS:
+                day, month = int(m.group(1)), _MONTHS[m.group(2)[:3].lower()]
+                year = int(m.group(3)) if m.group(3) else None
+            else:
+                m = re.fullmatch(r"([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?", s)
+                if m and m.group(1)[:3].lower() in _MONTHS:
+                    day, month = int(m.group(2)), _MONTHS[m.group(1)[:3].lower()]
+                    year = int(m.group(3)) if m.group(3) else None
+                else:
+                    raise FieldError(f"“{raw}” isn't a birthday we can read.")
+    # Address books use placeholder years (1604, 1900) when the year is unknown.
+    if year is not None and year <= 1900:
+        year = None
+    return f"{year:04d}-{month:02d}-{day:02d}" if year else f"{month:02d}-{day:02d}"
+
+
 class RowContext:
     """Lookups shared by all rows of one import."""
 
-    def __init__(self, mod: ModuleDef, user, add_missing_options: bool):
+    def __init__(self, mod: ModuleDef, user, add_missing_options: bool, create_links: dict | None = None):
         self.mod = mod
         self.user = user
         self.add_missing = add_missing_options and user.has_flag("manage_settings")
+        # {link field key: module to create unmatched names in}, only where the user may create there.
+        self.create_links = {
+            k: m for k, m in (create_links or {}).items()
+            if k in mod.field_map and m in dict(active_targets(mod.field_map[k])) and user.can(m, "create")
+        }
+        self.links: dict[str, dict[str, dict[str, list[int]]]] = {}
+        for f in mod.fields:
+            if f.type == "link":
+                for mkey, _ in active_targets(f):
+                    if mkey not in self.links:
+                        self.links[mkey] = self._link_index(mkey)
+        self.pending_records: dict[str, set[str]] = {}
+        self.created_records: dict[str, int] = {}
         self.options: dict[str, dict[str, ChoiceOption]] = {}
         for f in mod.fields:
             if f.type == "dropdown" and f.choice_list not in self.options:
@@ -287,6 +349,49 @@ class RowContext:
             self.users[u.full_name.strip().lower()] = u
             self.users[u.email.lower()] = u
         self.pending_new: dict[str, set[str]] = {}
+
+    @staticmethod
+    def _link_index(mkey: str) -> dict:
+        tmod = get_module(mkey)
+        exact: dict[str, list[int]] = {}
+        norm: dict[str, list[int]] = {}
+        titles = tmod.model.objects.filter(archived_at__isnull=True).values_list("pk", tmod.title_field)
+        for pk, title in titles:
+            exact.setdefault((title or "").strip().lower(), []).append(pk)
+            if k := name_key(tmod, title):
+                norm.setdefault(k, []).append(pk)
+        return {"exact": exact, "norm": norm}
+
+    def link(self, f: FieldDef, raw: str, warnings: list, commit: bool) -> str | None:
+        """Find the record a cell names ("Blume Ventures") → "investors:12"."""
+        name = " ".join(raw.split())
+        if not name:
+            return None
+        for mkey, _ in active_targets(f):
+            idx, tmod = self.links[mkey], get_module(mkey)
+            for bucket, key in (("exact", name.lower()), ("norm", name_key(tmod, name))):
+                hits = idx[bucket].get(key) or []
+                if len(hits) == 1:
+                    return f"{mkey}:{hits[0]}"
+                if len(hits) > 1:
+                    warnings.append(f"{f.label}: “{name}” matches {len(hits)} {tmod.label.lower()}, left blank.")
+                    return None
+        create_in = self.create_links.get(f.key)
+        if create_in:
+            tmod = get_module(create_in)
+            if not commit:
+                self.pending_records.setdefault(tmod.label, set()).add(name)
+                return None
+            obj = apply_values(tmod.model(), tmod, {tmod.title_field: name[:255]}, self.user)
+            idx = self.links[create_in]
+            idx["exact"].setdefault(name.lower(), []).append(obj.pk)
+            if k := name_key(tmod, name):
+                idx["norm"].setdefault(k, []).append(obj.pk)
+            self.created_records[tmod.label] = self.created_records.get(tmod.label, 0) + 1
+            return f"{create_in}:{obj.pk}"
+        labels = " or ".join(get_module(m).label.lower() for m, _ in active_targets(f))
+        warnings.append(f"{f.label}: “{name}” isn't in {labels}, left blank.")
+        return None
 
     def option(self, f: FieldDef, label: str, warnings: list, commit: bool):
         key = label.strip().lower()
@@ -319,12 +424,23 @@ def row_to_data(row: list[str], mapping: list[dict], ctx: RowContext, commit=Fal
         target = m.get("field")
         if target and target.endswith(CU_SUFFIX) and i < len(row):
             cu_values[target[: -len(CU_SUFFIX)]] = money_hint(row[i])
+    # Several columns may feed one text field ("First name" + "Last name"); join them in order.
+    joined: dict[str, list[str]] = {}
     for i, m in enumerate(mapping):
         key = m.get("field")
-        if not key or key.endswith(CU_SUFFIX) or i >= len(row):
+        if key and not key.endswith(CU_SUFFIX) and i < len(row) and ctx.mod.field_map[key].type in ("text", "longtext"):
+            joined.setdefault(key, []).append(row[i].strip())
+    done = set()
+    for i, m in enumerate(mapping):
+        key = m.get("field")
+        if not key or key.endswith(CU_SUFFIX) or i >= len(row) or key in done:
             continue
         raw = row[i]
         f = ctx.mod.field_map[key]
+        if key in joined:
+            done.add(key)
+            sep = "\n" if f.type == "longtext" else " "
+            raw = sep.join(p for p in joined[key] if p)
         try:
             if f.type == "money":
                 # currency/unit priority: in the cell → companion column → column default
@@ -349,6 +465,10 @@ def row_to_data(row: list[str], mapping: list[dict], ctx: RowContext, commit=Fal
                     data[key] = None
             elif f.type == "date":
                 data[key] = parse_date(raw, ctx.user.date_format)
+            elif f.type == "birthday":
+                data[key] = parse_birthday(raw, ctx.user.date_format)
+            elif f.type == "link":
+                data[key] = ctx.link(f, raw, warnings, commit)
             elif f.type == "tags":
                 data[key] = _split(raw)
             elif f.type in ("integer", "decimal", "percent"):
@@ -368,14 +488,20 @@ def _existing_keys(mod: ModuleDef) -> dict[str, list[tuple[int, str]]]:
     if not mod.duplicate_keys:
         return index
     text_fields = [f.key for f in mod.fields if f.type in ("text", "url", "email", "phone")]
-    for rec in mod.model.objects.filter(archived_at__isnull=True).values("pk", *text_fields):
-        for k in mod.duplicate_keys(rec):
+    links = [(f.key, mkey, f"{attr}_id") for f in mod.fields if f.type == "link" for mkey, attr in active_targets(f)]
+    cols = [*text_fields, *{c for _, _, c in links}]
+    for rec in mod.model.objects.filter(archived_at__isnull=True).values("pk", *cols):
+        values = {k: rec[k] for k in text_fields}
+        for key, mkey, col in links:
+            if rec[col] is not None:
+                values[key] = f"{mkey}:{rec[col]}"
+        for k in mod.duplicate_keys(values):
             index.setdefault(k, []).append((rec["pk"], rec[mod.title_field]))
     return index
 
 
-def check_rows(mod: ModuleDef, rows, mapping, user, enabled, add_missing_options=False) -> dict:
-    ctx = RowContext(mod, user, add_missing_options)
+def check_rows(mod: ModuleDef, rows, mapping, user, enabled, add_missing_options=False, create_links=None) -> dict:
+    ctx = RowContext(mod, user, add_missing_options, create_links)
     existing = _existing_keys(mod)
     seen_in_file: dict[str, int] = {}
     results = []
@@ -409,13 +535,15 @@ def check_rows(mod: ModuleDef, rows, mapping, user, enabled, add_missing_options
         "with_errors": sum(1 for r in results if r["errors"]),
         "duplicates": sum(1 for r in results if not r["errors"] and (r["duplicate_of"] or r["duplicate_of_row"])),
         "new_options": {k: sorted(v) for k, v in ctx.pending_new.items()},
+        "new_records": {k: sorted(v, key=str.lower) for k, v in ctx.pending_records.items()},
     }
     return {"summary": summary, "rows": results}
 
 
-def commit_rows(mod: ModuleDef, rows, mapping, user, enabled, include_rows: set[int], add_missing_options=False):
+def commit_rows(mod: ModuleDef, rows, mapping, user, enabled, include_rows: set[int], add_missing_options=False,
+                create_links=None):
     """Create a record for every row number in include_rows that validates."""
-    ctx = RowContext(mod, user, add_missing_options)
+    ctx = RowContext(mod, user, add_missing_options, create_links)
     created, failed = 0, []
     for n, row in enumerate(rows, start=2):
         if n not in include_rows:
@@ -428,7 +556,12 @@ def commit_rows(mod: ModuleDef, rows, mapping, user, enabled, include_rows: set[
             continue
         apply_values(mod.model(), mod, values, user)
         created += 1
-    return {"created": created, "failed": failed, "skipped": len(rows) - created - len(failed)}
+    return {
+        "created": created,
+        "failed": failed,
+        "skipped": len(rows) - created - len(failed),
+        "new_records": ctx.created_records,
+    }
 
 
 def validate_mapping(mod: ModuleDef, mapping, width: int, enabled: dict) -> list[dict]:
@@ -443,7 +576,7 @@ def validate_mapping(mod: ModuleDef, mapping, width: int, enabled: dict) -> list
                 raise ImportError_(f"Unknown field {key}.")
             if key.endswith(CU_SUFFIX) and mod.field_map[base].type != "money":
                 raise ImportError_(f"Unknown field {key}.")
-            if key in used:
+            if key in used and mod.field_map[base].type not in ("text", "longtext"):
                 raise ImportError_(f"Two columns are matched to {mod.field_map[base].label}. Pick one.")
             used.add(key)
         clean.append({"field": key, "currency": (m or {}).get("currency", ""), "unit": (m or {}).get("unit", "")})

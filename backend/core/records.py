@@ -9,10 +9,11 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import EmailValidator, URLValidator
 from django.db import transaction
-from django.db.models import Q, QuerySet
+from django.db.models import Case, F, IntegerField, Q, QuerySet, Value, When
+from django.db.models.functions import Coalesce
 
 from .models import ChoiceOption, Tag
-from .registry import CURRENCY_CODES, UNIT_MULTIPLIER, FieldDef, ModuleDef
+from .registry import CURRENCY_CODES, UNIT_MULTIPLIER, FieldDef, ModuleDef, active_targets, get_module
 
 User = get_user_model()
 
@@ -45,12 +46,36 @@ def read_value(obj, f: FieldDef):
         return [tag.name for tag in getattr(obj, f.key).all()]
     if t == "user":
         return getattr(obj, f"{f.key}_id")
+    if t == "link":
+        return link_value(obj, f)
+    if t == "birthday":
+        md = getattr(obj, f.key)
+        if not md:
+            return None
+        year = getattr(obj, f"{f.key}_year")
+        return f"{year:04d}-{md}" if year else md
     v = getattr(obj, f.key)
     if t in ("decimal", "percent"):
         return dec_str(v)
     if t == "date":
         return v.isoformat() if v else None
     return v
+
+
+def link_value(obj, f: FieldDef) -> dict | None:
+    """{module, id, title, archived} for whichever target the record links to."""
+    for mkey, attr in active_targets(f):
+        if getattr(obj, f"{attr}_id") is None:
+            continue
+        target = getattr(obj, attr)
+        tmod = get_module(mkey)
+        return {
+            "module": mkey,
+            "id": target.pk,
+            "title": getattr(target, tmod.title_field),
+            "archived": target.archived_at is not None,
+        }
+    return None
 
 
 def _user_ref(u):
@@ -80,6 +105,8 @@ def with_related(qs: QuerySet, mod: ModuleDef) -> QuerySet:
             prefetch.append(f.key)
         elif f.type in ("dropdown", "user"):
             select.append(f.key)
+        elif f.type == "link":
+            select.extend(attr for _, attr in active_targets(f))
     return qs.select_related(*select).prefetch_related(*prefetch)
 
 
@@ -263,7 +290,85 @@ def clean_one(f: FieldDef, v, instance=None):
                 seen.add(name.lower())
                 out.append(name)
         return out
+    if t == "link":
+        return _clean_link(f, v, instance)
+    if t == "birthday":
+        return _clean_birthday(v)
     raise FieldError("Unsupported field")
+
+
+def _current_link(instance, f: FieldDef) -> tuple[str, int] | None:
+    if not instance or not instance.pk:
+        return None
+    for mkey, attr in active_targets(f):
+        pk = getattr(instance, f"{attr}_id")
+        if pk is not None:
+            return (mkey, pk)
+    return None
+
+
+def _clean_link(f: FieldDef, v, instance):
+    """Accepts {"module", "id"} or "module:id". Returns (module key, record) or None."""
+    if v in EMPTY:
+        return None
+    if isinstance(v, dict):
+        mkey, raw_pk = v.get("module"), v.get("id")
+    elif isinstance(v, str) and ":" in v:
+        mkey, raw_pk = v.split(":", 1)
+    else:
+        raise FieldError("Pick a record from the list.")
+    targets = dict(active_targets(f))
+    if mkey not in targets:
+        raise FieldError("Pick a record from the list.")
+    tmod = get_module(mkey)
+    try:
+        pk = int(raw_pk)
+    except (TypeError, ValueError):
+        raise FieldError("Pick a record from the list.")
+    target = tmod.model.objects.filter(pk=pk).first()
+    if not target:
+        raise FieldError(f"That {tmod.singular.lower()} doesn't exist any more.")
+    if target.archived_at is not None and _current_link(instance, f) != (mkey, pk):
+        raise FieldError(f"{getattr(target, tmod.title_field)} is in the Archive. Restore it first.")
+    return (mkey, target)
+
+
+_MONTH_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
+
+def _clean_birthday(v):
+    """Accepts "MM-DD", "--MM-DD", "YYYY-MM-DD" or {day, month, year}. Returns {"md", "year"} or None."""
+    if v in EMPTY:
+        return None
+    if isinstance(v, dict):
+        day, month, year = v.get("day"), v.get("month"), v.get("year")
+    else:
+        s = str(v).strip().lstrip("-")
+        parts = s.split("-")
+        try:
+            if len(parts) == 3:
+                year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
+            elif len(parts) == 2:
+                year, month, day = None, int(parts[0]), int(parts[1])
+            else:
+                raise ValueError
+        except ValueError:
+            raise FieldError("Enter a birthday as MM-DD or YYYY-MM-DD.")
+    try:
+        day, month = int(day), int(month)
+        year = int(year) if year not in (None, "") else None
+    except (TypeError, ValueError):
+        raise FieldError("Enter a valid birthday.")
+    if not 1 <= month <= 12 or not 1 <= day <= _MONTH_DAYS[month - 1]:
+        raise FieldError("That day doesn't exist.")
+    if year is not None:
+        if not 1900 <= year <= dt.date.today().year:
+            raise FieldError("Enter a year between 1900 and this year, or leave it blank.")
+        try:
+            dt.date(year, month, day)
+        except ValueError:
+            raise FieldError(f"{year} wasn't a leap year.")
+    return {"md": f"{month:02d}-{day:02d}", "year": year}
 
 
 def clean_values(mod: ModuleDef, data: dict, *, enabled: dict, instance=None, partial=False):
@@ -333,6 +438,13 @@ def apply_values(obj, mod: ModuleDef, values: dict, user):
             setattr(obj, f"{key}_amount", v["amount"])
             setattr(obj, f"{key}_currency", v["currency"])
             setattr(obj, f"{key}_unit", v["unit"])
+        elif f.type == "link":
+            chosen = v[0] if v else None
+            for mkey, attr in active_targets(f):
+                setattr(obj, attr, v[1] if mkey == chosen else None)
+        elif f.type == "birthday":
+            setattr(obj, key, v["md"] if v else None)
+            setattr(obj, f"{key}_year", v["year"] if v else None)
         elif f.is_m2m:
             m2m[key] = tags_from_names(v) if f.type == "tags" else v
         else:
@@ -363,20 +475,84 @@ def _ints(v: str) -> list[int]:
     return out
 
 
+def _search_condition(mod: ModuleDef, q: str, enabled: dict) -> Q:
+    cond = Q()
+    for f in mod.fields:
+        if not f.searchable or not enabled.get(f.key, True):
+            continue
+        if f.type == "link":
+            # Contacts are found by their firm's name, for example.
+            for mkey, attr in active_targets(f):
+                cond |= Q(**{f"{attr}__{get_module(mkey).title_field}__icontains": q})
+        else:
+            cond |= Q(**{f"{f.key}__icontains": q})
+    return cond
+
+
+def _link_filter(qs: QuerySet, f: FieldDef, params) -> QuerySet:
+    """?firm=investors:5,investors:9 (specific records) and ?firm_type=investors|none (which side)."""
+    targets = dict(active_targets(f))
+    if raw := params.get(f.key):
+        cond = Q()
+        for token in _csv(raw):
+            mkey, _, pk = token.partition(":")
+            if mkey in targets and pk.isdigit():
+                cond |= Q(**{f"{targets[mkey]}_id": int(pk)})
+        qs = qs.filter(cond) if cond else qs.none()
+    typ = params.get(f"{f.key}_type")
+    if typ == "none":
+        qs = qs.filter(**{f"{attr}__isnull": True for attr in targets.values()})
+    elif typ in targets:
+        qs = qs.filter(**{f"{targets[typ]}__isnull": False})
+    return qs
+
+
+def _order_terms(mod: ModuleDef, key: str, desc: bool) -> list:
+    """Order-by expressions for one field. Empty values always sort last."""
+
+    def direction(expr):
+        return expr.desc(nulls_last=True) if desc else expr.asc(nulls_last=True)
+
+    if key in ("created_at", "updated_at"):
+        return [direction(F(key))]
+    f = mod.field_map.get(key)
+    if not f or not f.sortable:
+        return []
+    t = f.type
+    if t == "money":
+        # Amounts only compare within a currency, so group by currency first.
+        blank_last = Case(When(**{f"{key}_value__isnull": True}, then=Value(1)), default=Value(0), output_field=IntegerField())
+        return [blank_last, F(f"{key}_currency").asc(), direction(F(f"{key}_value"))]
+    if t == "dropdown":
+        # The list's own order (e.g. seniority for decision-maker levels), then name.
+        return [direction(F(f"{key}__order")), direction(F(f"{key}__label"))]
+    if t == "user":
+        return [direction(F(f"{key}__full_name"))]
+    if t == "link":
+        cols = [F(f"{attr}__{get_module(m).title_field}") for m, attr in active_targets(f)]
+        if not cols:
+            return []
+        return [direction(cols[0] if len(cols) == 1 else Coalesce(*cols))]
+    if t in ("text", "url", "email", "phone", "choice"):
+        blank_last = Case(When(**{key: ""}, then=Value(1)), default=Value(0), output_field=IntegerField())
+        return [blank_last, direction(F(key))]
+    return [direction(F(key))]
+
+
 def filter_queryset(qs: QuerySet, mod: ModuleDef, params, user, enabled: dict) -> QuerySet:
     q = (params.get("q") or "").strip()
     if q:
-        cond = Q()
-        for f in mod.fields:
-            if f.searchable and enabled.get(f.key, True):
-                cond |= Q(**{f"{f.key}__icontains": q})
-        qs = qs.filter(cond)
+        qs = qs.filter(_search_condition(mod, q, enabled))
 
     distinct = False
     for f in mod.fields:
+        k, t = f.key, f.type
+        if t == "link":
+            # Applied even when switched off: other screens (e.g. an investor's contacts) rely on it.
+            qs = _link_filter(qs, f, params)
+            continue
         if not f.filterable or not enabled.get(f.key, True):
             continue
-        k, t = f.key, f.type
         if t == "dropdown" and (ids := _ints(params.get(k, ""))):
             qs = qs.filter(**{f"{k}__in": ids})
             distinct = distinct or f.multi
@@ -398,6 +574,12 @@ def filter_queryset(qs: QuerySet, mod: ModuleDef, params, user, enabled: dict) -
                 cond |= Q(**{f"{k}__name__iexact": n})
             qs = qs.filter(cond)
             distinct = True
+        elif t == "birthday" and (months := _ints(params.get(f"{k}_month", ""))):
+            cond = Q()
+            for m in months:
+                if 1 <= m <= 12:
+                    cond |= Q(**{f"{k}__startswith": f"{m:02d}-"})
+            qs = qs.filter(cond) if cond else qs
         elif t in ("text",) and (raw := params.get(k)):
             qs = qs.filter(**{f"{k}__icontains": raw})
         elif t in ("integer", "decimal", "percent", "money", "date"):
@@ -419,24 +601,12 @@ def filter_queryset(qs: QuerySet, mod: ModuleDef, params, user, enabled: dict) -
     if mod.extra_filters:
         qs = mod.extra_filters(qs, params)
 
-    ordering = params.get("ordering")
-    if ordering:
-        desc = ordering.startswith("-")
-        key = ordering.lstrip("-")
-        if key in mod.field_map and mod.field_map[key].sortable:
-            f = mod.field_map[key]
-            col = {
-                "money": f"{key}_value",
-                "dropdown": f"{key}__label",
-                "user": f"{key}__full_name",
-            }.get(f.type, key)
-            if f.type == "money":
-                # Amounts only compare within a currency, so group by currency first.
-                qs = qs.order_by(f"{key}_currency", f"{'-' if desc else ''}{col}", "pk")
-            else:
-                qs = qs.order_by(f"{'-' if desc else ''}{col}", "pk")
-        elif key in ("created_at", "updated_at"):
-            qs = qs.order_by(f"{'-' if desc else ''}{key}", "pk")
+    # ?ordering=-primary_contact,full_name — several keys allowed, "-" for descending.
+    terms = []
+    for raw_key in _csv(params.get("ordering", "")):
+        terms += _order_terms(mod, raw_key.lstrip("-"), raw_key.startswith("-"))
+    if terms:
+        qs = qs.order_by(*terms, "pk")
     if distinct:
         qs = qs.distinct()
     return qs

@@ -131,8 +131,16 @@ MODULE = register(
         subtitle=subtitle,
         duplicate_keys=duplicate_keys,
         extra_filters=ticket_filter,
+        name_key=_norm_name,
         sections=[
-            {"key": "contacts", "label": "Linked contacts", "available_with": "contacts"},
+            {
+                "key": "contacts",
+                "label": "Linked contacts",
+                "module": "contacts",
+                "link_field": "firm",
+                "columns": ["full_name", "designation", "decision_level", "primary_contact", "work_email", "mobile"],
+                "order": "-primary_contact,decision_level,full_name",
+            },
             {"key": "deal_history", "label": "Deal history", "available_with": "deals"},
         ],
     )

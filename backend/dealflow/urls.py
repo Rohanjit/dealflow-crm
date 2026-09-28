@@ -24,6 +24,7 @@ api = [
     path("invites/accept/<str:token>/", a.InviteAcceptView.as_view()),
     path("schema/", c.SchemaView.as_view()),
     path("search/", c.SearchView.as_view()),
+    path("lookup/<str:module>/", c.LookupView.as_view()),
     path("m/<str:module>/", c.RecordListView.as_view()),
     path("m/<str:module>/export/", c.RecordExportView.as_view()),
     path("m/<str:module>/import/upload/", c.ImportUploadView.as_view()),

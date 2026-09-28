@@ -18,7 +18,7 @@ from .models import ChoiceList, ChoiceOption, FieldSwitch, FirmSettings
 from .modules import BUILT_MODULES, MODULE_LABELS
 from .pagination import StandardPagination
 from .records import apply_values, clean_values, filter_queryset, serialize, with_related
-from .registry import CURRENCIES, UNITS, all_modules, enabled_map, get_module
+from .registry import CURRENCIES, UNITS, active_targets, all_modules, enabled_map, get_module
 
 
 def _module(key: str):
@@ -52,6 +52,74 @@ def choice_lists_payload(keys=None):
     }
 
 
+def _section(s: dict, perms: dict) -> dict:
+    """ready: show the related records · coming: that module isn't built yet · hidden: no access."""
+    target = s.get("module") or s.get("available_with")
+    if target not in BUILT_MODULES:
+        status_ = "coming"
+    elif not perms[target]["view"]:
+        status_ = "hidden"
+    else:
+        status_ = "ready"
+    return {**s, "status": status_, "available": status_ == "ready"}
+
+
+def _segments(mod) -> dict | None:
+    """Quick switch above a list, e.g. All · Investor side · Company side · Not linked."""
+    if not mod.segment_field:
+        return None
+    f = mod.field(mod.segment_field)
+    targets = active_targets(f)
+    options = [{"value": "", "label": "All"}]
+    options += [{"value": m, "label": f.target_labels.get(m, get_module(m).label)} for m, _ in targets]
+    options.append({"value": "none", "label": "Not linked"})
+    return {"param": f"{f.key}_type", "options": options}
+
+
+def _can_lookup(user, module: str) -> bool:
+    """Names of records in `module` are visible to people who can view it, and to people who can
+    add or edit records in a module that links to it (they need the names to pick one)."""
+    if user.can(module, "view"):
+        return True
+    for src in all_modules():
+        if src.key not in BUILT_MODULES:
+            continue
+        links_here = any(f.type == "link" and module in dict(active_targets(f)) for f in src.fields)
+        if links_here and (user.can(src.key, "create") or user.can(src.key, "edit")):
+            return True
+    return False
+
+
+class LookupView(APIView):
+    """Short list of {id, title} for link pickers: ?q=blu, or ?ids=3,7 to label chosen records."""
+
+    def get(self, request, module):
+        mod = _module(module)
+        if not _can_lookup(request.user, module):
+            raise PermissionDenied(f"Your role can't see {mod.label}.")
+        ids = [int(p) for p in (request.query_params.get("ids") or "").split(",") if p.strip().isdigit()]
+        if ids:
+            qs = mod.model.objects.filter(pk__in=ids[:100])
+        else:
+            qs = mod.model.objects.filter(archived_at__isnull=True)
+            if q := (request.query_params.get("q") or "").strip():
+                qs = qs.filter(**{f"{mod.title_field}__icontains": q})
+            qs = qs.order_by(mod.title_field)[:20]
+        qs = with_related(qs, mod)
+        return Response(
+            [
+                {
+                    "module": module,
+                    "id": o.pk,
+                    "title": getattr(o, mod.title_field),
+                    "subtitle": mod.subtitle(o) if mod.subtitle else "",
+                    "archived": o.archived_at is not None,
+                }
+                for o in qs
+            ]
+        )
+
+
 class SchemaView(APIView):
     """Everything the frontend needs to render the modules this user can see."""
 
@@ -79,9 +147,8 @@ class SchemaView(APIView):
                     "title_field": mod.title_field,
                     "groups": mod.groups,
                     "fields": fields,
-                    "sections": [
-                        {**s, "available": s.get("available_with") in BUILT_MODULES} for s in mod.sections
-                    ],
+                    "sections": [_section(s, perms) for s in mod.sections],
+                    "segments": _segments(mod),
                     "perms": perms[mod.key],
                 }
             )
@@ -201,6 +268,11 @@ class ImportUploadView(APIView):
                 "mapping": importer.suggest_mapping(mod, headers, enabled),
                 "fields": importer.importable_fields(mod, enabled),
                 "can_add_options": request.user.has_flag("manage_settings"),
+                # Link fields whose unmatched names can be created as new records: {field: [modules]}
+                "can_create_links": {
+                    f.key: [m for m, _ in active_targets(f) if request.user.can(m, "create")]
+                    for f in mod.fields if f.type == "link" and enabled.get(f.key, True)
+                },
             }
         )
 
@@ -216,24 +288,26 @@ class _ImportStep(APIView):
             mapping = importer.validate_mapping(mod, request.data.get("mapping"), len(rows[0]), enabled)
         except importer.ImportError_ as e:
             raise ValidationError({"detail": str(e)})
-        return mod, enabled, rows[1:], mapping, bool(request.data.get("add_missing_options"))
+        create_links = request.data.get("create_links")
+        create_links = {str(k): str(v) for k, v in create_links.items()} if isinstance(create_links, dict) else {}
+        return mod, enabled, rows[1:], mapping, bool(request.data.get("add_missing_options")), create_links
 
 
 class ImportCheckView(_ImportStep):
     def post(self, request, module):
-        mod, enabled, rows, mapping, add_missing = self._prepare(request, module)
-        return Response(importer.check_rows(mod, rows, mapping, request.user, enabled, add_missing))
+        mod, enabled, rows, mapping, add_missing, create_links = self._prepare(request, module)
+        return Response(importer.check_rows(mod, rows, mapping, request.user, enabled, add_missing, create_links))
 
 
 class ImportCommitView(_ImportStep):
     def post(self, request, module):
-        mod, enabled, rows, mapping, add_missing = self._prepare(request, module)
+        mod, enabled, rows, mapping, add_missing, create_links = self._prepare(request, module)
         include = request.data.get("include_rows")
         if not isinstance(include, list):
             raise ValidationError({"include_rows": "Pick the rows to import."})
         include = {int(n) for n in include if str(n).isdigit()}
         with transaction.atomic():
-            result = importer.commit_rows(mod, rows, mapping, request.user, enabled, include, add_missing)
+            result = importer.commit_rows(mod, rows, mapping, request.user, enabled, include, add_missing, create_links)
         importer.discard_upload(request.data.get("token"))
         return Response(result)
 

@@ -13,6 +13,6 @@ MODULE_KEYS = [k for k, _ in MODULES]
 MODULE_LABELS = dict(MODULES)
 
 # Modules whose screens exist in this build. The frontend hides the rest.
-BUILT_MODULES = ["investors"]
+BUILT_MODULES = ["investors", "contacts"]
 
 ACTIONS = ["view", "create", "edit", "delete"]

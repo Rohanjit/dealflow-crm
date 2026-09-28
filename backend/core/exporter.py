@@ -10,7 +10,20 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from .models import ChoiceOption
+from .records import link_value, read_value
 from .registry import ModuleDef
+
+MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def birthday_text(value: str | None) -> str | None:
+    """'1985-03-12' → '12 Mar 1985', '03-12' → '12 Mar' (unambiguous in any date format)."""
+    if not value:
+        return None
+    parts = value.split("-")
+    year = parts[0] if len(parts) == 3 else None
+    month, day = int(parts[-2]), int(parts[-1])
+    return f"{day} {MONTHS[month - 1]}" + (f" {year}" if year else "")
 
 EXCEL_DATE = {"DD/MM/YYYY": "dd/mm/yyyy", "MM/DD/YYYY": "mm/dd/yyyy", "YYYY-MM-DD": "yyyy-mm-dd"}
 # Excel shows grouping by the viewer's locale; the Indian format needs an explicit pattern.
@@ -73,6 +86,11 @@ def export_workbook(mod: ModuleDef, qs, user, enabled: dict, columns: list[str] 
             elif t == "user":
                 u = getattr(obj, f.key)
                 v = u.full_name if u else None
+            elif t == "link":
+                link = link_value(obj, f)
+                v = link["title"] if link else None
+            elif t == "birthday":
+                v = birthday_text(read_value(obj, f))
             elif t in ("choice", "tristate"):
                 raw = getattr(obj, f.key)
                 v = dict(f.choices or []).get(raw, raw) or None
