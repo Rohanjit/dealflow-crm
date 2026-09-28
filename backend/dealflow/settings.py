@@ -109,6 +109,7 @@ STATIC_URL = "/static/"
 STATIC_ROOT = None  # no Django static files; the built SPA is served via WHITENOISE_ROOT
 STATICFILES_DIRS = []
 WHITENOISE_ROOT = FRONTEND_DIST if FRONTEND_DIST.exists() else None
+WHITENOISE_AUTOREFRESH = DEBUG  # pick up rebuilt frontend files without a restart while developing
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},

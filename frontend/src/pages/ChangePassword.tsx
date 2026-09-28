@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api } from "../api";
+import { resetSession } from "../context";
 import AuthCard from "../components/AuthCard";
 import { errorMessage, fieldErrors, notifyOk } from "../components/errors";
 
@@ -38,8 +39,7 @@ export default function ChangePassword({ forced = false }: { forced?: boolean })
 
   async function signOut() {
     await api("auth/logout/", { method: "POST" });
-    qc.clear();
-    await qc.invalidateQueries({ queryKey: ["app"] });
+    await resetSession(qc);
   }
 
   const form = (

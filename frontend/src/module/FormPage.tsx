@@ -1,20 +1,32 @@
 import { Alert, Anchor, Breadcrumbs, Button, Center, Group, Loader, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { api } from "../api";
 import { useModuleSchema } from "../context";
 import { errorMessage, fieldErrors, notifyOk } from "../components/errors";
 import type { RecordData } from "../types";
+import type { FieldSchema } from "../types";
 import { emptyValue, FieldInput } from "./fields";
+
+/** New records can start with a link filled in from the page address: ?firm=investors:12 */
+function prefill(f: FieldSchema, raw: string | null): unknown {
+  if (!raw || f.type !== "link") return undefined;
+  const [module, id] = raw.split(":");
+  if (!f.targets.includes(module) || !/^\d+$/.test(id ?? "")) return undefined;
+  return { module, id: Number(id), title: "", archived: false };
+}
 
 export default function FormPage() {
   const { module: key, id } = useParams();
   const { module, isLoading } = useModuleSchema(key);
   const nav = useNavigate();
   const qc = useQueryClient();
+  const [params] = useSearchParams();
   const editing = !!id;
+  // Where to go after saving or cancelling, e.g. back to the investor a contact was added from.
+  const returnTo = /^\/m\/[a-z]+\/\d+$/.test(params.get("return") ?? "") ? params.get("return")! : null;
   const rec = useQuery({
     queryKey: ["record", key, id],
     queryFn: () => api<RecordData>(`m/${key}/${id}/`),
@@ -31,9 +43,9 @@ export default function FormPage() {
     if (!module || values) return;
     if (editing && !rec.data) return;
     const init: Record<string, unknown> = {};
-    for (const f of fields) init[f.key] = editing ? rec.data![f.key] : emptyValue(f);
+    for (const f of fields) init[f.key] = editing ? rec.data![f.key] : prefill(f, params.get(f.key)) ?? emptyValue(f);
     setValues(init);
-  }, [module, fields, editing, rec.data, values]);
+  }, [module, fields, editing, rec.data, values, params]);
 
   if (isLoading || (editing && rec.isLoading)) return <Center py="xl"><Loader /></Center>;
   if (!module) return <Navigate to="/" replace />;
@@ -66,7 +78,7 @@ export default function FormPage() {
       await qc.invalidateQueries({ queryKey: ["records", module!.key] });
       await qc.invalidateQueries({ queryKey: ["search"] });
       notifyOk(editing ? "Saved." : `${saved._title} added.`);
-      nav(`/m/${module!.key}/${saved.id}`, { replace: true });
+      nav(returnTo ?? `/m/${module!.key}/${saved.id}`, { replace: true });
     } catch (err) {
       const fe = fieldErrors(err);
       setErrors(fe);
@@ -78,7 +90,7 @@ export default function FormPage() {
   }
 
   const title = editing ? `Edit ${rec.data!._title}` : `New ${module.singular.toLowerCase()}`;
-  const cancelTo = editing ? `/m/${module.key}/${id}` : `/m/${module.key}`;
+  const cancelTo = returnTo ?? (editing ? `/m/${module.key}/${id}` : `/m/${module.key}`);
 
   return (
     <form onSubmit={save}>

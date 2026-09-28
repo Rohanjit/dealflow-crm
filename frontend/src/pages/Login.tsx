@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api } from "../api";
+import { resetSession } from "../context";
 import AuthCard from "../components/AuthCard";
 import { errorMessage } from "../components/errors";
 
@@ -19,8 +20,7 @@ export default function Login({ firmName }: { firmName: string }) {
     setError("");
     try {
       await api("auth/login/", { body: { email, password } });
-      qc.clear();
-      await qc.invalidateQueries({ queryKey: ["app"] });
+      await resetSession(qc);
     } catch (err) {
       setError(errorMessage(err));
     } finally {

@@ -26,7 +26,7 @@ export type AppInfo = {
 
 export type FieldType =
   | "text" | "longtext" | "url" | "email" | "phone" | "integer" | "decimal" | "percent" | "date"
-  | "boolean" | "tristate" | "choice" | "dropdown" | "user" | "money" | "tags";
+  | "boolean" | "tristate" | "choice" | "dropdown" | "user" | "money" | "tags" | "link" | "birthday";
 
 export type FieldSchema = {
   key: string;
@@ -43,7 +43,27 @@ export type FieldSchema = {
   sortable: boolean;
   can_disable: boolean;
   enabled: boolean;
+  targets: string[]; // link: modules it can point at (only built ones)
+  target_labels: Record<string, string>; // link: e.g. { investors: "Investor side" }
 };
+
+export type Section = {
+  key: string;
+  label: string;
+  status: "ready" | "coming" | "hidden";
+  available: boolean;
+  available_with?: string; // placeholder sections: the module that will fill it
+  module?: string; // related-records sections
+  link_field?: string;
+  columns?: string[];
+  order?: string;
+};
+
+export type Segments = { param: string; options: { value: string; label: string }[] } | null;
+
+/** A link to one record in another module, as the API sends it. */
+export type LinkValue = { module: string; id: number; title: string; archived: boolean };
+export type LookupItem = LinkValue & { subtitle: string };
 
 export type ModuleSchema = {
   key: string;
@@ -52,7 +72,8 @@ export type ModuleSchema = {
   title_field: string;
   groups: string[];
   fields: FieldSchema[];
-  sections: { key: string; label: string; available_with: string; available: boolean }[];
+  sections: Section[];
+  segments: Segments;
   perms: ModulePerms;
 };
 

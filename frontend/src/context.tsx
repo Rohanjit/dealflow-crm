@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, type ReactNode } from "react";
 
 import { api } from "./api";
@@ -11,6 +11,13 @@ type Ctx = {
 };
 
 const AppCtx = createContext<Ctx | null>(null);
+
+/** After signing in or out: forget everything cached for the previous user and reload who's signed in.
+ *  (queryClient.clear() alone leaves the screen showing the old state.) */
+export async function resetSession(qc: QueryClient) {
+  qc.removeQueries({ predicate: (q) => q.queryKey[0] !== "app" });
+  await qc.refetchQueries({ queryKey: ["app"] });
+}
 
 export function useAppInfo() {
   return useQuery({ queryKey: ["app"], queryFn: () => api<AppInfo>("app/"), staleTime: 60_000 });

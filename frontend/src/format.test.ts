@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDate, formatMoney, groupDigits } from "./format";
+import { formatBirthday, formatDate, formatMoney, groupDigits, whatsappLink } from "./format";
 
 const IN = { date_format: "DD/MM/YYYY", number_grouping: "indian" };
 const US = { date_format: "MM/DD/YYYY", number_grouping: "international" };
@@ -38,5 +38,23 @@ describe("formatMoney", () => {
     expect(formatMoney({ amount: "1500000", currency: "INR", unit: "" }, IN)).toBe("₹15,00,000");
     expect(formatMoney({ amount: "12.5", currency: "AED", unit: "Mn" }, IN)).toBe("AED 12.5 Mn");
     expect(formatMoney({ amount: null, currency: "", unit: "" }, IN)).toBe("");
+  });
+});
+
+describe("formatBirthday", () => {
+  it("shows day and month, and the year when known", () => {
+    expect(formatBirthday("03-12", IN)).toBe("12 Mar");
+    expect(formatBirthday("1985-03-12", IN)).toBe("12 Mar 1985");
+    expect(formatBirthday("1985-03-12", US)).toBe("Mar 12, 1985");
+    expect(formatBirthday("11-02", US)).toBe("Nov 2");
+    expect(formatBirthday(null, IN)).toBe("");
+  });
+});
+
+describe("whatsappLink", () => {
+  it("needs a country code", () => {
+    expect(whatsappLink("+91 98200 12345")).toBe("https://wa.me/919820012345");
+    expect(whatsappLink("98200 12345")).toBeNull();
+    expect(whatsappLink("+91 22")).toBeNull();
   });
 });

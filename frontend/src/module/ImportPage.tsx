@@ -16,16 +16,23 @@ type MapEntry = { field: string | null; currency: string; unit: string };
 type Upload = {
   token: string; filename: string; headers: string[]; sample: string[][]; row_count: number;
   mapping: MapEntry[]; fields: { key: string; label: string; type: string; required: boolean }[]; can_add_options: boolean;
+  can_create_links: Record<string, string[]>; // link field → modules this user may add new records to
 };
 type RowResult = {
   row: number; title: string; errors: Record<string, string>; warnings: string[];
   duplicate_of: { id: number; title: string }[]; duplicate_of_row: number | null;
 };
 type Check = {
-  summary: { total: number; ok: number; with_errors: number; duplicates: number; new_options: Record<string, string[]> };
+  summary: {
+    total: number; ok: number; with_errors: number; duplicates: number; new_options: Record<string, string[]>;
+    new_records: Record<string, string[]>;
+  };
   rows: RowResult[];
 };
-type Result = { created: number; skipped: number; failed: { row: number; errors: Record<string, string> }[] };
+type Result = {
+  created: number; skipped: number; failed: { row: number; errors: Record<string, string> }[];
+  new_records: Record<string, number>;
+};
 
 export default function ImportPage() {
   const { module: key } = useParams();
@@ -42,6 +49,7 @@ function Wizard({ module, schema }: { module: ModuleSchema; schema: Schema }) {
   const [upload, setUpload] = useState<Upload | null>(null);
   const [mapping, setMapping] = useState<MapEntry[]>([]);
   const [addMissing, setAddMissing] = useState(false);
+  const [createLinks, setCreateLinks] = useState<Record<string, string>>({});
   const [check, setCheck] = useState<Check | null>(null);
   const [include, setInclude] = useState<Set<number>>(new Set());
   const [result, setResult] = useState<Result | null>(null);
@@ -75,7 +83,7 @@ function Wizard({ module, schema }: { module: ModuleSchema; schema: Schema }) {
 
   async function doCheck() {
     const c = await run(() => api<Check>(`m/${module.key}/import/check/`, {
-      body: { token: upload!.token, mapping, add_missing_options: addMissing },
+      body: { token: upload!.token, mapping, add_missing_options: addMissing, create_links: createLinks },
     }));
     if (c) {
       setCheck(c);
@@ -86,18 +94,20 @@ function Wizard({ module, schema }: { module: ModuleSchema; schema: Schema }) {
 
   async function doCommit() {
     const r = await run(() => api<Result>(`m/${module.key}/import/commit/`, {
-      body: { token: upload!.token, mapping, add_missing_options: addMissing, include_rows: [...include] },
+      body: { token: upload!.token, mapping, add_missing_options: addMissing, create_links: createLinks, include_rows: [...include] },
     }));
     if (r) {
       setResult(r);
       setStep(3);
       await qc.invalidateQueries({ queryKey: ["records", module.key] });
       if (addMissing) await qc.invalidateQueries({ queryKey: ["schema"] });
+      for (const m of Object.values(createLinks)) await qc.invalidateQueries({ queryKey: ["records", m] });
     }
   }
 
   function restart() {
     setStep(0); setFile(null); setUpload(null); setCheck(null); setResult(null); setError(""); setAddMissing(false);
+    setCreateLinks({});
   }
 
   return (
@@ -131,7 +141,8 @@ function Wizard({ module, schema }: { module: ModuleSchema; schema: Schema }) {
 
       {step === 1 && upload && (
         <MatchStep upload={upload} mapping={mapping} setMapping={setMapping} schema={schema} module={module}
-          addMissing={addMissing} setAddMissing={setAddMissing} busy={busy} onBack={restart} onNext={doCheck} />
+          addMissing={addMissing} setAddMissing={setAddMissing} createLinks={createLinks} setCreateLinks={setCreateLinks}
+          busy={busy} onBack={restart} onNext={doCheck} />
       )}
 
       {step === 2 && check && (
@@ -143,6 +154,9 @@ function Wizard({ module, schema }: { module: ModuleSchema; schema: Schema }) {
         <Paper withBorder p="xl" radius="md">
           <Stack>
             <Group gap="xs"><IconCheck color="var(--mantine-color-teal-6)" /><Title order={3}>{result.created} {result.created === 1 ? module.singular.toLowerCase() : module.label.toLowerCase()} imported</Title></Group>
+            {Object.entries(result.new_records ?? {}).map(([label, n]) => (
+              <Text key={label} size="sm">Also added {n} new {n === 1 ? singularOf(schema, label) : label.toLowerCase()}.</Text>
+            ))}
             {result.skipped > 0 && <Text size="sm" c="dimmed">{result.skipped} rows were left out.</Text>}
             {result.failed.length > 0 && (
               <Alert color="orange" title={`${result.failed.length} rows couldn't be imported`}>
@@ -162,13 +176,22 @@ function Wizard({ module, schema }: { module: ModuleSchema; schema: Schema }) {
   );
 }
 
+function singularOf(schema: Schema, moduleLabel: string) {
+  return (schema.modules.find((m) => m.label === moduleLabel)?.singular ?? moduleLabel).toLowerCase();
+}
+
 function MatchStep({
-  upload, mapping, setMapping, schema, module, addMissing, setAddMissing, busy, onBack, onNext,
+  upload, mapping, setMapping, schema, module, addMissing, setAddMissing, createLinks, setCreateLinks, busy, onBack, onNext,
 }: {
   upload: Upload; mapping: MapEntry[]; setMapping: (m: MapEntry[]) => void; schema: Schema; module: ModuleSchema;
-  addMissing: boolean; setAddMissing: (b: boolean) => void; busy: boolean; onBack: () => void; onNext: () => void;
+  addMissing: boolean; setAddMissing: (b: boolean) => void; createLinks: Record<string, string>;
+  setCreateLinks: (c: Record<string, string>) => void; busy: boolean; onBack: () => void; onNext: () => void;
 }) {
   const used = new Set(mapping.map((m) => m.field).filter(Boolean));
+  const joinable = (key: string) => ["text", "longtext"].includes(upload.fields.find((f) => f.key === key)?.type ?? "");
+  const columnsFor = (key: string) => upload.headers.filter((_, j) => mapping[j]?.field === key);
+  const linkFields = module.fields.filter((f) => f.type === "link" && used.has(f.key) && (upload.can_create_links[f.key] ?? []).length > 0);
+  const moduleOf = (key: string) => schema.modules.find((m) => m.key === key);
   const fieldType = Object.fromEntries(upload.fields.map((f) => [f.key, f.type]));
   const titleMapped = used.has(module.title_field);
   const hasDropdown = mapping.some((m) => m.field && module.fields.find((f) => f.key === m.field)?.type === "dropdown");
@@ -199,9 +222,13 @@ function MatchStep({
                     <Table.Td>
                       <Select size="sm" searchable
                         data={[{ value: "", label: "Don't import" }, ...upload.fields.map((f) => ({
-                          value: f.key, label: f.label + (f.required ? " *" : ""), disabled: used.has(f.key) && m.field !== f.key,
+                          value: f.key, label: f.label + (f.required ? " *" : ""),
+                          disabled: used.has(f.key) && m.field !== f.key && !joinable(f.key),
                         }))]}
                         value={m.field ?? ""} onChange={(v) => update(i, { field: v || null })} />
+                      {m.field && columnsFor(m.field).length > 1 && (
+                        <Text size="xs" c="dimmed" mt={4}>Joined: {columnsFor(m.field).join(" + ")}</Text>
+                      )}
                     </Table.Td>
                     <Table.Td>
                       {m.field && fieldType[m.field] === "money" ? (
@@ -223,6 +250,26 @@ function MatchStep({
           label="Add values that aren't in the dropdown lists yet (for example a new sector)"
           description="Otherwise those values are left blank and listed as warnings." />
       )}
+      {linkFields.map((f) => {
+        const options = upload.can_create_links[f.key];
+        const target = moduleOf(createLinks[f.key] ?? options[0]);
+        return (
+          <Group key={f.key} gap="xs" align="flex-start">
+            <Checkbox checked={!!createLinks[f.key]}
+              onChange={(e) => {
+                const next = { ...createLinks };
+                if (e.currentTarget.checked) next[f.key] = options[0]; else delete next[f.key];
+                setCreateLinks(next);
+              }}
+              label={`Create new ${target?.label.toLowerCase() ?? "records"} for names in “${f.label}” that aren't in Dealflow yet`}
+              description="Otherwise those rows are imported without the link, and listed as warnings." />
+            {createLinks[f.key] && options.length > 1 && (
+              <Select size="xs" w={180} data={options.map((m) => ({ value: m, label: moduleOf(m)?.label ?? m }))}
+                value={createLinks[f.key]} onChange={(v) => v && setCreateLinks({ ...createLinks, [f.key]: v })} />
+            )}
+          </Group>
+        );
+      })}
       {!titleMapped && <Alert color="orange">Match a column to {titleLabel}; it's required.</Alert>}
       <Group justify="space-between">
         <Button variant="default" onClick={onBack}>Choose another file</Button>
@@ -253,6 +300,7 @@ function ReviewStep({
     setInclude(next);
   };
   const newOpts = Object.entries(s.new_options);
+  const newRecords = Object.entries(s.new_records ?? {});
 
   return (
     <Stack>
@@ -264,6 +312,11 @@ function ReviewStep({
       <Text size="sm" c="dimmed">
         Possible duplicates are left out unless you tick them. Rows with errors can't be imported; fix them in your file and upload again.
       </Text>
+      {newRecords.length > 0 && (
+        <Alert color="blue" title="These will be added as new records">
+          {newRecords.map(([label, names]) => <Text key={label} size="sm"><b>{label}:</b> {names.join(", ")}</Text>)}
+        </Alert>
+      )}
       {newOpts.length > 0 && (
         <Alert color="blue" title="These will be added to the dropdown lists">
           {newOpts.map(([list, vals]) => <Text key={list} size="sm"><b>{list}:</b> {vals.join(", ")}</Text>)}

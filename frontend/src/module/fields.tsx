@@ -5,13 +5,17 @@ import {
   Textarea,
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
+import { IconBrandWhatsapp, IconCheck } from "@tabler/icons-react";
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 
 import { useMe, useSchema, useUsers } from "../context";
-import { formatDate, formatMoney, groupDigits, type Prefs } from "../format";
-import type { FieldSchema, Money, Schema, UserLookup } from "../types";
+import { formatBirthday, formatDate, formatMoney, groupDigits, whatsappLink, type Prefs } from "../format";
+import type { FieldSchema, LinkValue, Money, Schema, UserLookup } from "../types";
+import BirthdayInput from "./BirthdayInput";
+import LinkInput from "./LinkInput";
 
 dayjs.extend(customParseFormat);
 
@@ -24,7 +28,7 @@ export function emptyValue(f: FieldSchema): unknown {
     case "dropdown": return f.multi ? [] : null;
     case "boolean": return false;
     case "tristate": return "unknown";
-    case "integer": case "decimal": case "percent": case "date": case "user": return null;
+    case "integer": case "decimal": case "percent": case "date": case "user": case "link": case "birthday": return null;
     default: return "";
   }
 }
@@ -57,6 +61,8 @@ export function textValue(f: FieldSchema, v: unknown, ctx: { schema?: Schema; us
       return optionLabel(ctx.schema, f.choice_list, v as number).label;
     case "user": return ctx.users?.find((u) => u.id === v)?.full_name ?? "";
     case "tags": return (v as string[]).join(", ");
+    case "link": return (v as LinkValue).title;
+    case "birthday": return formatBirthday(v as string, ctx.prefs);
     default: return String(v);
   }
 }
@@ -85,6 +91,41 @@ export function FieldValue({ f, v, compact = false }: { f: FieldSchema; v: unkno
     }
     case "email":
       out = <Anchor href={`mailto:${v}`} size="sm" onClick={(e) => e.stopPropagation()}>{String(v)}</Anchor>;
+      break;
+    case "phone": {
+      const phone = String(v);
+      const wa = f.key.includes("mobile") ? whatsappLink(phone) : null;
+      out = (
+        <Group gap={6} wrap="nowrap">
+          <Anchor href={`tel:${phone.replace(/[^\d+]/g, "")}`} size="sm" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>{phone}</Anchor>
+          {wa && (
+            <Anchor href={wa} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} aria-label="WhatsApp" c="teal" lh={0}>
+              <IconBrandWhatsapp size={16} />
+            </Anchor>
+          )}
+        </Group>
+      );
+      break;
+    }
+    case "link": {
+      const l = v as LinkValue;
+      const canOpen = me.perms[l.module]?.view;
+      out = (
+        <Group gap={6} wrap="nowrap">
+          {canOpen ? (
+            <Anchor component={Link} to={`/m/${l.module}/${l.id}`} size="sm" onClick={(e) => e.stopPropagation()}>{l.title}</Anchor>
+          ) : (
+            <Text size="sm">{l.title}</Text>
+          )}
+          {l.archived && <Badge size="xs" variant="light" color="gray">Archived</Badge>}
+        </Group>
+      );
+      break;
+    }
+    case "boolean":
+      out = compact
+        ? (v ? <IconCheck size={16} color="var(--mantine-color-teal-7)" aria-label="Yes" /> : <Text c="dimmed" size="sm">—</Text>)
+        : <Text size="sm">{v ? "Yes" : "No"}</Text>;
       break;
     case "longtext":
       out = <Text size="sm" className="df-prewrap" lineClamp={compact ? 2 : undefined}>{String(v)}</Text>;
@@ -218,6 +259,10 @@ export function FieldInput({
       return <TagsInput {...common} clearable value={(value as string[]) ?? []} onChange={onChange} splitChars={[","]} placeholder="Type and press Enter" />;
     case "money":
       return <MoneyInput {...common} value={(value as Money) ?? EMPTY_MONEY} onChange={onChange} grouping={grouping} schema={schema} />;
+    case "link":
+      return <LinkInput f={f} value={(value as LinkValue) ?? null} onChange={onChange} error={error} schemaModules={schema?.modules ?? []} />;
+    case "birthday":
+      return <BirthdayInput label={f.label} value={(value as string) ?? null} onChange={onChange} error={error} dayFirst={me.date_format !== "MM/DD/YYYY"} />;
   }
 }
 

@@ -1,13 +1,18 @@
 import { Button, Group, Paper, SimpleGrid, Stack, Text, ThemeIcon, Title } from "@mantine/core";
-import { IconBriefcase, IconBuildingBank, IconFileImport, IconPlus } from "@tabler/icons-react";
+import { IconBriefcase, IconBuildingBank, IconFileImport, IconPlus, IconUsers } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
 
 import { useApp } from "../context";
 
+const CARDS: Record<string, { icon: typeof IconBriefcase; color: string; blurb: string }> = {
+  investors: { icon: IconBuildingBank, color: "teal", blurb: "Investor firms, what they invest in, and who owns each relationship." },
+  contacts: { icon: IconUsers, color: "grape", blurb: "People at investor firms and client companies: how to reach them and who knows them best." },
+};
+
 export default function Home() {
   const { info, me } = useApp();
-  const inv = me.perms.investors;
   const firstName = me.full_name.split(" ")[0];
+  const modules = info.modules.filter((m) => info.built_modules.includes(m.key) && me.perms[m.key]?.view && CARDS[m.key]);
   return (
     <Stack gap="lg" maw={1100}>
       <div>
@@ -27,20 +32,24 @@ export default function Home() {
         </Paper>
       )}
       <SimpleGrid cols={{ base: 1, md: 2 }}>
-        {inv?.view && (
-          <Paper withBorder p="lg" radius="md">
-            <Group gap="sm" mb="xs">
-              <ThemeIcon variant="light" size="lg" color="teal"><IconBuildingBank size={20} /></ThemeIcon>
-              <Text fw={600}>Investors</Text>
-            </Group>
-            <Text size="sm" c="dimmed" mb="md">Investor firms, what they invest in, and who owns each relationship.</Text>
-            <Group gap="xs">
-              <Button size="xs" component={Link} to="/m/investors">Open investors</Button>
-              {inv.create && <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} component={Link} to="/m/investors/new">Add one</Button>}
-              {inv.create && <Button size="xs" variant="default" leftSection={<IconFileImport size={14} />} component={Link} to="/m/investors/import">Import from Excel</Button>}
-            </Group>
-          </Paper>
-        )}
+        {modules.map((m) => {
+          const card = CARDS[m.key];
+          const perms = me.perms[m.key];
+          return (
+            <Paper key={m.key} withBorder p="lg" radius="md">
+              <Group gap="sm" mb="xs">
+                <ThemeIcon variant="light" size="lg" color={card.color}><card.icon size={20} /></ThemeIcon>
+                <Text fw={600}>{m.label}</Text>
+              </Group>
+              <Text size="sm" c="dimmed" mb="md">{card.blurb}</Text>
+              <Group gap="xs">
+                <Button size="xs" component={Link} to={`/m/${m.key}`}>Open {m.label.toLowerCase()}</Button>
+                {perms.create && <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} component={Link} to={`/m/${m.key}/new`}>Add one</Button>}
+                {perms.create && <Button size="xs" variant="default" leftSection={<IconFileImport size={14} />} component={Link} to={`/m/${m.key}/import`}>Import from Excel</Button>}
+              </Group>
+            </Paper>
+          );
+        })}
         {(me.flags.manage_users || me.role.is_admin) && (
           <Paper withBorder p="lg" radius="md">
             <Text fw={600} mb="xs">Set up your team</Text>

@@ -5,7 +5,7 @@ import { useState } from "react";
 import { api } from "../api";
 import { notifyError } from "../components/errors";
 
-type Field = { key: string; label: string; group: string; type: string; enabled: boolean; can_disable: boolean };
+type Field = { key: string; label: string; group: string; type: string; enabled: boolean; can_disable: boolean; required: boolean };
 type Mod = { module: string; label: string; groups: string[]; fields: Field[] };
 
 export default function FieldSettings() {
@@ -48,7 +48,9 @@ export default function FieldSettings() {
                     {f.can_disable ? (
                       <Switch checked={f.enabled} onChange={(e) => toggle(f, e.currentTarget.checked)} aria-label={f.label} />
                     ) : (
-                      <Tooltip label="Required; always on"><Badge variant="light" color="gray" size="sm">Required</Badge></Tooltip>
+                      <Tooltip label={f.required ? "Every record needs this, so it stays on" : "Other screens depend on this, so it stays on"}>
+                        <Badge variant="light" color="gray" size="sm">{f.required ? "Required" : "Always on"}</Badge>
+                      </Tooltip>
                     )}
                   </Group>
                 ))}

@@ -1,20 +1,21 @@
-import { Anchor, Breadcrumbs, Button, Center, Group, Loader, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
+import { Anchor, Badge, Breadcrumbs, Button, Center, Group, Loader, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { IconArchive, IconPencil } from "@tabler/icons-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api";
-import { useMe, useModuleSchema } from "../context";
+import { useApp, useModuleSchema } from "../context";
 import { errorMessage, notifyError, notifyOk } from "../components/errors";
 import { formatDateTime } from "../format";
 import type { FieldSchema, ModuleSchema, RecordData } from "../types";
 import { FieldValue, isEmpty } from "./fields";
+import RelatedSection from "./RelatedSection";
 
 export default function DetailPage() {
   const { module: key, id } = useParams();
   const { module, isLoading } = useModuleSchema(key);
-  const me = useMe();
+  const { info, me } = useApp();
   const nav = useNavigate();
   const qc = useQueryClient();
   const rec = useQuery({
@@ -34,6 +35,7 @@ export default function DetailPage() {
     );
   }
   const r = rec.data;
+  const moduleLabel = (key?: string) => info.modules.find((m) => m.key === key)?.label ?? key ?? "";
   const fields = module.fields.filter((f) => f.enabled && f.key !== module.title_field);
   const st = r._stamps;
 
@@ -81,6 +83,10 @@ export default function DetailPage() {
         </Group>
       </Group>
 
+      {module.sections.filter((s) => s.status === "ready" && s.module).map((s) => (
+        <RelatedSection key={s.key} section={s} parent={module} record={r} />
+      ))}
+
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
         {module.groups.map((g) => {
           const gf = fields.filter((f) => f.group === g);
@@ -99,15 +105,16 @@ export default function DetailPage() {
             </Paper>
           );
         })}
-        {module.sections.map((s) => (
+        {module.sections.filter((s) => s.status === "coming").map((s) => (
           <Paper key={s.key} withBorder p="lg" radius="md">
             <Text fw={600} mb="xs">{s.label}</Text>
             <Text size="sm" c="dimmed">
-              {s.available ? "Nothing linked yet." : `This fills in automatically once the ${s.available_with === "deals" ? "Active Deals" : "Contacts"} module is added.`}
+              This fills in automatically once the {moduleLabel(s.module ?? s.available_with)} module is added.
             </Text>
           </Paper>
         ))}
       </SimpleGrid>
+
 
       <Text size="xs" c="dimmed">
         Created by {st.created_by?.name ?? "—"} on {formatDateTime(st.created_at, me)} · Last edited by {st.updated_by?.name ?? "—"} on {formatDateTime(st.updated_at, me)}
@@ -119,18 +126,29 @@ export default function DetailPage() {
 // A few key facts shown under the record's name, per module.
 const HEADER_FIELDS: Record<string, string[]> = {
   investors: ["investor_type", "relationship_strength", "actively_deploying", "hq_city"],
+  contacts: ["designation", "firm", "decision_level", "primary_contact", "relationship_strength", "city"],
 };
 
 function HeaderBadges({ r, module }: { r: RecordData; module: ModuleSchema }) {
   const items = (HEADER_FIELDS[module.key] ?? [])
     .map((k) => module.fields.find((f) => f.key === k && f.enabled))
-    .filter((f): f is FieldSchema => !!f && !isEmpty(r[f.key]) && r[f.key] !== "unknown");
+    .filter((f): f is FieldSchema => !!f && !isEmpty(r[f.key]) && r[f.key] !== "unknown" && r[f.key] !== false);
   if (!items.length) return null;
   return (
     <Group gap="sm" mt={6}>
       {items.map((f) => (
         <span key={f.key}>
-          {f.type === "text" ? <Text size="sm" c="dimmed">{String(r[f.key])}</Text> : <FieldValue f={f} v={r[f.key]} compact />}
+          {f.type === "text" ? (
+            <Text size="sm" c="dimmed">{String(r[f.key])}</Text>
+          ) : f.type === "boolean" ? (
+            <Badge variant="light" color="teal">{f.label}</Badge>
+          ) : f.type === "tristate" ? (
+            <Badge variant="dot" color={r[f.key] === "yes" ? "teal" : "red"} tt="none">
+              {r[f.key] === "yes" ? f.label : `Not ${f.label.toLowerCase()}`}
+            </Badge>
+          ) : (
+            <FieldValue f={f} v={r[f.key]} compact />
+          )}
         </span>
       ))}
     </Group>

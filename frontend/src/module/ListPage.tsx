@@ -1,23 +1,25 @@
 import {
   ActionIcon, Button, Center, Checkbox, CloseButton, Drawer, Group, Loader, Menu, MultiSelect, NumberInput,
-  Pagination, Paper, ScrollArea, Select, Stack, Table, TagsInput, Text, TextInput, Title, Tooltip,
+  Pagination, Paper, ScrollArea, SegmentedControl, Select, Stack, Table, TagsInput, Text, TextInput, Title, Tooltip,
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
-import { useDebouncedCallback } from "@mantine/hooks";
+import { useDebouncedCallback, useDebouncedValue } from "@mantine/hooks";
 import {
   IconAdjustmentsHorizontal, IconArrowDown, IconArrowUp, IconColumns3, IconDownload, IconFileImport, IconPlus,
   IconSearch,
 } from "@tabler/icons-react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
-import { api, download } from "../api";
+import { api, download, qs } from "../api";
 import { useMe, useModuleSchema, useUsers } from "../context";
 import { errorMessage } from "../components/errors";
-import type { FieldSchema, ModuleSchema, Page, RecordData, Schema } from "../types";
+import { MONTH_NAMES } from "../format";
+import type { FieldSchema, LookupItem, ModuleSchema, Page, RecordData, Schema } from "../types";
 import { FieldValue } from "./fields";
+import { useModuleLabels } from "./LinkInput";
 
 const PAGE_SIZE = 50;
 const RESERVED = new Set(["q", "ordering", "page"]);
@@ -94,7 +96,8 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
     setParam({ ordering: next });
   };
 
-  const activeFilters = [...params.keys()].filter((k) => !RESERVED.has(k));
+  const segParam = module.segments?.param;
+  const activeFilters = [...params.keys()].filter((k) => !RESERVED.has(k) && k !== segParam);
   const exportParams = new URLSearchParams(params);
   exportParams.delete("page");
   exportParams.set("columns", shown.map((f) => f.key).join(","));
@@ -121,6 +124,12 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
         </Group>
       </Group>
 
+      {module.segments && (
+        <SegmentedControl w="fit-content" data={module.segments.options}
+          value={params.get(module.segments.param) ?? ""}
+          onChange={(v) => setParam({ [module.segments!.param]: v || null })} />
+      )}
+
       <Group gap="xs">
         <TextInput
           style={{ flex: 1, maxWidth: 420 }}
@@ -139,6 +148,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
             const next = new URLSearchParams();
             if (params.get("q")) next.set("q", params.get("q")!);
             if (ordering) next.set("ordering", ordering);
+            if (segParam && params.get(segParam)) next.set(segParam, params.get(segParam)!);
             setParams(next, { replace: true });
           }}>Clear filters</Button>
         )}
@@ -182,7 +192,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
                 {data && data.results.length === 0 && (
                   <Table.Tr>
                     <Table.Td colSpan={shown.length}>
-                      <EmptyState module={module} filtered={activeFilters.length > 0 || !!params.get("q")} />
+                      <EmptyState module={module} filtered={activeFilters.length > 0 || !!params.get("q") || !!(segParam && params.get(segParam))} />
                     </Table.Td>
                   </Table.Tr>
                 )}
@@ -284,6 +294,7 @@ function FilterDrawer({
   const keys = new Set<string>();
   for (const f of filterable) {
     if (f.type === "date") { keys.add(`${f.key}_from`); keys.add(`${f.key}_to`); }
+    else if (f.type === "birthday") keys.add(`${f.key}_month`);
     else keys.add(f.key);
   }
   if (module.key === "investors") ["ticket", "ticket_currency", "ticket_unit"].forEach((k) => keys.add(k));
@@ -350,6 +361,14 @@ function FilterDrawer({
                   </Group>
                 </div>
               );
+            case "link":
+              return <LinkFilter key={f.key} f={f} value={csv(f.key)} onChange={(v) => set(f.key, v.join(","))} />;
+            case "birthday":
+              return (
+                <MultiSelect key={f.key} label={`${f.label} in`} clearable placeholder="Any month"
+                  data={MONTH_NAMES.map((m, i) => ({ value: String(i + 1), label: m }))}
+                  value={csv(`${f.key}_month`)} onChange={(v) => set(`${f.key}_month`, v.join(","))} />
+              );
             default:
               return <TextInput key={f.key} label={f.label} placeholder="Contains…" value={draft[f.key] || ""} onChange={(e) => set(f.key, e.currentTarget.value)} />;
           }
@@ -358,10 +377,47 @@ function FilterDrawer({
           <Button variant="subtle" onClick={() => setDraft(Object.fromEntries([...keys].map((k) => [k, ""])))}>Reset</Button>
           <Button onClick={() => onApply(Object.fromEntries(Object.entries(draft).map(([k, v]) => [k, v || null])))}>Apply filters</Button>
         </Group>
-        {[...params.keys()].some((k) => !RESERVED.has(k)) && (
+        {[...params.keys()].some((k) => !RESERVED.has(k) && k !== module.segments?.param) && (
           <Text size="xs" c="dimmed">Filters are kept in the page address, so you can bookmark this view.</Text>
         )}
       </Stack>
     </Drawer>
+  );
+}
+
+/** Filter by specific linked records (e.g. contacts at Blume and Kotak). Searches on the server. */
+function LinkFilter({ f, value, onChange }: { f: FieldSchema; value: string[]; onChange: (v: string[]) => void }) {
+  const labels = useModuleLabels();
+  const [search, setSearch] = useState("");
+  const [debounced] = useDebouncedValue(search.trim(), 200);
+  const found = useQueries({
+    queries: f.targets.map((m) => ({
+      queryKey: ["lookup", m, debounced],
+      queryFn: () => api<LookupItem[]>(`lookup/${m}/${qs({ q: debounced })}`),
+      staleTime: 30_000,
+    })),
+  });
+  // Names for records already chosen (they may not be in the current search results).
+  const chosen = useQueries({
+    queries: f.targets.map((m) => {
+      const ids = value.filter((v) => v.startsWith(`${m}:`)).map((v) => v.split(":")[1]);
+      return {
+        queryKey: ["lookup-ids", m, ids.join(",")],
+        queryFn: () => api<LookupItem[]>(`lookup/${m}/${qs({ ids: ids.join(",") })}`),
+        enabled: ids.length > 0,
+        staleTime: 60_000,
+      };
+    }),
+  });
+  const items = new Map<string, string>();
+  [...chosen, ...found].forEach((r) => r.data?.forEach((x) => items.set(`${x.module}:${x.id}`, x.title)));
+  value.forEach((v) => { if (!items.has(v)) items.set(v, "…"); });
+  const noun = f.targets.map((m) => (labels[m] ?? m).toLowerCase()).join(" or ");
+  return (
+    <MultiSelect label={f.label} searchable clearable placeholder={value.length ? undefined : `Search ${noun}`}
+      data={[...items].map(([v, label]) => ({ value: v, label }))}
+      value={value} onChange={onChange}
+      searchValue={search} onSearchChange={setSearch} filter={({ options }) => options}
+      nothingFoundMessage={debounced ? `No ${noun} match` : undefined} />
   );
 }

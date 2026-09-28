@@ -474,7 +474,7 @@ class FieldSwitchView(APIView):
                     "groups": mod.groups,
                     "fields": [
                         {"key": f.key, "label": f.label, "group": f.group, "type": f.type,
-                         "enabled": enabled[f.key], "can_disable": f.can_disable}
+                         "enabled": enabled[f.key], "can_disable": f.can_disable, "required": f.required}
                         for f in mod.fields
                     ],
                 }

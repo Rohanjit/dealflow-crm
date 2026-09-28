@@ -5,10 +5,11 @@ import {
   IconSettings, IconTargetArrow, IconUserCircle, IconUsers,
 } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { api } from "../api";
-import { useApp } from "../context";
+import { useApp, resetSession } from "../context";
 import Logo from "../components/Logo";
 import GlobalSearch from "./GlobalSearch";
 
@@ -30,11 +31,14 @@ export default function Shell() {
 
   async function signOut() {
     await api("auth/logout/", { method: "POST" });
-    qc.clear();
-    await qc.invalidateQueries({ queryKey: ["app"] });
+    await resetSession(qc);
   }
 
   const active = (path: string) => loc.pathname === path || loc.pathname.startsWith(path + "/");
+  // Each new page starts at the top (React Router keeps the old scroll position otherwise).
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [loc.pathname]);
 
   return (
     <AppShell header={{ height: 56 }} navbar={{ width: 232, breakpoint: "sm", collapsed: { mobile: !opened } }} padding="lg">
