@@ -26,7 +26,7 @@ export type AppInfo = {
 
 export type FieldType =
   | "text" | "longtext" | "url" | "email" | "phone" | "integer" | "decimal" | "percent" | "date"
-  | "boolean" | "tristate" | "choice" | "dropdown" | "user" | "money" | "tags" | "link" | "birthday";
+  | "boolean" | "tristate" | "choice" | "dropdown" | "user" | "money" | "tags" | "link" | "birthday" | "datetime";
 
 export type FieldSchema = {
   key: string;
@@ -35,7 +35,7 @@ export type FieldSchema = {
   group: string;
   required: boolean;
   choice_list: string | null;
-  multi: boolean;
+  multi: boolean; // dropdown, user and link fields that take several values
   choices: { value: string; label: string }[];
   help: string;
   list_default: boolean;
@@ -47,7 +47,8 @@ export type FieldSchema = {
   target_labels: Record<string, string>; // link: e.g. { investors: "Investor side" }
   via: string | null; // company-level field shown on an outreach attempt: the link field holding it
   via_module: string | null;
-  pipeline_role: "stage" | "status" | "entered" | "lost_reason" | "hold_reason" | "revisit" | null;
+  pipeline_role: "stage" | "status" | "entered" | "exit" | null; // exit: a reason or date asked when leaving
+  readonly: boolean; // set by the app, never typed in (e.g. "From outreach")
 };
 
 export type Section = {
@@ -64,11 +65,23 @@ export type Section = {
   params?: Record<string, string>;
   columns?: string[];
   order?: string;
+  panel?: string; // a purpose-built panel instead of a table (e.g. a deal's investor tracker)
+  add_label?: string; // text of the Add button (default "Add <singular>")
+  no_add?: boolean; // records here are created elsewhere (e.g. a won mandate's deal)
 };
 
 export type Segments = { param: string; options: { value: string; label: string }[]; default: string } | null;
 
-export type PipelineExit = { value: string; label: string; reason_field: string | null; date_field: string | null };
+export type PipelineExit = {
+  value: string;
+  label: string; // the status, e.g. "Lost"
+  action: string; // the button, e.g. "Mark as lost"
+  done: string; // what happened, e.g. "Marked lost"
+  paused: boolean; // on hold: resumes where it stopped; the others are reopened
+  reason_field: string | null;
+  date_field: string | null;
+  tone: "red" | "orange" | "gray";
+};
 export type Pipeline = {
   stage_field: string;
   status_field: string;
@@ -76,6 +89,7 @@ export type Pipeline = {
   open_value: string;
   won: string | null;
   stages: { value: string; label: string }[];
+  groups: { label: string; stages: string[] }[]; // phases, e.g. Preparation / Execution
   exits: PipelineExit[];
 };
 
@@ -106,6 +120,7 @@ export type ModuleSchema = {
   segments: Segments;
   pipeline: Pipeline | null;
   timeline: boolean;
+  importable: boolean;
   perms: ModulePerms;
 };
 

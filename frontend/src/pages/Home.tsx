@@ -2,16 +2,20 @@ import { Button, Group, Paper, SimpleGrid, Stack, Text, ThemeIcon, Title } from 
 import { IconBriefcase, IconBuildingBank, IconFileImport, IconPlus, IconTargetArrow, IconUsers } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
 
-import { useApp } from "../context";
+import { useApp, useSchema } from "../context";
+import DealsDashboard from "../deals/Dashboard";
 
 const CARDS: Record<string, { icon: typeof IconBriefcase; color: string; blurb: string }> = {
   investors: { icon: IconBuildingBank, color: "teal", blurb: "Investor firms, what they invest in, and who owns each relationship." },
   contacts: { icon: IconUsers, color: "grape", blurb: "People at investor firms and client companies: how to reach them and who knows them best." },
   outreach: { icon: IconTargetArrow, color: "orange", blurb: "Companies you're approaching for mandates, from first contact to mandate won." },
+  deals: { icon: IconBriefcase, color: "navy", blurb: "Mandates being executed: stages, deal team, fees, and each deal's investor tracker with suggested investors." },
 };
+const OPEN_LABEL: Record<string, string> = { outreach: "Open pipeline", deals: "Open active deals" };
 
 export default function Home() {
   const { info, me } = useApp();
+  const { data: schema } = useSchema();
   const firstName = me.full_name.split(" ")[0];
   const modules = info.modules.filter((m) => info.built_modules.includes(m.key) && me.perms[m.key]?.view && CARDS[m.key]);
   return (
@@ -20,22 +24,12 @@ export default function Home() {
         <Title order={2}>Welcome, {firstName}</Title>
         <Text c="dimmed">{info.firm_name}</Text>
       </div>
-      {me.perms.deals?.view && (
-        <Paper withBorder p="lg" radius="md">
-          <Group gap="sm" mb="xs">
-            <ThemeIcon variant="light" size="lg"><IconBriefcase size={20} /></ThemeIcon>
-            <Text fw={600}>Active deals</Text>
-          </Group>
-          <Text size="sm" c="dimmed">
-            Deals by stage, deals near their target close date and mandates nearing expiry will show here once the
-            Active Deals module is added.
-          </Text>
-        </Paper>
-      )}
+      {me.perms.deals?.view && info.built_modules.includes("deals") && <DealsDashboard />}
       <SimpleGrid cols={{ base: 1, md: 2 }}>
         {modules.map((m) => {
           const card = CARDS[m.key];
           const perms = me.perms[m.key];
+          const importable = schema?.modules.find((s) => s.key === m.key)?.importable ?? false;
           return (
             <Paper key={m.key} withBorder p="lg" radius="md">
               <Group gap="sm" mb="xs">
@@ -44,9 +38,9 @@ export default function Home() {
               </Group>
               <Text size="sm" c="dimmed" mb="md">{card.blurb}</Text>
               <Group gap="xs">
-                <Button size="xs" component={Link} to={`/m/${m.key}`}>{m.key === "outreach" ? "Open pipeline" : `Open ${m.label.toLowerCase()}`}</Button>
+                <Button size="xs" component={Link} to={`/m/${m.key}`}>{OPEN_LABEL[m.key] ?? `Open ${m.label.toLowerCase()}`}</Button>
                 {perms.create && <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} component={Link} to={`/m/${m.key}/new`}>Add one</Button>}
-                {perms.create && <Button size="xs" variant="default" leftSection={<IconFileImport size={14} />} component={Link} to={`/m/${m.key}/import`}>Import from Excel</Button>}
+                {perms.create && importable && <Button size="xs" variant="default" leftSection={<IconFileImport size={14} />} component={Link} to={`/m/${m.key}/import`}>Import from Excel</Button>}
               </Group>
             </Paper>
           );

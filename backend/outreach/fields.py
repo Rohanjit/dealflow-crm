@@ -253,7 +253,7 @@ OUTREACH = register(
         sections=[
             {
                 "key": "deal",
-                "label": "Active deal",
+                "label": "Deal",
                 "module": "deals",
                 "link_field": "outreach",
                 "hide_empty": True,

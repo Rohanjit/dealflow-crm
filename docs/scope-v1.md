@@ -65,6 +65,7 @@ Open-source CRM for investment bankers. Discovery completed 27 Sep 2026.
 ### Home dashboard
 - Active deals snapshot only: deals by stage, deals near target close date, mandates nearing expiry.
 - Shown only to users whose role can access Active Deals.
+- "Near" means within 30 days by default (overdue and expired ones included); firms change the window in Settings > Firm (default chosen 29 Sep 2026 while building).
 
 ### Data import and export
 - Import from CSV/Excel for Investors, Contacts and Outreach, with a column-matching step and duplicate warnings.
@@ -151,6 +152,11 @@ No separate Interactions module: interactions are captured as dated notes inside
   - Timeline: target close date, current stage-entered date.
   - Closure details: amount raised, final valuation, lead investor(s), closing date, fee earned.
   - Notes/interaction log; linked vault documents and tasks.
+- Defaults chosen while building (29 Sep 2026, open to change):
+  - Companies get a Geography field (shared with outreach and deals) so matching can compare it with investors' geography focus; the deal records its company stage (Seed, Growth, …) for the same reason.
+  - CCPS and CCD count as equity for matching; Mix matches equity and debt investors.
+  - Deal exits don't ask for a reason; an optional note goes into the deal's log.
+  - Deals aren't imported from Excel: a pipeline sheet imported into Outreach at "Mandate won" creates the deals.
 
 ### 5. Tasks & Reminders
 - Fields: title, description, due date and time, priority (low/medium/high), status (open/in progress/done), assigned to (one user), created by.

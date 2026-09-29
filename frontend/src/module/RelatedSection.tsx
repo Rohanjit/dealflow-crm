@@ -42,9 +42,9 @@ export default function RelatedSection({ section, parent, record }: { section: S
           <Text fw={600}>{section.label}</Text>
           {data && <Badge variant="light" color="gray" size="sm">{count}</Badge>}
         </Group>
-        {rel.perms.create && (
+        {rel.perms.create && !section.no_add && (
           <Button size="xs" variant="light" leftSection={<IconPlus size={14} />} component={Link} to={addUrl}>
-            Add {rel.singular.toLowerCase()}
+            {section.add_label ?? `Add ${rel.singular.toLowerCase()}`}
           </Button>
         )}
       </Group>

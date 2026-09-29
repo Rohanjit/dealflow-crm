@@ -43,3 +43,34 @@ body {
   padding: 16px;
   background: linear-gradient(160deg, #1f3a5f 0%, #285495 55%, #4fb3a0 140%);
 }
+
+/* Home dashboard: stat tiles and the deals-by-stage bars */
+.df-tile {
+  display: block;
+  padding: 10px 12px;
+  border: 1px solid var(--mantine-color-gray-3);
+  border-radius: var(--mantine-radius-md);
+  transition: background-color 120ms;
+}
+.df-tile:hover, .df-tile:focus-visible { background: var(--mantine-color-gray-0); }
+.df-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+.df-bar-row:hover, .df-bar-row:focus-visible { background: var(--mantine-color-gray-0); }
+.df-bar-track {
+  flex: 1;
+  height: 14px;
+  border-left: 1px solid var(--mantine-color-gray-4);
+  display: flex;
+  align-items: center;
+}
+.df-bar {
+  height: 12px;
+  min-width: 3px;
+  border-radius: 0 4px 4px 0; /* square at the baseline, rounded at the data end */
+}

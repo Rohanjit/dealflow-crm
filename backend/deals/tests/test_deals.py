@@ -358,13 +358,13 @@ class MatchingTests(DealBase):
                  min_ticket={"amount": "5", "currency": "USD", "unit": "Mn"})
         body = self.matches()
         self.assertEqual(body["facts"], {"sector": "Consumer / D2C", "stage": "Growth", "geography": "India",
-                                         "raise": "₹ 100 Cr", "kind": "equity"})
+                                         "raise": "₹100 Cr", "kind": "equity"})
         ranked = [(r["investor"]["title"], r["score"]) for r in body["results"]]
         self.assertEqual(ranked[0], ("Perfect Capital", 100))
         self.assertEqual(ranked[-1][0], "Debt Fund")
         by_name = {r["investor"]["title"]: {x["factor"]: x for x in r["reasons"]} for r in body["results"]}
         self.assertEqual(by_name["Blank Partners"]["sector"]["fit"], "unknown")
-        self.assertEqual(by_name["Debt Fund"]["ticket"]["text"], "Minimum ticket ₹ 500 Cr is above the raise")
+        self.assertEqual(by_name["Debt Fund"]["ticket"]["text"], "Minimum ticket ₹500 Cr is above the raise")
         self.assertEqual(by_name["Debt Fund"]["instrument"]["fit"], "no")
         self.assertEqual(by_name["Global Dollar"]["geography"]["text"], "Invests globally")
         self.assertEqual(by_name["Global Dollar"]["ticket"]["text"], "Tickets in USD, raise in INR")
@@ -417,3 +417,16 @@ class DashboardTests(DealBase):
     def test_needs_deals_access(self):
         user = self.make_user("i@firm.com", self.make_role("Investors only", {"investors": ["view"]}))
         self.assertEqual(self.client_for(user).get("/api/dashboard/").status_code, 403)
+
+
+class TrackerRestoreTests(DealBase):
+    def test_restore_refused_when_investor_was_added_again(self):
+        d = self.deal()
+        inv = self.investor("Blume Ventures")
+        body = {"deal": f"deals:{d['id']}", "investor": f"investors:{inv['id']}"}
+        first = self.post(T_URL, body)
+        self.client.delete(f"{T_URL}{first['id']}/")
+        self.post(T_URL, body)
+        r = self.client.post(f"/api/archive/deal_investors/{first['id']}/")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("already on this deal's tracker", r.json()["detail"])

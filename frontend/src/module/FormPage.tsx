@@ -8,6 +8,7 @@ import { useModuleSchema } from "../context";
 import { errorMessage, fieldErrors, notifyOk } from "../components/errors";
 import type { FieldSchema, LinkValue, ModuleSchema, RecordData } from "../types";
 import { emptyValue, FieldInput } from "./fields";
+import { exitForField } from "./pipeline";
 
 /** New records can start with a link filled in from the page address: ?firm=investors:12 */
 function prefill(f: FieldSchema, raw: string | null): unknown {
@@ -20,15 +21,14 @@ function prefill(f: FieldSchema, raw: string | null): unknown {
 /** Which fields the form shows. Pipeline stage and status are moved with the stage controls, not
  *  typed in; a new record picks its starting stage; exit details show only while they apply. */
 function visible(f: FieldSchema, module: ModuleSchema, editing: boolean, record?: RecordData): boolean {
-  if (!f.enabled) return false;
+  if (!f.enabled || f.readonly) return false;
   const p = module.pipeline;
   if (!p || !f.pipeline_role) return true;
   const status = record ? String(record[p.status_field] ?? p.open_value) : p.open_value;
   switch (f.pipeline_role) {
     case "stage": return !editing;
     case "status": case "entered": return false;
-    case "lost_reason": return editing && status === "lost";
-    case "hold_reason": case "revisit": return editing && status === "on_hold";
+    case "exit": return editing && status === exitForField(p, f.key)?.value;
   }
   return true;
 }
@@ -182,7 +182,7 @@ export default function FormPage() {
                 <Text size="xs" c="dimmed" mt="md">
                   {missing
                     ? `Pick the ${viaLabel(missing)} first; its details fill in here.`
-                    : `These details belong to the ${viaLabel(vias[0])} and are shared by all its outreach.`}
+                    : `These details belong to the ${viaLabel(vias[0])} and are shared with its outreach and deals.`}
                 </Text>
               )}
             </Paper>

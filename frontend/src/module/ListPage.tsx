@@ -124,7 +124,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
           <Text c="dimmed" size="sm">{data ? `${total.toLocaleString(me.number_grouping === "indian" ? "en-IN" : "en-US")} ${total === 1 ? module.singular.toLowerCase() : module.label.toLowerCase()}` : " "}</Text>
         </div>
         <Group gap="xs">
-          {module.perms.create && (
+          {module.perms.create && module.importable && (
             <Button variant="default" leftSection={<IconFileImport size={16} />} component={Link} to={`/m/${module.key}/import`}>Import</Button>
           )}
           <Button variant="default" leftSection={<IconDownload size={16} />} onClick={() => download(`m/${module.key}/export/?${exportParams}`)}>
@@ -289,12 +289,17 @@ function EmptyState({ module, filtered }: { module: ModuleSchema; filtered: bool
     <Stack align="center" gap={6} py={48}>
       <Text fw={600}>{filtered ? `No ${module.label.toLowerCase()} match` : `No ${module.label.toLowerCase()} yet`}</Text>
       <Text size="sm" c="dimmed">
-        {filtered ? "Try a different search or clear the filters." : module.perms.create ? "Add one, or import your existing Excel sheet." : "Nothing has been added yet."}
+        {filtered ? "Try a different search or clear the filters."
+          : module.key === "deals" ? "Mandates won in Outreach appear here automatically, or add a deal by hand."
+            : module.perms.create ? (module.importable ? "Add one, or import your existing Excel sheet." : "Add the first one.")
+              : "Nothing has been added yet."}
       </Text>
       {!filtered && module.perms.create && (
         <Group mt="xs">
           <Button size="xs" component={Link} to={`/m/${module.key}/new`}>New {module.singular.toLowerCase()}</Button>
-          <Button size="xs" variant="default" component={Link} to={`/m/${module.key}/import`}>Import from Excel</Button>
+          {module.importable && (
+            <Button size="xs" variant="default" component={Link} to={`/m/${module.key}/import`}>Import from Excel</Button>
+          )}
         </Group>
       )}
     </Stack>
@@ -349,7 +354,7 @@ function FilterDrawer({
   const filterable = module.fields.filter((f) => f.filterable && f.enabled);
   const keys = new Set<string>();
   for (const f of filterable) {
-    if (f.type === "date") { keys.add(`${f.key}_from`); keys.add(`${f.key}_to`); }
+    if (f.type === "date" || f.type === "datetime") { keys.add(`${f.key}_from`); keys.add(`${f.key}_to`); }
     else if (f.type === "birthday") keys.add(`${f.key}_month`);
     else keys.add(f.key);
   }
@@ -403,7 +408,7 @@ function FilterDrawer({
               return <TagsInput key={f.key} label={f.label} description="Matches any of these" value={csv(f.key)} onChange={(v) => set(f.key, v.join(","))} />;
             case "boolean":
               return <Select key={f.key} label={f.label} clearable data={[{ value: "true", label: "Yes" }, { value: "false", label: "No" }]} value={draft[f.key] || null} onChange={(v) => set(f.key, v ?? "")} />;
-            case "date":
+            case "date": case "datetime":
               return (
                 <div key={f.key}>
                   <Text size="sm" fw={500} mb={4}>{f.label}</Text>

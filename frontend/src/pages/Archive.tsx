@@ -11,7 +11,9 @@ import { useApp } from "../context";
 import { notifyError, notifyOk } from "../components/errors";
 import { formatDateTime } from "../format";
 
-type Item = { module: string; module_label: string; id: number; title: string; archived_at: string; archived_by: string | null };
+type Item = {
+  module: string; module_label: string; id: number; title: string; subtitle: string; archived_at: string; archived_by: string | null;
+};
 
 export default function ArchivePage() {
   const { info, me } = useApp();
@@ -75,7 +77,10 @@ export default function ArchivePage() {
             <Table.Tbody>
               {data?.results.map((it) => (
                 <Table.Tr key={`${it.module}-${it.id}`}>
-                  <Table.Td><Text size="sm" fw={500}>{it.title}</Text></Table.Td>
+                  <Table.Td>
+                    <Text size="sm" fw={500}>{it.title}</Text>
+                    {it.subtitle && <Text size="xs" c="dimmed">{it.subtitle}</Text>}
+                  </Table.Td>
                   <Table.Td><Text size="sm">{it.module_label}</Text></Table.Td>
                   <Table.Td><Text size="sm">{it.archived_by ?? "—"}</Text></Table.Td>
                   <Table.Td><Text size="sm">{formatDateTime(it.archived_at, me)}</Text></Table.Td>

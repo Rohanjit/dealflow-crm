@@ -28,10 +28,13 @@ SYMBOL = dict(CURRENCIES)
 
 
 def money_text(amount, currency: str, unit: str) -> str:
+    """₹100 Cr, $5 Mn, AED 20 Mn: the way the app shows amounts (without digit grouping)."""
     if amount is None:
         return ""
+    symbol = SYMBOL.get(currency, currency)
     s = format(Decimal(amount).normalize(), "f")
-    return " ".join(p for p in (SYMBOL.get(currency, currency), s, unit) if p)
+    text = f"{symbol} {s}" if symbol.isalpha() else f"{symbol}{s}"
+    return f"{text} {unit}" if unit else text
 
 
 def deal_kind(deal: Deal) -> str | None:

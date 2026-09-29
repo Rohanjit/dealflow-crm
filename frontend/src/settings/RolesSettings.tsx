@@ -128,6 +128,7 @@ export default function RolesSettings() {
                         <Text size="sm">{m.label}</Text>
                         {!info.built_modules.includes(m.key) && <Text size="xs" c="dimmed">Coming soon; set it up now</Text>}
                         {m.key === "outreach" && <Text size="xs" c="dimmed">Also covers companies</Text>}
+                        {m.key === "deals" && <Text size="xs" c="dimmed">Also covers companies and each deal's investor tracker</Text>}
                       </Table.Td>
                       {ACTIONS.map((a) => (
                         <Table.Td key={a.key} ta="center">

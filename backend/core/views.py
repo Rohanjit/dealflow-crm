@@ -490,6 +490,12 @@ class ArchiveItemView(APIView):
     def post(self, request, module, pk):
         """Restore."""
         mod, obj = self._get(module, pk)
+        if mod.validate:
+            # e.g. the same investor may have been added to that deal's tracker again since.
+            links = {f.key: (m, getattr(obj, attr)) for f in mod.fields if f.type == "link" and not f.multi and not f.via
+                     for m, attr in active_targets(f) if getattr(obj, f"{attr}_id") is not None}
+            if errors := mod.validate(links, obj, False):
+                raise ValidationError({"detail": " ".join(errors.values())})
         obj.archived_at = None
         obj.archived_by = None
         obj.updated_by = request.user

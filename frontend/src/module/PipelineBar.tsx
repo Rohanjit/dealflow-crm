@@ -1,16 +1,26 @@
 // Stage bar on a pipeline record: where it is, how long it's been there, and the next move.
 
-import { Button, Group, Menu, Paper, Text, Tooltip, UnstyledButton } from "@mantine/core";
+import { Button, Group, Menu, Paper, Stack, Text, Tooltip, UnstyledButton } from "@mantine/core";
 import { IconChevronDown, IconPlayerPause, IconPlayerPlay, IconX } from "@tabler/icons-react";
 
 import { useApp, useSchema, useUsers } from "../context";
 import { formatDate } from "../format";
 import type { ModuleSchema, RecordData } from "../types";
 import { textValue } from "./fields";
-import { exitOf, stageLabel, stageOf, usePipelineMove } from "./pipeline";
+import { exitOf, resumeVerb, stageLabel, stageOf, usePipelineMove } from "./pipeline";
+
+/** Soft hyphens in long words so a narrow stage cell breaks "Documen-tation" rather than mid-word
+ *  at random (browsers without hyphenation dictionaries otherwise split anywhere). */
+function breakable(label: string): string {
+  return label.split(" ").map((w) => {
+    if (w.length < 11 || w.includes("-")) return w;
+    const at = /(tion|ment|ship|ence|ance)$/.test(w) ? w.length - 4 : Math.ceil(w.length / 2);
+    return `${w.slice(0, at)}\u00ad${w.slice(at)}`;
+  }).join(" ");
+}
 
 export default function PipelineBar({ module, record }: { module: ModuleSchema; record: RecordData }) {
-  const { info, me } = useApp();
+  const { me } = useApp();
   const { data: schema } = useSchema();
   const { data: users } = useUsers();
   const p = module.pipeline!;
@@ -25,42 +35,61 @@ export default function PipelineBar({ module, record }: { module: ModuleSchema; 
   const reasonField = exit?.reason_field ? module.fields.find((f) => f.key === exit.reason_field) : undefined;
   const dateField = exit?.date_field ? module.fields.find((f) => f.key === exit.date_field) : undefined;
   const reason = reasonField && record[reasonField.key] ? textValue(reasonField, record[reasonField.key], ctx) : "";
-  const dealsBuilt = info.built_modules.includes("deals");
 
-  const tone = !isOpen ? (status === "lost" ? "red" : "orange") : isWon ? "teal" : "navy";
+  const tone = !isOpen ? exit?.tone ?? "red" : isWon ? "teal" : "navy";
   let summary: string;
   if (!isOpen) {
     summary = `${exit?.label ?? status} at ${stageLabel(p, stage)}${reason ? ` · ${reason}` : ""}`;
     if (dateField && record[dateField.key]) summary += ` · ${dateField.label.toLowerCase()} ${formatDate(record[dateField.key] as string, me)}`;
   } else if (isWon) {
-    summary = dealsBuilt ? "Mandate won." : "Mandate won. It moves to Active Deals once that module is added.";
+    summary = `${stageLabel(p, stage)}${since ? ` on ${formatDate(since, me)}` : ""}.`;
   } else {
     summary = `${stageLabel(p, stage)}${since ? ` since ${formatDate(since, me)}` : ""}`;
   }
 
+  // Long pipelines (Active Deals has twelve stages in two phases) get narrower cells and phase labels.
+  const dense = p.stages.length > 8;
+  const phases = p.groups.length
+    ? p.groups.map((g) => ({ label: g.label, stages: p.stages.filter((s) => g.stages.includes(s.value)) }))
+    : [{ label: "", stages: p.stages }];
+
+  const cell = (s: { value: string; label: string }) => {
+    const i = p.stages.indexOf(s);
+    const current = i === idx;
+    const done = i < idx;
+    const shade = tone === "gray" ? 6 : isOpen ? 7 : 6;
+    const bg = current ? `var(--mantine-color-${tone}-${shade})` : done ? "var(--mantine-color-navy-1)" : "var(--mantine-color-gray-1)";
+    const fg = current ? "white" : done ? "var(--mantine-color-navy-8)" : "var(--mantine-color-gray-6)";
+    const clickable = canEdit && !(current && isOpen);
+    const button = (
+      <UnstyledButton key={s.value} disabled={!clickable}
+        onClick={() => move(record, { kind: "stage", stage: s.value })}
+        style={{
+          flex: 1, minWidth: dense ? 76 : 110, padding: dense ? "6px 6px 6px 14px" : "8px 10px", background: bg, color: fg,
+          textAlign: "center", fontSize: dense ? 12 : 13, fontWeight: current ? 600 : 500, lineHeight: 1.25,
+          overflowWrap: "break-word",
+          clipPath: i === 0 ? "polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%)"
+            : "polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%, 10px 50%)",
+          cursor: clickable ? "pointer" : "default",
+        }}>
+        {dense ? breakable(s.label) : s.label}
+      </UnstyledButton>
+    );
+    return clickable ? <Tooltip key={s.value} label={`Move to ${s.label}`}>{button}</Tooltip> : button;
+  };
+
   return (
     <Paper withBorder radius="md" p="md">
-      <Group gap={4} wrap="nowrap" style={{ overflowX: "auto" }}>
-        {p.stages.map((s, i) => {
-          const current = i === idx;
-          const done = i < idx;
-          const bg = current ? `var(--mantine-color-${tone}-${isOpen ? 7 : 6})` : done ? "var(--mantine-color-navy-1)" : "var(--mantine-color-gray-1)";
-          const fg = current ? "white" : done ? "var(--mantine-color-navy-8)" : "var(--mantine-color-gray-6)";
-          const cell = (
-            <UnstyledButton key={s.value} disabled={!canEdit || (current && isOpen)}
-              onClick={() => move(record, { kind: "stage", stage: s.value })}
-              style={{
-                flex: 1, minWidth: 110, padding: "8px 10px", background: bg, color: fg, textAlign: "center",
-                fontSize: 13, fontWeight: current ? 600 : 500,
-                clipPath: i === 0 ? "polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%)"
-                  : "polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%, 10px 50%)",
-                cursor: canEdit && !(current && isOpen) ? "pointer" : "default",
-              }}>
-              {s.label}
-            </UnstyledButton>
-          );
-          return canEdit && !(current && isOpen) ? <Tooltip key={s.value} label={`Move to ${s.label}`}>{cell}</Tooltip> : cell;
-        })}
+      <Group gap={4} wrap="nowrap" align="stretch" style={{ overflowX: "auto" }}>
+        {phases.map((ph) => (
+          <Stack key={ph.label || "all"} gap={4} style={{ flex: ph.stages.length, minWidth: 0 }}>
+            {ph.label && (
+              <Text size="xs" fw={600} c="dimmed" tt="uppercase" pb={2}
+                style={{ borderBottom: "1px solid var(--mantine-color-gray-3)", letterSpacing: 0.4 }}>{ph.label}</Text>
+            )}
+            <Group gap={4} wrap="nowrap" align="stretch">{ph.stages.map(cell)}</Group>
+          </Stack>
+        ))}
       </Group>
       <Group justify="space-between" mt="sm" gap="xs">
         <Text size="sm" c={`${tone}.8`} fw={500}>{summary}</Text>
@@ -71,7 +100,7 @@ export default function PipelineBar({ module, record }: { module: ModuleSchema; 
             )}
             {!isOpen && (
               <Button size="xs" leftSection={<IconPlayerPlay size={14} />} onClick={() => move(record, { kind: "resume" })}>
-                {status === "lost" ? "Reopen" : "Resume"} at {stageLabel(p, stage)}
+                {resumeVerb(p, status)} at {stageLabel(p, stage)}
               </Button>
             )}
             {!isWon && (
@@ -81,10 +110,10 @@ export default function PipelineBar({ module, record }: { module: ModuleSchema; 
                 </Menu.Target>
                 <Menu.Dropdown>
                   {p.exits.filter((e) => e.value !== status).map((e) => (
-                    <Menu.Item key={e.value} color={e.value === "lost" ? "red" : undefined}
-                      leftSection={e.value === "lost" ? <IconX size={14} /> : <IconPlayerPause size={14} />}
+                    <Menu.Item key={e.value} color={e.tone === "red" ? "red" : undefined}
+                      leftSection={e.paused ? <IconPlayerPause size={14} /> : <IconX size={14} />}
                       onClick={() => move(record, { kind: "exit", exit: e.value })}>
-                      {e.value === "lost" ? "Mark as lost" : `Put ${e.label.toLowerCase()}`}
+                      {e.action}
                     </Menu.Item>
                   ))}
                 </Menu.Dropdown>

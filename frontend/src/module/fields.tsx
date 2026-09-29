@@ -4,7 +4,7 @@ import {
   Anchor, Badge, Group, MultiSelect, NumberInput, SegmentedControl, Select, Switch, TagsInput, Text, TextInput,
   Textarea,
 } from "@mantine/core";
-import { DateInput } from "@mantine/dates";
+import { DateInput, TimeInput } from "@mantine/dates";
 import { IconBrandWhatsapp, IconCheck } from "@tabler/icons-react";
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
@@ -12,10 +12,10 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import { useMe, useSchema, useUsers } from "../context";
-import { formatBirthday, formatDate, formatMoney, groupDigits, whatsappLink, type Prefs } from "../format";
+import { formatBirthday, formatDate, formatDateAndTime, formatMoney, groupDigits, whatsappLink, type Prefs } from "../format";
 import type { FieldSchema, LinkValue, Money, Schema, UserLookup } from "../types";
 import BirthdayInput from "./BirthdayInput";
-import LinkInput from "./LinkInput";
+import LinkInput, { MultiLinkInput } from "./LinkInput";
 
 dayjs.extend(customParseFormat);
 
@@ -30,13 +30,15 @@ export function dateParser(dateFormat: string) {
 }
 
 export function emptyValue(f: FieldSchema): unknown {
+  if (f.multi) return [];
   switch (f.type) {
     case "money": return { ...EMPTY_MONEY };
     case "tags": return [];
     case "dropdown": return f.multi ? [] : null;
     case "boolean": return false;
     case "tristate": return "unknown";
-    case "integer": case "decimal": case "percent": case "date": case "user": case "link": case "birthday": return null;
+    case "integer": case "decimal": case "percent": case "date": case "user": case "link": case "birthday":
+    case "datetime": return null;
     default: return "";
   }
 }
@@ -59,6 +61,7 @@ export function textValue(f: FieldSchema, v: unknown, ctx: { schema?: Schema; us
   switch (f.type) {
     case "money": return formatMoney(v as Money, ctx.prefs);
     case "date": return formatDate(v as string, ctx.prefs);
+    case "datetime": return formatDateAndTime(v as string, ctx.prefs);
     case "integer": return f.key.includes("vintage") || f.key.includes("year") ? String(v) : groupDigits(v as number, ctx.prefs.number_grouping);
     case "decimal": return groupDigits(v as string, ctx.prefs.number_grouping);
     case "percent": return `${v}%`;
@@ -67,12 +70,29 @@ export function textValue(f: FieldSchema, v: unknown, ctx: { schema?: Schema; us
     case "dropdown":
       if (f.multi) return (v as number[]).map((id) => optionLabel(ctx.schema, f.choice_list, id).label).join(", ");
       return optionLabel(ctx.schema, f.choice_list, v as number).label;
-    case "user": return ctx.users?.find((u) => u.id === v)?.full_name ?? "";
+    case "user":
+      if (f.multi) return (v as number[]).map((id) => ctx.users?.find((u) => u.id === id)?.full_name ?? "").filter(Boolean).join(", ");
+      return ctx.users?.find((u) => u.id === v)?.full_name ?? "";
     case "tags": return (v as string[]).join(", ");
-    case "link": return (v as LinkValue).title;
+    case "link": return f.multi ? (v as LinkValue[]).map((l) => l.title).join(", ") : (v as LinkValue).title;
     case "birthday": return formatBirthday(v as string, ctx.prefs);
     default: return String(v);
   }
+}
+
+function LinkAnchor({ l }: { l: LinkValue }) {
+  const me = useMe();
+  const canOpen = me.perms[l.module]?.view;
+  return (
+    <Group gap={6} wrap="nowrap">
+      {canOpen ? (
+        <Anchor component={Link} to={`/m/${l.module}/${l.id}`} size="sm" onClick={(e) => e.stopPropagation()}>{l.title}</Anchor>
+      ) : (
+        <Text size="sm">{l.title}</Text>
+      )}
+      {l.archived && <Badge size="xs" variant="light" color="gray">Archived</Badge>}
+    </Group>
+  );
 }
 
 const STRENGTH_COLOR: Record<string, string> = { cold: "blue", warm: "orange", strong: "teal" };
@@ -115,21 +135,18 @@ export function FieldValue({ f, v, compact = false }: { f: FieldSchema; v: unkno
       );
       break;
     }
-    case "link": {
-      const l = v as LinkValue;
-      const canOpen = me.perms[l.module]?.view;
-      out = (
-        <Group gap={6} wrap="nowrap">
-          {canOpen ? (
-            <Anchor component={Link} to={`/m/${l.module}/${l.id}`} size="sm" onClick={(e) => e.stopPropagation()}>{l.title}</Anchor>
-          ) : (
-            <Text size="sm">{l.title}</Text>
-          )}
-          {l.archived && <Badge size="xs" variant="light" color="gray">Archived</Badge>}
+    case "link":
+      out = f.multi ? (
+        <Group gap={4} wrap={compact ? "nowrap" : "wrap"} style={{ columnGap: 10 }}>
+          {(v as LinkValue[]).map((l, i) => (
+            <Group key={`${l.module}:${l.id}`} gap={0} wrap="nowrap">
+              <LinkAnchor l={l} />
+              {i < (v as LinkValue[]).length - 1 && <Text size="sm" c="dimmed">,</Text>}
+            </Group>
+          ))}
         </Group>
-      );
+      ) : <LinkAnchor l={v as LinkValue} />;
       break;
-    }
     case "boolean":
       out = compact
         ? (v ? <IconCheck size={16} color="var(--mantine-color-teal-7)" aria-label="Yes" /> : <Text c="dimmed" size="sm">—</Text>)
@@ -252,9 +269,16 @@ export function FieldInput({
       );
     }
     case "user": {
+      const keep = new Set([original].flat());
       const data = (users ?? [])
-        .filter((u) => u.is_active || u.id === original)
+        .filter((u) => u.is_active || keep.has(u.id))
         .map((u) => ({ value: String(u.id), label: u.is_active ? u.full_name : `${u.full_name} (deactivated)` }));
+      if (f.multi) {
+        return (
+          <MultiSelect {...common} searchable clearable data={data}
+            value={((value as number[]) ?? []).map(String)} onChange={(v) => onChange(v.map(Number))} />
+        );
+      }
       return (
         <Select {...common} searchable clearable data={data} value={value ? String(value) : null}
           onChange={(v) => onChange(v ? Number(v) : null)} />
@@ -265,10 +289,39 @@ export function FieldInput({
     case "money":
       return <MoneyInput {...common} value={(value as Money) ?? EMPTY_MONEY} onChange={onChange} grouping={grouping} schema={schema} />;
     case "link":
+      if (f.multi) return <MultiLinkInput f={f} value={(value as LinkValue[]) ?? []} onChange={onChange} error={error} />;
       return <LinkInput f={f} value={(value as LinkValue) ?? null} onChange={onChange} error={error} schemaModules={schema?.modules ?? []} />;
+    case "datetime":
+      return <DateTimeInput {...common} value={(value as string) ?? null} onChange={onChange} dateFormat={me.date_format} />;
     case "birthday":
       return <BirthdayInput label={f.label} value={(value as string) ?? null} onChange={onChange} error={error} dayFirst={me.date_format !== "MM/DD/YYYY"} />;
   }
+}
+
+/** A date with an optional time of day: "2026-10-12" or "2026-10-12T14:30". */
+function DateTimeInput({
+  label, required, error, description, value, onChange, dateFormat,
+}: {
+  label: string; required: boolean; error?: string; description?: string; value: string | null;
+  onChange: (v: string | null) => void; dateFormat: string;
+}) {
+  const [day, time = ""] = (value ?? "").split("T");
+  const join = (d: string, t: string) => (d ? (t ? `${d}T${t}` : d) : null);
+  return (
+    <div>
+      <Text size="sm" fw={500} mb={4}>{label}{required && <Text span c="red"> *</Text>}</Text>
+      <Group gap={6} wrap="nowrap" align="flex-start">
+        <DateInput aria-label={label} style={{ flex: 1 }} clearable valueFormat={dateFormat} placeholder={dateFormat.toLowerCase()}
+          dateParser={dateParser(dateFormat)} error={!!error}
+          value={day ? dayjs(day).toDate() : null}
+          onChange={(d) => onChange(join(d ? dayjs(d).format("YYYY-MM-DD") : "", d ? time : ""))} />
+        <TimeInput aria-label={`${label} time`} w={120} disabled={!day} value={time}
+          onChange={(e) => onChange(join(day, e.currentTarget.value))} />
+      </Group>
+      {error ? <Text size="xs" c="red" mt={4}>{error}</Text>
+        : <Text size="xs" c="dimmed" mt={4}>{description || "The time is optional."}</Text>}
+    </div>
+  );
 }
 
 function MoneyInput({

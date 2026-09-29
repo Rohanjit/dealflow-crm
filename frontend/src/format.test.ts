@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatBirthday, formatDate, formatMoney, groupDigits, whatsappLink } from "./format";
+import { formatBirthday, formatDate, formatDateAndTime, formatMoney, groupDigits, whatsappLink } from "./format";
 
 const IN = { date_format: "DD/MM/YYYY", number_grouping: "indian" };
 const US = { date_format: "MM/DD/YYYY", number_grouping: "international" };
@@ -56,5 +56,14 @@ describe("whatsappLink", () => {
     expect(whatsappLink("+91 98200 12345")).toBe("https://wa.me/919820012345");
     expect(whatsappLink("98200 12345")).toBeNull();
     expect(whatsappLink("+91 22")).toBeNull();
+  });
+});
+
+describe("formatDateAndTime", () => {
+  it("adds the time when there is one", () => {
+    const p = { date_format: "DD/MM/YYYY", number_grouping: "indian" };
+    expect(formatDateAndTime("2026-10-12T14:30", p)).toBe("12/10/2026 14:30");
+    expect(formatDateAndTime("2026-10-12", p)).toBe("12/10/2026");
+    expect(formatDateAndTime(null, p)).toBe("");
   });
 });

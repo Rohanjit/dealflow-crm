@@ -1,7 +1,7 @@
 // Picker for a link field (e.g. a contact's firm): searches the target modules on the server,
 // and can create a new record from what was typed when the user is allowed to.
 
-import { Group, Loader, Select, Text, type ComboboxItem, type ComboboxItemGroup } from "@mantine/core";
+import { Group, Loader, MultiSelect, Select, Text, type ComboboxItem, type ComboboxItemGroup } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -66,8 +66,11 @@ export default function LinkInput({
   const loading = results.some((r) => r.isFetching);
   const denied = results.length > 0 && results.every((r) => r.error instanceof ApiError && r.error.status === 403);
 
-  // Where a new record can be created from what was typed (every target this user may add to).
-  const creatable = f.targets.filter((m) => me.perms[m]?.create).map((m) => schemaModules.find((sm) => sm.key === m)!).filter(Boolean);
+  // Where a new record can be created from what was typed: every target this user may add to that is
+  // named by plain text (a firm or company, not a deal, which is named after its company).
+  const creatable = f.targets.filter((m) => me.perms[m]?.create)
+    .map((m) => schemaModules.find((sm) => sm.key === m))
+    .filter((sm): sm is ModuleSchema => !!sm && sm.fields.find((x) => x.key === sm.title_field)?.type === "text");
   const exact = results.some((r) => r.data?.some((x) => x.title.toLowerCase() === typed.toLowerCase()));
 
   const toItem = (x: LookupItem): ComboboxItem => ({ value: `${x.module}:${x.id}`, label: x.title });
@@ -158,6 +161,54 @@ export default function LinkInput({
           </div>
         </Group>
       )}
+    />
+  );
+}
+
+/** Picker for a field that links to several records (e.g. a deal's lead investors). */
+export function MultiLinkInput({
+  f, value, onChange, error,
+}: {
+  f: FieldSchema;
+  value: LinkValue[];
+  onChange: (v: LinkValue[]) => void;
+  error?: string;
+}) {
+  const labels = useModuleLabels();
+  const [search, setSearch] = useState("");
+  const [debounced] = useDebouncedValue(search.trim(), 200);
+  const results = useQueries({
+    queries: f.targets.map((m) => ({
+      queryKey: ["lookup", m, debounced],
+      queryFn: () => api<LookupItem[]>(`lookup/${m}/${qs({ q: debounced })}`),
+      staleTime: 30_000,
+    })),
+  });
+  const loading = results.some((r) => r.isFetching);
+  const found = results.flatMap((r) => r.data ?? []);
+  // Chosen records stay in the list so their names show, including archived ones kept from before.
+  const items = new Map<string, LinkValue>();
+  value.forEach((l) => items.set(`${l.module}:${l.id}`, l));
+  found.forEach((x) => { if (!items.has(`${x.module}:${x.id}`)) items.set(`${x.module}:${x.id}`, x); });
+  const noun = f.targets.map((m) => (labels[m] ?? m).toLowerCase()).join(" or ");
+  const archived = value.filter((l) => l.archived).map((l) => l.title);
+  return (
+    <MultiSelect
+      label={f.label}
+      required={f.required}
+      description={archived.length ? `${archived.join(", ")} ${archived.length === 1 ? "is" : "are"} in the Archive.` : f.help || undefined}
+      error={error}
+      searchable
+      clearable
+      placeholder={value.length ? undefined : `Search ${noun}`}
+      data={[...items].map(([k, l]) => ({ value: k, label: l.title }))}
+      value={value.map((l) => `${l.module}:${l.id}`)}
+      onChange={(keys) => onChange(keys.map((k) => items.get(k)!).filter(Boolean).map(({ module, id, title, archived }) => ({ module, id, title, archived })))}
+      searchValue={search}
+      onSearchChange={setSearch}
+      filter={({ options }) => options}
+      nothingFoundMessage={loading ? "Searching…" : debounced ? `No ${noun} match “${debounced}”` : `No ${noun} yet`}
+      rightSection={loading ? <Loader size={14} /> : undefined}
     />
   );
 }

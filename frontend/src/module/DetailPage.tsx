@@ -6,18 +6,22 @@ import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api";
 import { useApp, useModuleSchema } from "../context";
+import DealTracker from "../deals/DealTracker";
 import { errorMessage, notifyError, notifyOk } from "../components/errors";
 import { formatDateTime } from "../format";
 import type { FieldSchema, LinkValue, ModuleSchema, RecordData } from "../types";
 import { FieldValue, isEmpty } from "./fields";
 import PipelineBar from "./PipelineBar";
-import { stageOf } from "./pipeline";
+import { exitForField, stageOf } from "./pipeline";
 import RelatedSection from "./RelatedSection";
 import Timeline from "./Timeline";
 
+// Record types that live inside another record (a deal's investor tracker): the page leads back there.
+const PARENT_LINK: Record<string, string> = { deal_investors: "deal" };
+
 export default function DetailPage() {
   const { module: key, id } = useParams();
-  const { module, isLoading } = useModuleSchema(key);
+  const { module, schema, isLoading } = useModuleSchema(key);
   const { info, me } = useApp();
   const nav = useNavigate();
   const qc = useQueryClient();
@@ -46,14 +50,16 @@ export default function DetailPage() {
     if (!p || !f.pipeline_role) return true;
     // Stage and status live in the stage bar; exit details only when they apply.
     if (f.pipeline_role === "stage" || f.pipeline_role === "status") return false;
-    if (f.pipeline_role === "lost_reason") return state!.status === "lost";
-    if (f.pipeline_role === "hold_reason" || f.pipeline_role === "revisit") return state!.status === "on_hold";
+    if (f.pipeline_role === "exit") return state!.status === exitForField(p, f.key)?.value;
     return true;
   };
   const fields = module.fields.filter(shown);
   const st = r._stamps;
   const titleLink = module.fields.find((f) => f.key === module.title_field && f.type === "link");
   const parentLink = titleLink ? (r[titleLink.key] as LinkValue | null) : null;
+  const parentName = schema?.modules.find((m) => m.key === parentLink?.module)?.singular ?? "Linked record";
+  const owner = PARENT_LINK[module.key] ? (r[PARENT_LINK[module.key]] as LinkValue | null) : null;
+  const ownerModule = owner ? schema?.modules.find((m) => m.key === owner.module) : undefined;
 
   function archive() {
     modals.openConfirmModal({
@@ -70,7 +76,7 @@ export default function DetailPage() {
           await api(`m/${module!.key}/${r.id}/`, { method: "DELETE" });
           await qc.invalidateQueries({ queryKey: ["records", module!.key] });
           notifyOk(`${r._title} moved to the Archive.`);
-          nav(`/m/${module!.key}`);
+          nav(owner ? `/m/${owner.module}/${owner.id}` : `/m/${module!.key}`);
         } catch (e) {
           notifyError(e, "Couldn't delete");
         }
@@ -81,7 +87,14 @@ export default function DetailPage() {
   return (
     <Stack gap="lg" maw={module.timeline ? 1400 : 1200}>
       <Breadcrumbs>
-        <Anchor component={Link} to={`/m/${module.key}`} size="sm">{module.label}</Anchor>
+        {owner && ownerModule ? (
+          [
+            <Anchor key="m" component={Link} to={`/m/${ownerModule.key}`} size="sm">{ownerModule.label}</Anchor>,
+            <Anchor key="r" component={Link} to={`/m/${owner.module}/${owner.id}`} size="sm">{owner.title}</Anchor>,
+          ]
+        ) : (
+          <Anchor component={Link} to={`/m/${module.key}`} size="sm">{module.label}</Anchor>
+        )}
         <Text size="sm">{r._title}</Text>
       </Breadcrumbs>
       <Group justify="space-between" align="flex-start">
@@ -90,7 +103,7 @@ export default function DetailPage() {
             <Title order={2}>{r._title}</Title>
             {parentLink && me.perms[parentLink.module]?.view && (
               <Anchor component={Link} to={`/m/${parentLink.module}/${parentLink.id}`} size="sm">
-                <Group gap={2} component="span" wrap="nowrap">Company page <IconArrowUpRight size={14} /></Group>
+                <Group gap={2} component="span" wrap="nowrap">{parentName} page <IconArrowUpRight size={14} /></Group>
               </Anchor>
             )}
           </Group>
@@ -112,7 +125,9 @@ export default function DetailPage() {
       <Grid.Col span={{ base: 12, lg: module.timeline ? 8 : 12 }}>
       <Stack gap="lg">
       {module.sections.filter((s) => s.status === "ready" && s.module).map((s) => (
-        <RelatedSection key={s.key} section={s} parent={module} record={r} />
+        s.panel === "tracker"
+          ? <DealTracker key={s.key} section={s} deal={r} />
+          : <RelatedSection key={s.key} section={s} parent={module} record={r} />
       ))}
 
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
@@ -164,6 +179,8 @@ const HEADER_FIELDS: Record<string, string[]> = {
   contacts: ["designation", "firm", "decision_level", "primary_contact", "relationship_strength", "city"],
   companies: ["sector", "sub_sector", "city"],
   outreach: ["transaction_type", "expected_size", "lead_banker"],
+  deals: ["transaction_type", "target_raise", "lead_banker", "exclusivity"],
+  deal_investors: ["deal"],
 };
 
 function HeaderBadges({ r, module }: { r: RecordData; module: ModuleSchema }) {

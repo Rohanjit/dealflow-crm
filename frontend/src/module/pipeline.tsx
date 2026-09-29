@@ -1,5 +1,6 @@
-// Stage moves for pipeline modules (Outreach; later Active Deals): the modal that asks for a
-// reason when something is lost or put on hold, and a hook the board and detail page share.
+// Stage moves for pipeline modules (Outreach, Active Deals, a deal's investor tracker): the modal
+// that asks what's needed when a record leaves the pipeline (a reason, a revisit date, a note), and
+// a hook the board, stage bar and tracker share.
 
 import { Button, Group, Modal, Select, Stack, Text, Textarea } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
@@ -30,6 +31,18 @@ export function exitOf(p: Pipeline, status: string): PipelineExit | undefined {
   return p.exits.find((e) => e.value === status);
 }
 
+/** The exit a reason or date field belongs to (e.g. Lost reason → Lost). */
+export function exitForField(p: Pipeline, key: string): PipelineExit | undefined {
+  return p.exits.find((e) => e.reason_field === key || e.date_field === key);
+}
+
+/** "Resume" for a pause, "Reopen" for the rest. */
+export function resumeVerb(p: Pipeline, status: string): "Resume" | "Reopen" {
+  return exitOf(p, status)?.paused ? "Resume" : "Reopen";
+}
+
+const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+
 /** Moves a record through the pipeline, asking for whatever each move needs. */
 export function usePipelineMove(module: ModuleSchema, onMoved?: () => void) {
   const qc = useQueryClient();
@@ -46,9 +59,10 @@ export function usePipelineMove(module: ModuleSchema, onMoved?: () => void) {
       return false;
     } finally {
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ["records", module.key] }),
+        qc.invalidateQueries({ queryKey: ["records"] }), // a move can add records elsewhere (a won mandate's deal)
         qc.invalidateQueries({ queryKey: ["record", module.key, String(record.id)] }),
         qc.invalidateQueries({ queryKey: ["notes", module.key, record.id] }),
+        qc.invalidateQueries({ queryKey: ["dashboard"] }),
       ]);
       onMoved?.();
     }
@@ -62,19 +76,19 @@ export function usePipelineMove(module: ModuleSchema, onMoved?: () => void) {
       return;
     }
     if (m.kind === "resume") {
-      const verb = status === "lost" ? "Reopened" : "Resumed";
-      save(record, { [p.status_field]: p.open_value }, `${verb} at ${stageLabel(p, stage)}.`);
+      const done = resumeVerb(p, status) === "Resume" ? "Resumed" : "Reopened";
+      save(record, { [p.status_field]: p.open_value }, `${done} at ${stageLabel(p, stage)}.`);
       return;
     }
     if (m.stage === stage && isOpen) return;
     if (!isOpen) {
-      const verb = status === "lost" ? "Reopen" : "Resume";
+      const verb = resumeVerb(p, status);
       modals.openConfirmModal({
         title: `${verb} ${record._title}?`,
         children: (
           <Text size="sm">
-            It's {exitOf(p, status)?.label.toLowerCase()} at {stageLabel(p, stage)}. {verb} it and move it to{" "}
-            {stageLabel(p, m.stage)}?
+            {record._title} is marked “{exitOf(p, status)?.label ?? status}” at {stageLabel(p, stage)}. {verb} it and
+            move it to {stageLabel(p, m.stage)}?
           </Text>
         ),
         labels: { confirm: `${verb} and move`, cancel: "Cancel" },
@@ -90,9 +104,10 @@ export function usePipelineMove(module: ModuleSchema, onMoved?: () => void) {
       onSaved={async () => {
         setPending(null);
         await Promise.all([
-          qc.invalidateQueries({ queryKey: ["records", module.key] }),
+          qc.invalidateQueries({ queryKey: ["records"] }),
           qc.invalidateQueries({ queryKey: ["record", module.key, String(pending.record.id)] }),
           qc.invalidateQueries({ queryKey: ["notes", module.key, pending.record.id] }),
+          qc.invalidateQueries({ queryKey: ["dashboard"] }),
         ]);
         onMoved?.();
       }} />
@@ -126,7 +141,7 @@ function ExitModal({
     try {
       await api(`m/${module.key}/${record.id}/`, { method: "PATCH", body });
       if (note.trim()) await api(`m/${module.key}/${record.id}/notes/`, { body: { kind: "note", text: note } });
-      notifyOk(exit.value === "lost" ? `${record._title} marked lost.` : `${record._title} put on hold.`);
+      notifyOk(`${record._title}: ${lowerFirst(exit.done)}.`);
       onSaved();
     } catch (e) {
       const fe = fieldErrors(e);
@@ -136,13 +151,13 @@ function ExitModal({
     }
   }
 
-  const title = exit.value === "lost" ? `Mark ${record._title} as lost` : `Put ${record._title} on hold`;
+  const color = exit.tone === "gray" ? "gray" : exit.tone;
   return (
-    <Modal opened onClose={onClose} title={<Text fw={600}>{title}</Text>}>
+    <Modal opened onClose={onClose} title={<Text fw={600}>{exit.action}: {record._title}</Text>}>
       <Stack>
         <Text size="sm" c="dimmed">
           It stays recorded at {stageLabel(p, stage)}
-          {exit.value === "lost" ? "." : ", and resumes there when you pick it up again."}
+          {exit.paused ? ", and resumes there when you pick it up again." : ", and can be reopened later."}
         </Text>
         {reasonField && (
           <Select label={reasonField.label} required searchable data={reasons.map((o) => ({ value: String(o.id), label: o.label }))}
@@ -159,9 +174,7 @@ function ExitModal({
         {errors[p.status_field] && <Text c="red" size="sm">{errors[p.status_field]}</Text>}
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>Cancel</Button>
-          <Button color={exit.value === "lost" ? "red" : undefined} onClick={submit} loading={busy}>
-            {exit.value === "lost" ? "Mark as lost" : "Put on hold"}
-          </Button>
+          <Button color={color} onClick={submit} loading={busy}>{exit.action}</Button>
         </Group>
       </Stack>
     </Modal>

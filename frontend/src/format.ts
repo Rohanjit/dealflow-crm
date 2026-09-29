@@ -22,6 +22,13 @@ export function formatDate(iso: string | null | undefined, p: Prefs): string {
   return `${d}/${m}/${y}`;
 }
 
+/** A date with an optional time of day, as the API sends it: "2026-10-12T14:30" → "12/10/2026 14:30". */
+export function formatDateAndTime(v: string | null | undefined, p: Prefs): string {
+  if (!v) return "";
+  const [day, time] = v.split("T");
+  return `${formatDate(day, p)}${time ? ` ${time.slice(0, 5)}` : ""}`;
+}
+
 export function formatDateTime(iso: string | null | undefined, p: Prefs): string {
   if (!iso) return "";
   const dt = new Date(iso);
