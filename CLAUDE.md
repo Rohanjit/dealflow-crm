@@ -80,3 +80,4 @@ Read this first in every session. The full product scope is in `docs/scope-v1.md
 - [x] Active Deals (29 Sep 2026): deals created from mandates won (and earlier won mandates), twelve stages in two phases with on hold / withdrawn / dropped, deal team, fees, closure details with lead investors, per-deal investor tracker with funnel counts and suggested investors, investors' deal history, company and outreach pages list their deals, home dashboard with a look-ahead window in Settings.
 - [ ] Tasks & Reminders
 - [ ] Vault
+- [ ] Security hardening (after all V1 modules; discuss with Shobhit first): brief in `docs/security-hardening-brief.md`. Parts of it conflict with V1 scope decisions (MFA, field-level permissions, four-eyes role changes, encryption at rest, full audit log), so agree scope before building.
