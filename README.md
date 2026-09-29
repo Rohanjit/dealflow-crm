@@ -4,7 +4,7 @@
 
 Dealflow tracks the full life of a mandate, from the first approach to a company through to closing, alongside the investor relationships that make deals happen. It runs on your own laptop or server, so confidential deal data never leaves your firm.
 
-> **Status:** in development. V1 is being built module by module. Foundation, Investors and Contacts are done.
+> **Status:** in development. V1 is being built module by module. Foundation, Investors, Contacts and Outreach are done.
 
 ## What's in V1
 
@@ -12,7 +12,7 @@ Dealflow tracks the full life of a mandate, from the first approach to a company
 | --- | --- |
 | **Investors** | Investor firms with preferences (sectors, stages, ticket size, geography), fund profile, relationship owner and linked contacts. |
 | **Contacts** | People at investor firms and at client companies, in one place. |
-| **Outreach** | Origination pipeline for winning mandates: Identified → Contacted → Meeting held → Proposal sent → Negotiating → Mandate won. |
+| **Outreach** | Origination pipeline for winning mandates: Identified → Contacted → Meeting held → Proposal sent → Negotiating → Mandate won, on a drag-and-drop board. Each company is recorded once, with every approach, its people and an interaction log. |
 | **Active Deals** | Execution pipeline from data collection to closing, with a per-deal investor tracker and rules-based investor matching. |
 | **Tasks & Reminders** | Follow-ups assigned to people, linked to any record, with in-app reminders. |
 | **Vault** | Confidential documents stored on your own server, protected by a separate Vault PIN. |

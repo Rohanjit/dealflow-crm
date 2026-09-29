@@ -45,6 +45,9 @@ export type FieldSchema = {
   enabled: boolean;
   targets: string[]; // link: modules it can point at (only built ones)
   target_labels: Record<string, string>; // link: e.g. { investors: "Investor side" }
+  via: string | null; // company-level field shown on an outreach attempt: the link field holding it
+  via_module: string | null;
+  pipeline_role: "stage" | "status" | "entered" | "lost_reason" | "hold_reason" | "revisit" | null;
 };
 
 export type Section = {
@@ -55,11 +58,38 @@ export type Section = {
   available_with?: string; // placeholder sections: the module that will fill it
   module?: string; // related-records sections
   link_field?: string;
+  via?: string; // link through this record's link field (e.g. an outreach attempt's company)
+  exclude_self?: boolean;
+  hide_empty?: boolean;
+  params?: Record<string, string>;
   columns?: string[];
   order?: string;
 };
 
-export type Segments = { param: string; options: { value: string; label: string }[] } | null;
+export type Segments = { param: string; options: { value: string; label: string }[]; default: string } | null;
+
+export type PipelineExit = { value: string; label: string; reason_field: string | null; date_field: string | null };
+export type Pipeline = {
+  stage_field: string;
+  status_field: string;
+  entered_field: string;
+  open_value: string;
+  won: string | null;
+  stages: { value: string; label: string }[];
+  exits: PipelineExit[];
+};
+
+export type Note = {
+  id: number;
+  kind: "note" | "call" | "meeting" | "email" | "stage";
+  date: string;
+  text: string;
+  meta: Record<string, string>;
+  created_by: { id: number; name: string } | null;
+  created_at: string;
+  updated_at: string;
+  can_edit: boolean;
+};
 
 /** A link to one record in another module, as the API sends it. */
 export type LinkValue = { module: string; id: number; title: string; archived: boolean };
@@ -74,6 +104,8 @@ export type ModuleSchema = {
   fields: FieldSchema[];
   sections: Section[];
   segments: Segments;
+  pipeline: Pipeline | null;
+  timeline: boolean;
   perms: ModulePerms;
 };
 

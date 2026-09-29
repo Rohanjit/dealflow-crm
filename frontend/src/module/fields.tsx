@@ -21,6 +21,14 @@ dayjs.extend(customParseFormat);
 
 export const EMPTY_MONEY: Money = { amount: null, currency: "", unit: "" };
 
+/** Reads a typed date in the user's format (or ISO, or "12 Mar 2026") for date pickers. */
+export function dateParser(dateFormat: string) {
+  return (s: string) => {
+    const d = dayjs(s, [dateFormat, "YYYY-MM-DD", "D MMM YYYY", "D MMMM YYYY"], true);
+    return d.isValid() ? d.toDate() : null;
+  };
+}
+
 export function emptyValue(f: FieldSchema): unknown {
   switch (f.type) {
     case "money": return { ...EMPTY_MONEY };
@@ -206,10 +214,7 @@ export function FieldInput({
     case "date":
       return (
         <DateInput {...common} clearable valueFormat={me.date_format} placeholder={me.date_format.toLowerCase()}
-          dateParser={(s) => {
-            const d = dayjs(s, [me.date_format, "YYYY-MM-DD", "D MMM YYYY"], true);
-            return d.isValid() ? d.toDate() : null;
-          }}
+          dateParser={dateParser(me.date_format)}
           value={value ? dayjs(value as string).toDate() : null}
           onChange={(d) => onChange(d ? dayjs(d).format("YYYY-MM-DD") : null)} />
       );

@@ -1,12 +1,12 @@
 import {
   ActionIcon, Button, Center, Checkbox, CloseButton, Drawer, Group, Loader, Menu, MultiSelect, NumberInput,
-  Pagination, Paper, ScrollArea, SegmentedControl, Select, Stack, Table, TagsInput, Text, TextInput, Title, Tooltip,
+  Pagination, Paper, ScrollArea, SegmentedControl, Select, Stack, Table, Tabs, TagsInput, Text, TextInput, Title, Tooltip,
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { useDebouncedCallback, useDebouncedValue } from "@mantine/hooks";
 import {
-  IconAdjustmentsHorizontal, IconArrowDown, IconArrowUp, IconColumns3, IconDownload, IconFileImport, IconPlus,
-  IconSearch,
+  IconAdjustmentsHorizontal, IconArrowDown, IconArrowUp, IconColumns3, IconDownload, IconFileImport, IconLayoutKanban,
+  IconPlus, IconSearch, IconTable,
 } from "@tabler/icons-react";
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
@@ -14,10 +14,11 @@ import { useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { api, download, qs } from "../api";
-import { useMe, useModuleSchema, useUsers } from "../context";
+import { useMe, useModuleSchema, useSchema, useUsers } from "../context";
 import { errorMessage } from "../components/errors";
 import { MONTH_NAMES } from "../format";
 import type { FieldSchema, LookupItem, ModuleSchema, Page, RecordData, Schema } from "../types";
+import BoardView from "./BoardView";
 import { FieldValue } from "./fields";
 import { useModuleLabels } from "./LinkInput";
 
@@ -68,7 +69,16 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
   if (!shown.some((f) => f.key === module.title_field)) shown.unshift(fieldMap[module.title_field]);
 
   const page = Number(params.get("page") || 1);
-  const apiParams = new URLSearchParams(params);
+  // Quick switch above the list (e.g. Active / Won / Lost). Its default isn't in the address.
+  const segParam = module.segments?.param;
+  const segValue = segParam ? params.get(segParam) ?? module.segments!.default : "";
+  const withSegment = (p: URLSearchParams) => {
+    if (segParam && segValue && !p.has(segParam)) p.set(segParam, segValue);
+    return p;
+  };
+  const [view, setView] = useState<"board" | "table">(() => (module.pipeline ? loadView(module.key) : "table"));
+  const board = !!module.pipeline && view === "board";
+  const apiParams = withSegment(new URLSearchParams(params));
   apiParams.set("page_size", String(PAGE_SIZE));
   const queryString = apiParams.toString();
 
@@ -76,6 +86,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
     queryKey: ["records", module.key, queryString],
     queryFn: () => api<Page<RecordData>>(`m/${module.key}/?${queryString}`),
     placeholderData: keepPreviousData,
+    enabled: !board,
   });
 
   const setParam = (updates: Record<string, string | null>, resetPage = true) => {
@@ -96,9 +107,9 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
     setParam({ ordering: next });
   };
 
-  const segParam = module.segments?.param;
   const activeFilters = [...params.keys()].filter((k) => !RESERVED.has(k) && k !== segParam);
-  const exportParams = new URLSearchParams(params);
+  const exportParams = board ? new URLSearchParams(params) : withSegment(new URLSearchParams(params));
+  if (board && segParam) exportParams.delete(segParam);
   exportParams.delete("page");
   exportParams.set("columns", shown.map((f) => f.key).join(","));
 
@@ -106,6 +117,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
 
   return (
     <Stack gap="md">
+      <ModuleTabs current={module.key} />
       <Group justify="space-between" align="flex-end">
         <div>
           <Title order={2}>{module.label}</Title>
@@ -124,10 +136,9 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
         </Group>
       </Group>
 
-      {module.segments && (
-        <SegmentedControl w="fit-content" data={module.segments.options}
-          value={params.get(module.segments.param) ?? ""}
-          onChange={(v) => setParam({ [module.segments!.param]: v || null })} />
+      {module.segments && !board && (
+        <SegmentedControl w="fit-content" data={module.segments.options} value={segValue}
+          onChange={(v) => setParam({ [module.segments!.param]: v === module.segments!.default ? null : v || null })} />
       )}
 
       <Group gap="xs">
@@ -142,7 +153,14 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
         <Button variant={activeFilters.length ? "light" : "default"} leftSection={<IconAdjustmentsHorizontal size={16} />} onClick={() => setFiltersOpen(true)}>
           Filters{activeFilters.length ? ` (${countFilters(activeFilters)})` : ""}
         </Button>
-        <ColumnPicker module={module} columns={shown.map((f) => f.key)} onChange={(c) => { setColumns(c); saveColumns(module.key, c); }} />
+        {!board && <ColumnPicker module={module} columns={shown.map((f) => f.key)} onChange={(c) => { setColumns(c); saveColumns(module.key, c); }} />}
+        {module.pipeline && (
+          <SegmentedControl size="sm" value={view} onChange={(v) => { setView(v as "board" | "table"); saveView(module.key, v); }}
+            data={[
+              { value: "board", label: <Group gap={6} wrap="nowrap"><IconLayoutKanban size={16} />Board</Group> },
+              { value: "table", label: <Group gap={6} wrap="nowrap"><IconTable size={16} />Table</Group> },
+            ]} />
+        )}
         {activeFilters.length > 0 && (
           <Button variant="subtle" size="compact-sm" onClick={() => {
             const next = new URLSearchParams();
@@ -155,7 +173,9 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
         {isFetching && <Loader size="xs" />}
       </Group>
 
-      {error ? (
+      {board ? (
+        <BoardView module={module} params={params} />
+      ) : error ? (
         <Paper withBorder p="lg"><Text c="red">{errorMessage(error)}</Text></Paper>
       ) : (
         <Paper withBorder radius="md">
@@ -181,7 +201,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
                       <Table.Td key={f.key} maw={f.type === "longtext" ? 320 : undefined}
                         miw={f.key === module.title_field ? 180 : f.multi || f.type === "tags" ? 200 : undefined}>
                         {f.key === module.title_field ? (
-                          <Text size="sm" fw={600} c="navy.9">{String(r[f.key] ?? "")}</Text>
+                          <Text size="sm" fw={600} c="navy.9">{r._title}</Text>
                         ) : (
                           <FieldValue f={f} v={r[f.key]} compact />
                         )}
@@ -202,7 +222,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
         </Paper>
       )}
 
-      {total > PAGE_SIZE && (
+      {!board && total > PAGE_SIZE && (
         <Group justify="space-between">
           <Text size="sm" c="dimmed">
             Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
@@ -220,6 +240,42 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
         onApply={(updates) => { setParam(updates); setFiltersOpen(false); }}
       />
     </Stack>
+  );
+}
+
+function loadView(module: string): "board" | "table" {
+  try {
+    return localStorage.getItem(`dealflow.view.${module}`) === "table" ? "table" : "board";
+  } catch {
+    return "board";
+  }
+}
+
+function saveView(module: string, v: string) {
+  try {
+    localStorage.setItem(`dealflow.view.${module}`, v);
+  } catch {
+    /* ignore */
+  }
+}
+
+// Record types that live together under one menu item.
+const MODULE_TABS: Record<string, { key: string; label: string }[]> = {
+  outreach: [{ key: "outreach", label: "Pipeline" }, { key: "companies", label: "Companies" }],
+  companies: [{ key: "outreach", label: "Pipeline" }, { key: "companies", label: "Companies" }],
+};
+
+function ModuleTabs({ current }: { current: string }) {
+  const nav = useNavigate();
+  const { data: schema } = useSchema();
+  const tabs = (MODULE_TABS[current] ?? []).filter((t) => schema?.modules.some((m) => m.key === t.key));
+  if (tabs.length < 2) return null;
+  return (
+    <Tabs value={current} onChange={(v) => v && nav(`/m/${v}`)}>
+      <Tabs.List>
+        {tabs.map((t) => <Tabs.Tab key={t.key} value={t.key}>{t.label}</Tabs.Tab>)}
+      </Tabs.List>
+    </Tabs>
   );
 }
 

@@ -66,9 +66,8 @@ export default function LinkInput({
   const loading = results.some((r) => r.isFetching);
   const denied = results.length > 0 && results.every((r) => r.error instanceof ApiError && r.error.status === 403);
 
-  // Where a new record would be created: the first target this user may add to.
-  const createIn = f.targets.find((m) => me.perms[m]?.create);
-  const createModule = schemaModules.find((m) => m.key === createIn);
+  // Where a new record can be created from what was typed (every target this user may add to).
+  const creatable = f.targets.filter((m) => me.perms[m]?.create).map((m) => schemaModules.find((sm) => sm.key === m)!).filter(Boolean);
   const exact = results.some((r) => r.data?.some((x) => x.title.toLowerCase() === typed.toLowerCase()));
 
   const toItem = (x: LookupItem): ComboboxItem => ({ value: `${x.module}:${x.id}`, label: x.title });
@@ -80,21 +79,25 @@ export default function LinkInput({
   if (current && !groups.some((g) => g.items.some((it) => (it as ComboboxItem).value === selectedKey))) {
     groups.unshift({ group: "", items: [{ value: selectedKey!, label: current.title }] });
   }
-  if (createIn && typed && !exact && typed !== current?.title) {
-    groups.push({ group: "", items: [{ value: CREATE, label: `+ Add “${typed}” as a new ${createModule?.singular.toLowerCase() ?? "record"}` }] });
+  if (creatable.length && typed && !exact && typed !== current?.title) {
+    groups.push({
+      group: f.targets.length > 1 ? "Add new" : "",
+      items: creatable.map((m) => ({ value: `${CREATE}:${m.key}`, label: `+ Add “${typed}” as a new ${m.singular.toLowerCase()}` })),
+    });
   }
   const data = f.targets.length > 1 ? groups.filter((g) => g.items.length) : groups.flatMap((g) => g.items as ComboboxItem[]);
   const subtitles = new Map<string, string>();
   results.forEach((r) => r.data?.forEach((x) => subtitles.set(`${x.module}:${x.id}`, x.subtitle)));
 
-  async function create() {
-    if (!createIn || !createModule) return;
+  async function create(moduleKey: string) {
+    const createModule = creatable.find((m) => m.key === moduleKey);
+    if (!createModule) return;
     setCreating(true);
     try {
-      const rec = await api<RecordData>(`m/${createIn}/`, { body: { [createModule.title_field]: typed } });
-      await qc.invalidateQueries({ queryKey: ["lookup", createIn] });
-      await qc.invalidateQueries({ queryKey: ["records", createIn] });
-      onChange({ module: createIn, id: rec.id, title: rec._title, archived: false });
+      const rec = await api<RecordData>(`m/${moduleKey}/`, { body: { [createModule.title_field]: typed } });
+      await qc.invalidateQueries({ queryKey: ["lookup", moduleKey] });
+      await qc.invalidateQueries({ queryKey: ["records", moduleKey] });
+      onChange({ module: moduleKey, id: rec.id, title: rec._title, archived: false });
       setSearch(rec._title);
       notifyOk(`${rec._title} added to ${createModule.label}.`);
     } catch (e) {
@@ -105,8 +108,8 @@ export default function LinkInput({
   }
 
   function pick(key: string | null) {
-    if (key === CREATE) {
-      create();
+    if (key?.startsWith(`${CREATE}:`)) {
+      create(key.slice(CREATE.length + 1));
       return;
     }
     if (!key) {
@@ -150,7 +153,7 @@ export default function LinkInput({
       renderOption={({ option }) => (
         <Group gap={6} wrap="nowrap">
           <div>
-            <Text size="sm" fw={option.value === CREATE ? 600 : undefined} c={option.value === CREATE ? "navy" : undefined}>{option.label}</Text>
+            <Text size="sm" fw={option.value.startsWith(CREATE) ? 600 : undefined} c={option.value.startsWith(CREATE) ? "navy" : undefined}>{option.label}</Text>
             {subtitles.get(option.value) && <Text size="xs" c="dimmed">{subtitles.get(option.value)}</Text>}
           </div>
         </Group>

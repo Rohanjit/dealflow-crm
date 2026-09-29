@@ -8,23 +8,30 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, qs } from "../api";
 import { useSchema } from "../context";
 import { errorMessage } from "../components/errors";
-import type { ModuleSchema, Page, RecordData, Section } from "../types";
+import type { LinkValue, ModuleSchema, Page, RecordData, Section } from "../types";
 import { FieldValue } from "./fields";
 
 export default function RelatedSection({ section, parent, record }: { section: Section; parent: ModuleSchema; record: RecordData }) {
   const nav = useNavigate();
   const { data: schema } = useSchema();
   const rel = schema?.modules.find((m) => m.key === section.module);
-  const linkParam = `${parent.key}:${record.id}`;
+  // Either records linked to this one, or (via) to the record this one links to — e.g. the
+  // contacts of an outreach attempt's company.
+  const via = section.via ? (record[section.via] as LinkValue | null) : null;
+  const linkParam = section.via ? (via ? `${via.module}:${via.id}` : null) : `${parent.key}:${record.id}`;
   const { data, isLoading, error } = useQuery({
     queryKey: ["records", section.module, "related", section.link_field, linkParam, section.order],
-    queryFn: () => api<Page<RecordData>>(`m/${section.module}/${qs({ [section.link_field!]: linkParam, ordering: section.order, page_size: 200 })}`),
-    enabled: !!rel,
+    queryFn: () => api<Page<RecordData>>(`m/${section.module}/${qs({
+      ...(section.params ?? {}), [section.link_field!]: linkParam, ordering: section.order, page_size: 200,
+    })}`),
+    enabled: !!rel && !!linkParam,
   });
-  if (!rel) return null;
+  if (!rel || !linkParam) return null;
 
   const columns = (section.columns ?? []).map((k) => rel.fields.find((f) => f.key === k && f.enabled)).filter((f) => !!f);
-  const count = data?.count ?? 0;
+  const rows = (data?.results ?? []).filter((r) => !(section.exclude_self && rel.key === parent.key && r.id === record.id));
+  const count = rows.length;
+  if (section.hide_empty && data && count === 0) return null;
   const back = `/m/${parent.key}/${record.id}`;
   const addUrl = `/m/${rel.key}/new${qs({ [section.link_field!]: linkParam, return: back })}`;
 
@@ -54,12 +61,12 @@ export default function RelatedSection({ section, parent, record }: { section: S
               <Table.Tr>{columns.map((f) => <Table.Th key={f!.key}>{f!.type === "boolean" ? "" : f!.label}</Table.Th>)}</Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {data!.results.map((r) => (
+              {rows.map((r) => (
                 <Table.Tr key={r.id} className="df-row-link" onClick={() => nav(`/m/${rel.key}/${r.id}`)}>
                   {columns.map((f) => (
                     <Table.Td key={f!.key}>
                       {f!.key === rel.title_field ? (
-                        <Text size="sm" fw={600} c="navy.9">{String(r[f!.key])}</Text>
+                        <Text size="sm" fw={600} c="navy.9">{r._title}</Text>
                       ) : f!.type === "boolean" ? (
                         r[f!.key] ? <Badge size="sm" variant="light" color="teal">{f!.label.replace(/^Primary point of contact$/, "Primary")}</Badge> : null
                       ) : (

@@ -6,8 +6,7 @@ import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-r
 import { api } from "../api";
 import { useModuleSchema } from "../context";
 import { errorMessage, fieldErrors, notifyOk } from "../components/errors";
-import type { RecordData } from "../types";
-import type { FieldSchema } from "../types";
+import type { FieldSchema, LinkValue, ModuleSchema, RecordData } from "../types";
 import { emptyValue, FieldInput } from "./fields";
 
 /** New records can start with a link filled in from the page address: ?firm=investors:12 */
@@ -16,6 +15,22 @@ function prefill(f: FieldSchema, raw: string | null): unknown {
   const [module, id] = raw.split(":");
   if (!f.targets.includes(module) || !/^\d+$/.test(id ?? "")) return undefined;
   return { module, id: Number(id), title: "", archived: false };
+}
+
+/** Which fields the form shows. Pipeline stage and status are moved with the stage controls, not
+ *  typed in; a new record picks its starting stage; exit details show only while they apply. */
+function visible(f: FieldSchema, module: ModuleSchema, editing: boolean, record?: RecordData): boolean {
+  if (!f.enabled) return false;
+  const p = module.pipeline;
+  if (!p || !f.pipeline_role) return true;
+  const status = record ? String(record[p.status_field] ?? p.open_value) : p.open_value;
+  switch (f.pipeline_role) {
+    case "stage": return !editing;
+    case "status": case "entered": return false;
+    case "lost_reason": return editing && status === "lost";
+    case "hold_reason": case "revisit": return editing && status === "on_hold";
+  }
+  return true;
 }
 
 export default function FormPage() {
@@ -33,19 +48,55 @@ export default function FormPage() {
     enabled: editing && !!module,
   });
 
-  const fields = useMemo(() => module?.fields.filter((f) => f.enabled) ?? [], [module]);
+  const fields = useMemo(
+    () => (module ? module.fields.filter((f) => visible(f, module, editing, rec.data)) : []),
+    [module, editing, rec.data],
+  );
   const [values, setValues] = useState<Record<string, unknown> | null>(null);
+  // Saved values, so options removed from a list (or deactivated users) stay selectable.
+  const [originals, setOriginals] = useState<Record<string, unknown>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loadingLinked, setLoadingLinked] = useState(false);
+
+  // Company-level fields (via a link, e.g. an outreach attempt's company) load from that record.
+  async function loadLinked(viaKey: string, link: LinkValue | null) {
+    const proxies = (module?.fields ?? []).filter((f) => f.via === viaKey);
+    if (!proxies.length) return;
+    if (!link) {
+      setValues((v) => ({ ...v!, ...Object.fromEntries(proxies.map((f) => [f.key, emptyValue(f)])) }));
+      return;
+    }
+    setLoadingLinked(true);
+    try {
+      const other = await api<RecordData>(`m/${link.module}/${link.id}/`);
+      const loaded = Object.fromEntries(proxies.map((f) => [f.key, other[f.key] ?? emptyValue(f)]));
+      setValues((v) => ({ ...v!, ...loaded }));
+      setOriginals((o) => ({ ...o, ...loaded }));
+    } finally {
+      setLoadingLinked(false);
+    }
+  }
 
   useEffect(() => {
     if (!module || values) return;
     if (editing && !rec.data) return;
     const init: Record<string, unknown> = {};
-    for (const f of fields) init[f.key] = editing ? rec.data![f.key] : prefill(f, params.get(f.key)) ?? emptyValue(f);
+    for (const f of module.fields) {
+      if (editing) init[f.key] = rec.data![f.key];
+      else if (f.pipeline_role === "stage" && module.pipeline) init[f.key] = module.pipeline.stages[0].value;
+      else init[f.key] = prefill(f, params.get(f.key)) ?? emptyValue(f);
+    }
     setValues(init);
-  }, [module, fields, editing, rec.data, values, params]);
+    setOriginals(editing ? rec.data! : {});
+    if (!editing) {
+      // A prefilled company brings its details with it.
+      for (const f of module.fields) {
+        if (f.type === "link" && init[f.key] && module.fields.some((pf) => pf.via === f.key)) loadLinked(f.key, init[f.key] as LinkValue);
+      }
+    }
+  }, [module, editing, rec.data, values, params]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isLoading || (editing && rec.isLoading)) return <Center py="xl"><Loader /></Center>;
   if (!module) return <Navigate to="/" replace />;
@@ -53,9 +104,14 @@ export default function FormPage() {
   if (rec.error) return <Text c="red">{errorMessage(rec.error)}</Text>;
   if (!values) return null;
 
-  const set = (k: string) => (v: unknown) => {
-    setValues((prev) => ({ ...prev!, [k]: v }));
-    if (errors[k]) setErrors((e) => { const n = { ...e }; delete n[k]; return n; });
+  const set = (f: FieldSchema) => (v: unknown) => {
+    const before = values[f.key] as LinkValue | null;
+    setValues((prev) => ({ ...prev!, [f.key]: v }));
+    if (errors[f.key]) setErrors((e) => { const n = { ...e }; delete n[f.key]; return n; });
+    if (f.type === "link" && module.fields.some((pf) => pf.via === f.key)) {
+      const after = v as LinkValue | null;
+      if (before?.module !== after?.module || before?.id !== after?.id) loadLinked(f.key, after);
+    }
   };
 
   async function save(e: React.FormEvent) {
@@ -64,19 +120,19 @@ export default function FormPage() {
     setError("");
     setErrors({});
     try {
-      let body: Record<string, unknown> = values!;
+      const shownKeys = new Set(fields.map((f) => f.key));
+      let body: Record<string, unknown> = Object.fromEntries(Object.entries(values!).filter(([k]) => shownKeys.has(k)));
       if (editing) {
-        body = Object.fromEntries(
-          Object.entries(values!).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(rec.data![k])),
-        );
+        body = Object.fromEntries(Object.entries(body).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(rec.data![k])));
       }
       const saved = await api<RecordData>(editing ? `m/${module!.key}/${id}/` : `m/${module!.key}/`, {
         method: editing ? "PATCH" : "POST",
         body,
       });
       qc.setQueryData(["record", module!.key, String(saved.id)], saved);
-      await qc.invalidateQueries({ queryKey: ["records", module!.key] });
+      await qc.invalidateQueries({ queryKey: ["records"] });
       await qc.invalidateQueries({ queryKey: ["search"] });
+      await qc.invalidateQueries({ queryKey: ["notes", module!.key, saved.id] });
       notifyOk(editing ? "Saved." : `${saved._title} added.`);
       nav(returnTo ?? `/m/${module!.key}/${saved.id}`, { replace: true });
     } catch (err) {
@@ -91,6 +147,7 @@ export default function FormPage() {
 
   const title = editing ? `Edit ${rec.data!._title}` : `New ${module.singular.toLowerCase()}`;
   const cancelTo = returnTo ?? (editing ? `/m/${module.key}/${id}` : `/m/${module.key}`);
+  const viaLabel = (viaKey: string) => module.fields.find((f) => f.key === viaKey)?.label.toLowerCase() ?? viaKey;
 
   return (
     <form onSubmit={save}>
@@ -105,17 +162,29 @@ export default function FormPage() {
         {module.groups.map((g) => {
           const gf = fields.filter((f) => f.group === g);
           if (!gf.length) return null;
+          const vias = [...new Set(gf.filter((f) => f.via).map((f) => f.via!))];
+          const missing = vias.find((v) => !values[v]);
+          const own = gf.filter((f) => !f.via || !missing);
           return (
             <Paper key={g} withBorder p="lg" radius="md">
-              <Text fw={600} mb="md">{g}</Text>
+              <Group justify="space-between" mb="md">
+                <Text fw={600}>{g}</Text>
+                {loadingLinked && vias.length > 0 && <Loader size="xs" />}
+              </Group>
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" verticalSpacing="md">
-                {gf.map((f) => (
+                {own.map((f) => (
                   <div key={f.key} style={{ gridColumn: f.type === "longtext" || f.type === "tags" ? "1 / -1" : undefined }}>
-                    <FieldInput f={f} value={values[f.key]} onChange={set(f.key)} error={errors[f.key]}
-                      original={editing ? rec.data![f.key] : undefined} />
+                    <FieldInput f={f} value={values[f.key]} onChange={set(f)} error={errors[f.key]} original={originals[f.key]} />
                   </div>
                 ))}
               </SimpleGrid>
+              {vias.length > 0 && (
+                <Text size="xs" c="dimmed" mt="md">
+                  {missing
+                    ? `Pick the ${viaLabel(missing)} first; its details fill in here.`
+                    : `These details belong to the ${viaLabel(vias[0])} and are shared by all its outreach.`}
+                </Text>
+              )}
             </Paper>
           );
         })}

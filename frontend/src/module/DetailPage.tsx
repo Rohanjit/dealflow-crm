@@ -1,6 +1,6 @@
-import { Anchor, Badge, Breadcrumbs, Button, Center, Group, Loader, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
+import { Anchor, Badge, Breadcrumbs, Button, Center, Grid, Group, Loader, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import { modals } from "@mantine/modals";
-import { IconArchive, IconPencil } from "@tabler/icons-react";
+import { IconArchive, IconArrowUpRight, IconPencil } from "@tabler/icons-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
@@ -8,9 +8,12 @@ import { api } from "../api";
 import { useApp, useModuleSchema } from "../context";
 import { errorMessage, notifyError, notifyOk } from "../components/errors";
 import { formatDateTime } from "../format";
-import type { FieldSchema, ModuleSchema, RecordData } from "../types";
+import type { FieldSchema, LinkValue, ModuleSchema, RecordData } from "../types";
 import { FieldValue, isEmpty } from "./fields";
+import PipelineBar from "./PipelineBar";
+import { stageOf } from "./pipeline";
 import RelatedSection from "./RelatedSection";
+import Timeline from "./Timeline";
 
 export default function DetailPage() {
   const { module: key, id } = useParams();
@@ -36,8 +39,21 @@ export default function DetailPage() {
   }
   const r = rec.data;
   const moduleLabel = (key?: string) => info.modules.find((m) => m.key === key)?.label ?? key ?? "";
-  const fields = module.fields.filter((f) => f.enabled && f.key !== module.title_field);
+  const p = module.pipeline;
+  const state = p ? stageOf(r, p) : null;
+  const shown = (f: FieldSchema) => {
+    if (!f.enabled || f.key === module.title_field) return false;
+    if (!p || !f.pipeline_role) return true;
+    // Stage and status live in the stage bar; exit details only when they apply.
+    if (f.pipeline_role === "stage" || f.pipeline_role === "status") return false;
+    if (f.pipeline_role === "lost_reason") return state!.status === "lost";
+    if (f.pipeline_role === "hold_reason" || f.pipeline_role === "revisit") return state!.status === "on_hold";
+    return true;
+  };
+  const fields = module.fields.filter(shown);
   const st = r._stamps;
+  const titleLink = module.fields.find((f) => f.key === module.title_field && f.type === "link");
+  const parentLink = titleLink ? (r[titleLink.key] as LinkValue | null) : null;
 
   function archive() {
     modals.openConfirmModal({
@@ -63,14 +79,21 @@ export default function DetailPage() {
   }
 
   return (
-    <Stack gap="lg" maw={1200}>
+    <Stack gap="lg" maw={module.timeline ? 1400 : 1200}>
       <Breadcrumbs>
         <Anchor component={Link} to={`/m/${module.key}`} size="sm">{module.label}</Anchor>
         <Text size="sm">{r._title}</Text>
       </Breadcrumbs>
       <Group justify="space-between" align="flex-start">
         <div>
-          <Title order={2}>{r._title}</Title>
+          <Group gap="sm" align="baseline">
+            <Title order={2}>{r._title}</Title>
+            {parentLink && me.perms[parentLink.module]?.view && (
+              <Anchor component={Link} to={`/m/${parentLink.module}/${parentLink.id}`} size="sm">
+                <Group gap={2} component="span" wrap="nowrap">Company page <IconArrowUpRight size={14} /></Group>
+              </Anchor>
+            )}
+          </Group>
           <HeaderBadges r={r} module={module} />
         </div>
         <Group gap="xs">
@@ -83,6 +106,11 @@ export default function DetailPage() {
         </Group>
       </Group>
 
+      {p && <PipelineBar module={module} record={r} />}
+
+      <Grid gutter="lg" align="flex-start">
+      <Grid.Col span={{ base: 12, lg: module.timeline ? 8 : 12 }}>
+      <Stack gap="lg">
       {module.sections.filter((s) => s.status === "ready" && s.module).map((s) => (
         <RelatedSection key={s.key} section={s} parent={module} record={r} />
       ))}
@@ -114,7 +142,14 @@ export default function DetailPage() {
           </Paper>
         ))}
       </SimpleGrid>
-
+      </Stack>
+      </Grid.Col>
+      {module.timeline && (
+        <Grid.Col span={{ base: 12, lg: 4 }}>
+          <Timeline module={module} recordId={r.id} />
+        </Grid.Col>
+      )}
+      </Grid>
 
       <Text size="xs" c="dimmed">
         Created by {st.created_by?.name ?? "—"} on {formatDateTime(st.created_at, me)} · Last edited by {st.updated_by?.name ?? "—"} on {formatDateTime(st.updated_at, me)}
@@ -127,6 +162,8 @@ export default function DetailPage() {
 const HEADER_FIELDS: Record<string, string[]> = {
   investors: ["investor_type", "relationship_strength", "actively_deploying", "hq_city"],
   contacts: ["designation", "firm", "decision_level", "primary_contact", "relationship_strength", "city"],
+  companies: ["sector", "sub_sector", "city"],
+  outreach: ["transaction_type", "expected_size", "lead_banker"],
 };
 
 function HeaderBadges({ r, module }: { r: RecordData; module: ModuleSchema }) {

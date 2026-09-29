@@ -47,6 +47,14 @@ Read this first in every session. The full product scope is in `docs/scope-v1.md
 24. **Contacts:** the firm link is optional (lawyers, advisers and introducers needn't belong to a firm). "Primary point of contact" is a flag, and several per firm are allowed. "Introduced by" is free text. Import duplicates: same email, mobile (last 10 digits), LinkedIn profile, or same name at the same firm.
 25. **Import, more:** several columns can feed one text field ("First name" + "Last name" → Full name). Link cells match an existing record by exact name, then by normalised name (for investors the generic words are ignored, so "Blume" finds "Blume Ventures"); names matching several records are left blank with a warning. Unmatched names can optionally be created as new records, only by people who can create in that module.
 26. The Vite build is served through WhiteNoise, which indexes files at start-up: restart the server after rebuilding the frontend (automatic when `DJANGO_DEBUG=1`).
+27. **Outreach is company level** (Shobhit, 29 Sep 2026): `outreach.Company` is recorded once; each approach is an `outreach.Outreach` attempt with a required `company` FK. Both live in the `outreach` app and register two modules: `companies` and `outreach`. The menu shows one Outreach item with Pipeline / Companies tabs.
+28. **Company-level fields on attempts** use `proxy()` (FieldDef `via="company"`, `via_module="companies"`): same key and type as on the company; reads, filters, sorting, search, export and import go through the FK, and saves land on the company, so every attempt (and later every deal) shares them. Their on/off switches belong to Companies. Imports never blank a known company detail from an empty cell.
+29. **Derived permissions:** `core.modules.DERIVED_PERMISSIONS` — companies have no permission row of their own and allow whatever Outreach or Active Deals allows. `Role.module_perms()` and `User.can()` include them.
+30. **Pipelines** (`ModuleDef.pipeline = PipelineDef(...)`, logic in `core/pipeline.py`): `stage` holds one of the fixed stages and `status` is open / on_hold / lost, so an exit keeps the stage it happened at. Lost needs a reason; on hold needs a reason and a revisit date (not enforced on import). Changing the stage reopens a paused or lost record; resuming keeps the stage. `stage_entered` updates on every stage change; exit details clear when they stop applying. Every change writes a log entry. The app never types stage or status into a form: the board and the stage bar send PATCHes.
+31. **Interaction log:** `core.Note` (module + record id), kinds note / call / meeting / email / stage. `/api/m/<module>/<id>/notes/` (view to read, edit permission to add); authors or admins edit or delete their own notes; stage entries are fixed. Enabled per module with `timeline=True`. Permanently deleting a record deletes its log.
+32. **Titles:** a module can be named through a link (`title_path="company__name"`, `title_fn`), used by search, lookups, archive and import review.
+33. **Won mandates** stay in Outreach at "Mandate won" until Active Deals exists; that module will create a deal for each (including ones won earlier).
+34. List quick switches can be explicit (`segment_param` / `segment_options` / `segment_default`, e.g. Outreach's Active / Won / On hold / Lost / All). With no parameter the API returns everything; the app sends the default, and the board ignores it.
 
 ## Conventions
 
@@ -60,7 +68,7 @@ Read this first in every session. The full product scope is in `docs/scope-v1.md
 - [x] Repo created (private), license, README, this brief
 - [x] Foundation + Investors (27 Sep 2026): setup wizard, login, users and invites, roles and permissions, field switches, editable dropdowns, record stamps, archive, global and per-module search and filters, import/export, settings, backups with daily scheduler, Docker Compose (SQLite and Postgres both tested). Home dashboard waits for Active Deals; Investors' "Linked contacts" and "Deal history" sections fill in with Contacts and Active Deals.
 - [x] Contacts (29 Sep 2026): all V1 fields, firm link with Investor side / Not linked switch (Company side arrives with Outreach), birthdays without a year, linked contacts on each investor with "Add contact", create a missing firm from the picker or during import, LinkedIn/Outlook-style imports, duplicate warnings.
-- [ ] Outreach
+- [x] Outreach (29 Sep 2026): companies recorded once with their outreach attempts, contacts and history; pipeline board with drag and drop, stage bar, lost/on-hold with reasons and revisit dates, interaction log, Active/Won/On hold/Lost views, flat pipeline-sheet import that creates companies, Company side for contacts.
 - [ ] Active Deals
 - [ ] Tasks & Reminders
 - [ ] Vault

@@ -66,7 +66,7 @@ def before_save(obj, mod: ModuleDef, values: dict, old: tuple, importing: bool) 
     setattr(obj, p.status_field, status)
     stage_changed, status_changed = stage != old_stage, status != old_status
     today = timezone.localdate()
-    if stage_changed and p.entered_field not in values:
+    if stage_changed and not values.get(p.entered_field):
         setattr(obj, p.entered_field, today)
     if status_changed:
         # Exit details that no longer apply are cleared; the log keeps them.

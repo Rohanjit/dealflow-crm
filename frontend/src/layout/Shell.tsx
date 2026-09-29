@@ -22,6 +22,9 @@ const ICONS: Record<string, typeof IconHome> = {
   vault: IconLock,
 };
 
+// Record types shown under another menu item (companies live under Outreach).
+const NAV_CHILDREN: Record<string, string[]> = { outreach: ["companies"] };
+
 export default function Shell() {
   const { info, me } = useApp();
   const [opened, { toggle, close }] = useDisclosure();
@@ -90,7 +93,7 @@ export default function Shell() {
             }
             return (
               <NavLink key={m.key} component={Link} to={`/m/${m.key}`} label={m.label} leftSection={<Icon size={18} />}
-                active={active(`/m/${m.key}`)} onClick={close} />
+                active={active(`/m/${m.key}`) || (NAV_CHILDREN[m.key] ?? []).some((c) => active(`/m/${c}`))} onClick={close} />
             );
           })}
         </AppShell.Section>

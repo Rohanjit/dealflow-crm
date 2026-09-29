@@ -1,5 +1,5 @@
 import { Button, Group, Paper, SimpleGrid, Stack, Text, ThemeIcon, Title } from "@mantine/core";
-import { IconBriefcase, IconBuildingBank, IconFileImport, IconPlus, IconUsers } from "@tabler/icons-react";
+import { IconBriefcase, IconBuildingBank, IconFileImport, IconPlus, IconTargetArrow, IconUsers } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
 
 import { useApp } from "../context";
@@ -7,6 +7,7 @@ import { useApp } from "../context";
 const CARDS: Record<string, { icon: typeof IconBriefcase; color: string; blurb: string }> = {
   investors: { icon: IconBuildingBank, color: "teal", blurb: "Investor firms, what they invest in, and who owns each relationship." },
   contacts: { icon: IconUsers, color: "grape", blurb: "People at investor firms and client companies: how to reach them and who knows them best." },
+  outreach: { icon: IconTargetArrow, color: "orange", blurb: "Companies you're approaching for mandates, from first contact to mandate won." },
 };
 
 export default function Home() {
@@ -43,7 +44,7 @@ export default function Home() {
               </Group>
               <Text size="sm" c="dimmed" mb="md">{card.blurb}</Text>
               <Group gap="xs">
-                <Button size="xs" component={Link} to={`/m/${m.key}`}>Open {m.label.toLowerCase()}</Button>
+                <Button size="xs" component={Link} to={`/m/${m.key}`}>{m.key === "outreach" ? "Open pipeline" : `Open ${m.label.toLowerCase()}`}</Button>
                 {perms.create && <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} component={Link} to={`/m/${m.key}/new`}>Add one</Button>}
                 {perms.create && <Button size="xs" variant="default" leftSection={<IconFileImport size={14} />} component={Link} to={`/m/${m.key}/import`}>Import from Excel</Button>}
               </Group>
