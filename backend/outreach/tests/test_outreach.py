@@ -153,7 +153,7 @@ class PipelineTests(OutreachBase):
         o = self.outreach(stage="negotiating")
         r = self.client.patch(f"{O_URL}{o['id']}/", {"stage": "won"}, format="json").json()
         self.assertEqual(r["stage"], "won")
-        self.assertEqual(self.notes(o)[0]["text"], "Mandate won (from Negotiating)")
+        self.assertEqual([n["text"] for n in self.notes(o)[:2]], ["Moved to Active Deals", "Mandate won (from Negotiating)"])
         r = self.client.patch(f"{O_URL}{o['id']}/", {"status": "lost", "lost_reason": self.opt("lost_reasons", "Other").pk}, format="json")
         self.assertEqual(r.status_code, 400)
         self.assertIn("status", r.json())
@@ -259,7 +259,7 @@ class ContactsCompanySideTests(OutreachBase):
         schema = self.client.get("/api/schema/").json()
         outreach = next(m for m in schema["modules"] if m["key"] == "outreach")
         self.assertEqual({s["key"]: (s["status"], s.get("via")) for s in outreach["sections"]},
-                         {"contacts": ("ready", "company"), "history": ("ready", "company")})
+                         {"deal": ("ready", None), "contacts": ("ready", "company"), "history": ("ready", "company")})
         self.assertEqual(outreach["pipeline"]["stages"][0], {"value": "identified", "label": "Identified"})
         self.assertTrue(outreach["timeline"])
         self.assertTrue(o["id"])

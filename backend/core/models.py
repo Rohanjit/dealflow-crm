@@ -14,6 +14,8 @@ class FirmSettings(models.Model):
     backups_enabled = models.BooleanField(default=True)
     last_backup_at = models.DateTimeField(null=True, blank=True)
     last_backup_error = models.TextField(blank=True)
+    # Home page: how far ahead "near target close" and "mandate nearing expiry" look.
+    dashboard_days = models.PositiveSmallIntegerField(default=30)
 
     @classmethod
     def load(cls) -> "FirmSettings":

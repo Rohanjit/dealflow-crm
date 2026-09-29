@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     "investors",
     "contacts",
     "outreach",
+    "deals",
 ]
 
 MIDDLEWARE = [

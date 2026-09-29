@@ -97,7 +97,7 @@ def duplicate_keys(values: dict) -> list[str]:
     return keys
 
 
-def ticket_filter(qs, params):
+def ticket_filter(qs, params, user=None):
     """?ticket=50&ticket_currency=INR&ticket_unit=Cr → investors whose ticket range covers it.
     Only compares within the same currency (no conversion). Units are scaled."""
     raw = params.get("ticket")
@@ -141,7 +141,15 @@ MODULE = register(
                 "columns": ["full_name", "designation", "decision_level", "primary_contact", "work_email", "mobile"],
                 "order": "-primary_contact,decision_level,full_name",
             },
-            {"key": "deal_history", "label": "Deal history", "available_with": "deals"},
+            {
+                "key": "deal_history",
+                "label": "Deal history",
+                "module": "deal_investors",
+                "link_field": "investor",
+                "add_label": "Add to a deal",
+                "columns": ["deal", "stage", "status", "stage_entered", "decline_reason"],
+                "order": "-created_at",
+            },
         ],
     )
 )

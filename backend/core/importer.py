@@ -183,7 +183,7 @@ def suggest_mapping(mod: ModuleDef, headers: list[str], enabled: dict) -> list[d
     column holds the whole value."""
     candidates, parts = {}, {}
     for f in mod.fields:
-        if not enabled.get(f.key, True):
+        if f.readonly or not enabled.get(f.key, True):
             continue
         for name in [f.label, f.key, *f.aliases]:
             candidates.setdefault(_norm(name), f.key)
@@ -282,6 +282,41 @@ def parse_date(raw: str, user_format: str) -> str:
     raise FieldError(f"“{raw}” isn't a date we can read.")
 
 
+def parse_time(raw: str) -> str:
+    """'14:30', '2:30 pm', '9 am', '14.30' → 'HH:MM'."""
+    m = re.fullmatch(r"(\d{1,2})(?:[:.](\d{2}))?(?::\d{2})?\s*([ap]\.?m\.?)?", raw.strip().lower())
+    if not m or (m.group(2) is None and not m.group(3)):
+        raise FieldError(f"“{raw}” isn't a time we can read.")
+    hour, minute = int(m.group(1)), int(m.group(2) or 0)
+    if m.group(3):
+        if not 1 <= hour <= 12:
+            raise FieldError(f"“{raw}” isn't a time we can read.")
+        hour = hour % 12 + (12 if m.group(3).startswith("p") else 0)
+    if hour > 23 or minute > 59:
+        raise FieldError(f"“{raw}” isn't a time we can read.")
+    return f"{hour:02d}:{minute:02d}"
+
+
+def parse_datetime(raw: str, user_format: str) -> str:
+    """A date with an optional time: '12/10/2026 14:30', '2026-10-12T14:30:00', '12 Oct 2026'."""
+    s = raw.strip()
+    if not s:
+        return ""
+    m = re.fullmatch(r"(\d{4}-\d{2}-\d{2})[T ](\d{1,2}:\d{2})(?::\d{2}(?:\.\d+)?)?", s)
+    if m:
+        day, at = m.group(1), parse_time(m.group(2))
+        return day if at == "00:00" else f"{day}T{at}"  # Excel dates without a time come as midnight
+    try:
+        return parse_date(s, user_format)
+    except FieldError:
+        pass
+    # "<date> <time>": try splitting off a trailing time.
+    m = re.fullmatch(r"(.+?)[\s,]+(\d{1,2}(?:[:.]\d{2})?(?::\d{2})?\s*(?:[ap]\.?m\.?)?)", s, re.IGNORECASE)
+    if m:
+        return f"{parse_date(m.group(1), user_format)}T{parse_time(m.group(2))}"
+    raise FieldError(f"“{raw}” isn't a date we can read.")
+
+
 def parse_birthday(raw: str, user_format: str) -> str:
     """'12 Mar', 'March 12', '12/03', '12/03/1985', '1985-03-12' → 'MM-DD' or 'YYYY-MM-DD'."""
     s = raw.strip()
@@ -373,7 +408,7 @@ class RowContext:
                 norm.setdefault(k, []).append(pk)
         return {"exact": exact, "norm": norm}
 
-    def link(self, f: FieldDef, raw: str, warnings: list, commit: bool) -> str | None:
+    def link(self, f: FieldDef, raw: str, warnings: list, commit: bool, allow_create=True) -> str | None:
         """Find the record a cell names ("Blume Ventures") → "investors:12"."""
         name = " ".join(raw.split())
         if not name:
@@ -390,7 +425,7 @@ class RowContext:
             if len(hits) > 1:
                 warnings.append(f"{f.label}: “{name}” matches {len(hits)} records, left blank.")
                 return None
-        create_in = self.create_links.get(f.key)
+        create_in = self.create_links.get(f.key) if allow_create else None
         if create_in:
             tmod = get_module(create_in)
             if not commit:
@@ -410,6 +445,19 @@ class RowContext:
         labels = " or ".join(get_module(m).label.lower() for m, _ in active_targets(f))
         warnings.append(f"{f.label}: “{name}” isn't in {labels}, left blank.")
         return None
+
+    def links(self, f: FieldDef, raw: str, warnings: list, commit: bool) -> list:
+        """A cell naming several records ("Blume Ventures; Accel"). Names are split on ; | or new
+        lines, and on commas only when the whole cell isn't itself one name."""
+        names = [p.strip() for p in re.split(r"[;|\n]", raw) if p.strip()]
+        if len(names) == 1 and "," in names[0] and self.link(f, names[0], [], False, allow_create=False) is None:
+            names = [p.strip() for p in names[0].split(",") if p.strip()]
+        out = []
+        for name in names:
+            v = self.link(f, name, warnings, commit)
+            if v is not None and v is not PENDING and v not in out:
+                out.append(v)
+        return out
 
     def option(self, f: FieldDef, label: str, warnings: list, commit: bool):
         key = label.strip().lower()
@@ -471,6 +519,13 @@ def row_to_data(row: list[str], mapping: list[dict], ctx: RowContext, commit=Fal
                 labels = _split(raw) if f.multi else ([raw.strip()] if raw.strip() else [])
                 ids = [pk for lbl in labels if (pk := ctx.option(f, lbl, warnings, commit))]
                 data[key] = ids if f.multi else (ids[0] if ids else None)
+            elif f.type == "user" and f.multi:
+                data[key] = []
+                for name in _split(raw):
+                    if u := ctx.users.get(name.lower()):
+                        data[key].append(u.pk)
+                    else:
+                        warnings.append(f"{f.label}: no user called “{name}”, left out.")
             elif f.type == "user":
                 if raw.strip():
                     u = ctx.users.get(raw.strip().lower())
@@ -483,8 +538,12 @@ def row_to_data(row: list[str], mapping: list[dict], ctx: RowContext, commit=Fal
                     data[key] = None
             elif f.type == "date":
                 data[key] = parse_date(raw, ctx.user.date_format)
+            elif f.type == "datetime":
+                data[key] = parse_datetime(raw, ctx.user.date_format)
             elif f.type == "birthday":
                 data[key] = parse_birthday(raw, ctx.user.date_format)
+            elif f.type == "link" and f.multi:
+                data[key] = ctx.links(f, raw, warnings, commit)
             elif f.type == "link":
                 data[key] = ctx.link(f, raw, warnings, commit)
             elif f.type == "tags":
@@ -507,7 +566,8 @@ def _existing_keys(mod: ModuleDef) -> dict[str, list[tuple[int, str]]]:
         return index
     own = [f for f in mod.fields if not f.via]
     text_fields = [f.key for f in own if f.type in ("text", "url", "email", "phone", "choice")]
-    links = [(f.key, mkey, f"{attr}_id") for f in own if f.type == "link" for mkey, attr in active_targets(f)]
+    links = [(f.key, mkey, f"{attr}_id") for f in own if f.type == "link" and not f.multi
+             for mkey, attr in active_targets(f)]
     cols = list(dict.fromkeys([*text_fields, *(c for _, _, c in links), mod.title_lookup]))
     for rec in mod.model.objects.filter(archived_at__isnull=True).values("pk", *cols):
         values = {k: rec[k] for k in text_fields}
@@ -614,7 +674,7 @@ def validate_mapping(mod: ModuleDef, mapping, width: int, enabled: dict) -> list
         key = (m or {}).get("field") or None
         if key:
             base = key[: -len(CU_SUFFIX)] if key.endswith(CU_SUFFIX) else key
-            if base not in mod.field_map or not enabled.get(base, True):
+            if base not in mod.field_map or mod.field_map[base].readonly or not enabled.get(base, True):
                 raise ImportError_(f"Unknown field {key}.")
             if key.endswith(CU_SUFFIX) and mod.field_map[base].type != "money":
                 raise ImportError_(f"Unknown field {key}.")
@@ -630,7 +690,7 @@ def validate_mapping(mod: ModuleDef, mapping, width: int, enabled: dict) -> list
 def importable_fields(mod: ModuleDef, enabled: dict) -> list[dict]:
     out = []
     for f in mod.fields:
-        if not enabled.get(f.key, True):
+        if f.readonly or not enabled.get(f.key, True):
             continue
         out.append({"key": f.key, "label": f.label, "type": f.type, "required": f.required})
         if f.type == "money":

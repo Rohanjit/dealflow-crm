@@ -1,15 +1,21 @@
-"""Stage rules for pipeline modules (Outreach now, Active Deals later).
+"""Stage rules for pipeline modules (Outreach, Active Deals, each deal's investor tracker).
 
-A record sits at one stage; exits (Lost, On hold) can happen at any stage and keep the stage
-it was at, which is how the exit stage is recorded. Changing the stage reopens a paused or
-lost record. Every stage or status change is written to the record's interaction log.
+A record sits at one stage; exits (Lost, On hold, Dropped, Declined…) can happen at any stage and
+keep the stage it was at, which is how the exit stage is recorded. Changing the stage reopens a
+paused or closed record. Every stage or status change is written to the record's interaction log,
+and announced with the `stage_changed` signal (Active Deals listens for mandates won).
 """
 
 from __future__ import annotations
 
+import django.dispatch
 from django.utils import timezone
 
 from .registry import ModuleDef
+
+# Sent after a record's stage or status changed and was saved.
+# sender = module key; kwargs: record, event ({text, meta}), user, importing.
+stage_changed = django.dispatch.Signal()
 
 
 def _state(instance, p) -> tuple[str | None, str | None]:
@@ -85,20 +91,21 @@ def before_save(obj, mod: ModuleDef, values: dict, old: tuple, importing: bool) 
         return None
     meta = {"from_stage": old_stage, "to_stage": stage, "from_status": old_status, "to_status": status}
     if status != p.open_value:
-        label = "Marked lost" if status == "lost" else f"Put {p.exit_label(status).lower()}"
-        text = f"{label} at {p.stage_label(stage)}"
-        if rf := p.reason_fields.get(status):
-            reason = getattr(obj, rf)
+        exit_ = p.exit(status)
+        text = f"{exit_.done if exit_ else status} at {p.stage_label(stage)}"
+        if exit_ and exit_.reason_field:
+            reason = getattr(obj, exit_.reason_field)
             if reason is not None:
                 text += f" · {reason.label}"
                 meta["reason"] = reason.label
-        if df := p.date_fields.get(status):
-            when = getattr(obj, df)
+        if exit_ and exit_.date_field:
+            when = getattr(obj, exit_.date_field)
             if when:
                 meta["date"] = when.isoformat()
-                meta["date_label"] = mod.field(df).label
+                meta["date_label"] = mod.field(exit_.date_field).label
     elif old_status != p.open_value:
-        verb = "Reopened" if old_status == "lost" else "Resumed"
+        old_exit = p.exit(old_status)
+        verb = "Resumed" if old_exit and old_exit.paused else "Reopened"
         text = f"{verb} at {p.stage_label(stage)}" if not stage_changed else f"{verb} and moved to {p.stage_label(stage)}"
     elif p.won and stage == p.won:
         text = f"{p.stage_label(stage)} (from {p.stage_label(old_stage)})"

@@ -1,7 +1,7 @@
 import re
 from urllib.parse import urlparse
 
-from core.registry import FieldDef, ModuleDef, PipelineDef, proxy, register
+from core.registry import Exit, FieldDef, ModuleDef, PipelineDef, proxy, register
 
 from .models import STAGES, STATUSES, Company, Outreach
 
@@ -17,6 +17,9 @@ COMPANY_FIELDS = [
              aliases=["industry", "vertical"]),
     FieldDef("sub_sector", "Sub-sector", "text", CB, searchable=True,
              aliases=["sub sector", "subsector", "segment", "sub industry", "niche"]),
+    FieldDef("geography", "Geography", "dropdown", CB, choice_list="geographies", filterable=True,
+             help="Where the company mainly operates. Used to suggest investors for its deals.",
+             aliases=["region", "country", "market"]),
     FieldDef("city", "City", "text", CB, list_default=True, searchable=True, filterable=True,
              aliases=["location", "hq", "hq city", "headquarters", "based in"]),
     FieldDef("website", "Website", "url", CB, searchable=True, aliases=["url", "web", "site"]),
@@ -102,7 +105,15 @@ COMPANIES = register(
                 "columns": ["full_name", "designation", "decision_level", "primary_contact", "work_email", "mobile"],
                 "order": "-primary_contact,decision_level,full_name",
             },
-            {"key": "deals", "label": "Deals", "available_with": "deals"},
+            {
+                "key": "deals",
+                "label": "Deals",
+                "module": "deals",
+                "link_field": "company",
+                "params": {"view": "all"},
+                "columns": ["transaction_type", "stage", "status", "target_raise", "lead_banker", "target_close_date"],
+                "order": "-created_at",
+            },
         ],
     )
 )
@@ -125,6 +136,7 @@ OUTREACH_FIELDS = [
              aliases=["company", "company name", "name", "client", "target", "target company", "account"]),
     _company("sector", CO, list_default=True),
     _company("sub_sector", CO),
+    _company("geography", CO),
     _company("city", CO, list_default=False),
     _company("website", CO),
     _company("year_founded", CO),
@@ -168,10 +180,10 @@ OUTREACH_FIELDS = [
                       "next action date", "next follow-up date"]),
 
     FieldDef("lost_reason", "Lost reason", "dropdown", EX, choice_list="lost_reasons", filterable=True,
-             always_on=True, pipeline_role="lost_reason", aliases=["reason lost", "why lost", "loss reason"]),
+             always_on=True, pipeline_role="exit", aliases=["reason lost", "why lost", "loss reason"]),
     FieldDef("hold_reason", "On-hold reason", "dropdown", EX, choice_list="hold_reasons", filterable=True,
-             always_on=True, pipeline_role="hold_reason", aliases=["on hold reason", "hold reason", "why on hold"]),
-    FieldDef("revisit_date", "Revisit on", "date", EX, filterable=True, always_on=True, pipeline_role="revisit",
+             always_on=True, pipeline_role="exit", aliases=["on hold reason", "hold reason", "why on hold"]),
+    FieldDef("revisit_date", "Revisit on", "date", EX, filterable=True, always_on=True, pipeline_role="exit",
              aliases=["revisit", "revisit date", "revisit on", "follow up after"]),
 
     FieldDef("tags", "Tags", "tags", OO, filterable=True, aliases=["labels", "categories"]),
@@ -186,7 +198,7 @@ VIEWS = [
 ]
 
 
-def outreach_view_filter(qs, params):
+def outreach_view_filter(qs, params, user=None):
     """?view=active (default in the app: still being worked) | won | on_hold | lost | all."""
     view = params.get("view")
     if view == "active":
@@ -230,13 +242,25 @@ OUTREACH = register(
         segment_default="active",
         pipeline=PipelineDef(
             stages=STAGES,
-            exits=[("on_hold", "On hold"), ("lost", "Lost")],
+            exits=[
+                Exit("on_hold", "On hold", "Put on hold", "Put on hold", paused=True,
+                     reason_field="hold_reason", date_field="revisit_date"),
+                Exit("lost", "Lost", "Mark as lost", "Marked lost", reason_field="lost_reason"),
+            ],
             won="won",
-            reason_fields={"lost": "lost_reason", "on_hold": "hold_reason"},
-            date_fields={"on_hold": "revisit_date"},
         ),
         timeline=True,
         sections=[
+            {
+                "key": "deal",
+                "label": "Active deal",
+                "module": "deals",
+                "link_field": "outreach",
+                "hide_empty": True,
+                "no_add": True,
+                "params": {"view": "all"},
+                "columns": ["transaction_type", "stage", "status", "lead_banker", "target_close_date"],
+            },
             {
                 "key": "contacts",
                 "label": "Company contacts",

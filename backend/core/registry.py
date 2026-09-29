@@ -30,6 +30,7 @@ FIELD_TYPES = {
     "tags",
     "link",  # a link to one record in another module (possibly one of several modules)
     "birthday",  # day + month, year optional
+    "datetime",  # a date with an optional time of day (task due dates)
 }
 
 TRISTATE_CHOICES = [("yes", "Yes"), ("no", "No"), ("unknown", "Unknown")]
@@ -76,7 +77,7 @@ class FieldDef:
     group: str
     required: bool = False
     choice_list: str | None = None  # dropdown: key of the editable ChoiceList
-    multi: bool = False  # dropdown: many options allowed
+    multi: bool = False  # dropdown, user, link: several allowed (a many-to-many column per target)
     choices: list[tuple[str, str]] | None = None  # choice: fixed options
     help: str = ""
     list_default: bool = False  # shown as a list column by default
@@ -95,10 +96,12 @@ class FieldDef:
     # points to (e.g. "company"), which belongs to module `via_module`. See `proxy()`.
     via: str | None = None
     via_module: str | None = None
-    # Pipeline modules: which part of the stage machinery this field is (stage, status, entered,
-    # lost_reason, hold_reason, revisit). The screens show these through stage controls.
+    # Pipeline modules: which part of the stage machinery this field is (stage, status, entered, or
+    # exit = a reason or date asked for when a record leaves the pipeline). The screens show these
+    # through stage controls rather than as plain inputs.
     pipeline_role: str | None = None
     allow_negative: bool = False  # money/number fields that can be below zero (EBITDA, PAT)
+    readonly: bool = False  # set by the app (e.g. "Created by"), never by forms or imports
 
     def __post_init__(self):
         assert self.type in FIELD_TYPES, f"Unknown field type {self.type}"
@@ -108,7 +111,9 @@ class FieldDef:
             assert self.targets, f"{self.key}: link needs targets"
         if self.type == "tristate":
             self.choices = TRISTATE_CHOICES
-        if self.type in ("tags",) or (self.type == "dropdown" and self.multi) or self.type == "longtext":
+        if self.multi:
+            assert self.type in ("dropdown", "user", "link"), f"{self.key}: only dropdown, user and link can be multi"
+        if self.type in ("tags", "longtext") or self.multi:
             self.sortable = False
 
     @property
@@ -117,7 +122,8 @@ class FieldDef:
 
     @property
     def is_m2m(self) -> bool:
-        return self.type == "tags" or (self.type == "dropdown" and self.multi)
+        """Stored in a many-to-many column (links keep one per target module)."""
+        return self.type == "tags" or self.multi
 
     def path(self, name: str | None = None) -> str:
         """Database lookup path for this field's column (prefixed with the FK for proxies)."""
@@ -144,6 +150,7 @@ class FieldDef:
             "via": self.via,
             "via_module": self.via_module,
             "pipeline_role": self.pipeline_role,
+            "readonly": self.readonly,
         }
 
 
@@ -154,25 +161,67 @@ def proxy(src: FieldDef, via: str, via_module: str, **changes) -> FieldDef:
 
 
 @dataclass
+class Exit:
+    """A way out of a pipeline that can happen at any stage (Lost, On hold, Dropped, Declined…).
+    The record keeps the stage it left at, so the exit stage is always recorded."""
+
+    value: str  # status value, e.g. "lost"
+    label: str  # the status as shown, e.g. "Lost"
+    action: str  # the button that does it, e.g. "Mark as lost"
+    done: str  # how the log and messages put it, e.g. "Marked lost"
+    paused: bool = False  # on hold: picked up again where it stopped ("Resume"); the others are reopened
+    reason_field: str | None = None  # dropdown asking why; required when someone moves it here in the app
+    date_field: str | None = None  # e.g. a revisit date; required when someone moves it here in the app
+    tone: str = ""  # colour on screens: red (default), orange (default for pauses) or gray
+
+    def schema(self) -> dict:
+        return {
+            "value": self.value,
+            "label": self.label,
+            "action": self.action,
+            "done": self.done,
+            "paused": self.paused,
+            "reason_field": self.reason_field,
+            "date_field": self.date_field,
+            "tone": self.tone or ("orange" if self.paused else "red"),
+        }
+
+
+@dataclass
 class PipelineDef:
-    """Fixed stages plus exits (e.g. Lost, On hold) that can happen at any stage. The stage a
-    record exited at stays in `stage_field`, so the exit stage is always recorded."""
+    """Fixed stages plus exits that can happen at any stage."""
 
     stages: list[tuple[str, str]]
-    exits: list[tuple[str, str]]  # (status value, label), e.g. ("on_hold", "On hold")
-    won: str | None = None  # final stage (e.g. "won" = mandate won)
+    exits: list[Exit]
+    won: str | None = None  # final stage (e.g. "won" = mandate won, "closed" = deal closed)
+    groups: list[tuple[str, list[str]]] = field(default_factory=list)  # phases, e.g. Preparation / Execution
     stage_field: str = "stage"
     status_field: str = "status"
     entered_field: str = "stage_entered"
     open_value: str = "open"
-    reason_fields: dict[str, str] = field(default_factory=dict)  # {status: dropdown field for the reason}
-    date_fields: dict[str, str] = field(default_factory=dict)  # {status: date field, e.g. revisit date}
+
+    def __post_init__(self):
+        values = [v for v, _ in self.stages]
+        for _, members in self.groups:
+            assert all(m in values for m in members), "pipeline group names an unknown stage"
 
     def stage_label(self, value: str) -> str:
         return dict(self.stages).get(value, value)
 
+    def exit(self, value: str | None) -> Exit | None:
+        return next((e for e in self.exits if e.value == value), None)
+
     def exit_label(self, value: str) -> str:
-        return dict(self.exits).get(value, value)
+        e = self.exit(value)
+        return e.label if e else value
+
+    @property
+    def reason_fields(self) -> dict[str, str]:
+        return {e.value: e.reason_field for e in self.exits if e.reason_field}
+
+    @property
+    def date_fields(self) -> dict[str, str]:
+        return {e.value: e.date_field for e in self.exits if e.date_field}
 
     def schema(self) -> dict:
         return {
@@ -182,11 +231,8 @@ class PipelineDef:
             "open_value": self.open_value,
             "won": self.won,
             "stages": [{"value": v, "label": lbl} for v, lbl in self.stages],
-            "exits": [
-                {"value": v, "label": lbl, "reason_field": self.reason_fields.get(v),
-                 "date_field": self.date_fields.get(v)}
-                for v, lbl in self.exits
-            ],
+            "groups": [{"label": lbl, "stages": members} for lbl, members in self.groups],
+            "exits": [e.schema() for e in self.exits],
         }
 
 
@@ -202,7 +248,7 @@ class ModuleDef:
     subtitle: Callable | None = None  # record -> short text for search results
     # Import duplicate detection: record -> list of normalised keys; rows sharing a key warn.
     duplicate_keys: Callable | None = None
-    extra_filters: Callable | None = None  # (queryset, query_params) -> queryset
+    extra_filters: Callable | None = None  # (queryset, query_params, user) -> queryset
     # Extra sections on the detail page. Either related records from another module
     # {key, label, module, link_field, columns, order} or a placeholder {key, label, available_with}.
     sections: list[dict] = field(default_factory=list)
@@ -221,6 +267,10 @@ class ModuleDef:
     timeline: bool = False  # records carry a dated interaction log (core.Note)
     # Cross-field rules: (values, instance, importing) -> {field: message}
     validate: Callable | None = None
+    # Bookkeeping just before a record is saved: (obj, values, user) -> None (e.g. a task's completion date).
+    before_save: Callable | None = None
+    importable: bool = True  # offered in Import from Excel
+    in_search: bool = True  # shown in the global search (the investor tracker isn't: investors already are)
 
     def title_of(self, obj) -> str:
         return self.title_fn(obj) if self.title_fn else getattr(obj, self.title_field)

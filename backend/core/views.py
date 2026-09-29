@@ -155,6 +155,7 @@ class SchemaView(APIView):
                     "segments": _segments(mod),
                     "pipeline": mod.pipeline.schema() if mod.pipeline else None,
                     "timeline": mod.timeline,
+                    "importable": mod.importable,
                     "perms": perms[mod.key],
                 }
             )
@@ -333,11 +334,18 @@ class NoteDetailView(APIView):
 # ---------------------------------------------------------------- import
 
 
+def _importable(key: str):
+    mod = _module(key)
+    if not mod.importable:
+        raise NotFound(f"{mod.label} can't be imported from a file.")
+    return mod
+
+
 class ImportUploadView(APIView):
     parser_classes = [MultiPartParser]
 
     def post(self, request, module):
-        mod = _module(module)
+        mod = _importable(module)
         _require(request.user, module, "create")
         f = request.FILES.get("file")
         if not f:
@@ -374,7 +382,7 @@ class ImportUploadView(APIView):
 
 class _ImportStep(APIView):
     def _prepare(self, request, module):
-        mod = _module(module)
+        mod = _importable(module)
         _require(request.user, module, "create")
         enabled = enabled_map(module)
         try:
@@ -417,7 +425,7 @@ class SearchView(APIView):
             return Response({"results": []})
         out = []
         for mod in all_modules():
-            if mod.key not in BUILT_MODULES or not request.user.can(mod.key, "view"):
+            if mod.key not in BUILT_MODULES or not mod.in_search or not request.user.can(mod.key, "view"):
                 continue
             enabled = enabled_map(mod.key)
             qs = filter_queryset(
@@ -463,6 +471,7 @@ class ArchiveListView(APIView):
                         "module_label": mod.label,
                         "id": obj.pk,
                         "title": mod.title_of(obj),
+                        "subtitle": mod.subtitle(obj) if mod.subtitle else "",
                         "archived_at": obj.archived_at.isoformat(),
                         "archived_by": obj.archived_by.full_name if obj.archived_by else None,
                     }
@@ -494,10 +503,9 @@ class ArchiveItemView(APIView):
         mod, obj = self._get(module, pk)
         try:
             with transaction.atomic():
-                Note.objects.filter(module=mod.key, record_id=obj.pk).delete()
-                obj.delete()
+                obj.delete()  # its interaction log goes with it (core.signals)
         except ProtectedError as e:
-            kinds = sorted({type(o)._meta.verbose_name_plural for o in e.protected_objects})
+            kinds = sorted({str(type(o)._meta.verbose_name_plural) for o in e.protected_objects})
             raise ValidationError({"detail": f"{mod.title_of(obj)} still has {' and '.join(kinds)}. "
                                              "Delete those permanently first."})
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -514,6 +522,7 @@ def firm_payload(fs: FirmSettings):
         "backups_enabled": fs.backups_enabled,
         "last_backup_at": fs.last_backup_at.isoformat() if fs.last_backup_at else None,
         "last_backup_error": fs.last_backup_error,
+        "dashboard_days": fs.dashboard_days,
     }
 
 
@@ -551,6 +560,13 @@ class FirmSettingsView(APIView):
                 errors["backup_hour"] = "Pick an hour between 0 and 23."
         if "backups_enabled" in request.data:
             fs.backups_enabled = bool(request.data["backups_enabled"])
+        if "dashboard_days" in request.data:
+            try:
+                fs.dashboard_days = int(request.data["dashboard_days"])
+                if not 1 <= fs.dashboard_days <= 365:
+                    raise ValueError
+            except (TypeError, ValueError):
+                errors["dashboard_days"] = "Pick between 1 and 365 days."
         if errors:
             raise ValidationError(errors)
         fs.save()

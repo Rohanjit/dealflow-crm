@@ -5,6 +5,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 
 from accounts import views as a
 from core import views as c
+from deals import views as d
 
 api = [
     path("app/", a.AppView.as_view()),
@@ -44,6 +45,8 @@ api = [
     path("backups/", c.BackupListView.as_view()),
     path("backups/restore/", c.BackupRestoreView.as_view()),
     path("backups/<str:name>/download/", c.BackupDownloadView.as_view()),
+    path("dashboard/", d.DashboardView.as_view()),
+    path("deals/<int:pk>/matches/", d.MatchesView.as_view()),
     path("health/", c.HealthView.as_view()),
 ]
 

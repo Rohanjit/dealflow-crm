@@ -22,6 +22,7 @@ class Company(Record):
     name = models.CharField(max_length=255)
     sector = models.ForeignKey(ChoiceOption, on_delete=models.PROTECT, null=True, blank=True, related_name="+")
     sub_sector = models.CharField(max_length=255, blank=True)
+    geography = models.ForeignKey(ChoiceOption, on_delete=models.PROTECT, null=True, blank=True, related_name="+")
     city = models.CharField(max_length=255, blank=True)
     website = models.CharField(max_length=255, blank=True)
     year_founded = models.IntegerField(null=True, blank=True)

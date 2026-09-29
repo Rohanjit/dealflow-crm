@@ -27,6 +27,15 @@ def birthday_text(value: str | None) -> str | None:
     month, day = int(parts[-2]), int(parts[-1])
     return f"{day} {MONTHS[month - 1]}" + (f" {year}" if year else "")
 
+def _datetime_cell(value: str | None):
+    """'2026-10-12T14:30' → a date and time Excel understands; a date alone stays a date."""
+    if not value:
+        return None
+    day, _, at = value.partition("T")
+    d = dt.date.fromisoformat(day)
+    return dt.datetime.combine(d, dt.time.fromisoformat(at)) if at else d
+
+
 EXCEL_DATE = {"DD/MM/YYYY": "dd/mm/yyyy", "MM/DD/YYYY": "mm/dd/yyyy", "YYYY-MM-DD": "yyyy-mm-dd"}
 # Excel shows grouping by the viewer's locale; the Indian format needs an explicit pattern.
 EXCEL_NUMBER = {
@@ -84,9 +93,13 @@ def export_workbook(mod: ModuleDef, qs, user, enabled: dict, columns: list[str] 
             elif t == "tags":
                 v = ", ".join(v)
             elif t == "user":
-                v = user_names.get(v)
+                v = (", ".join(user_names.get(pk, "") for pk in v) or None) if f.multi else user_names.get(v)
             elif t == "link":
-                v = v["title"] if v else None
+                v = (", ".join(i["title"] for i in v) or None) if f.multi else (v["title"] if v else None)
+            elif t == "datetime":
+                row.append(_datetime_cell(v))
+                fmts.append(date_fmt + (" hh:mm" if v and "T" in v else ""))
+                continue
             elif t == "birthday":
                 v = birthday_text(v)
             elif t in ("choice", "tristate"):
