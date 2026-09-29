@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     "contacts",
     "outreach",
     "deals",
+    "tasks",
 ]
 
 MIDDLEWARE = [
