@@ -115,6 +115,7 @@ No separate Interactions module: interactions are captured as dated notes inside
 - Other: tags, notes.
 
 ### 3. Outreach (origination: approaching companies to win mandates)
+- Company level (decided 29 Sep 2026): each company is recorded once, and every approach to it is an outreach attempt under that company. Pitching a company again after a lost mandate starts a new attempt; the company's details, contacts and earlier attempts stay together. Company basics and the financial snapshot are shared by all of a company's attempts (and later its deals).
 - Stages: Identified → Contacted → Meeting held → Proposal sent → Negotiating → Mandate won.
 - Exits from any stage: Lost (with reason) and On hold (with reason and revisit date). The exit stage is recorded. On hold resumes at the paused stage.
 - Mandate won automatically moves the company into Active Deals (at Data collection), carrying all outreach data.

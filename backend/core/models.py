@@ -73,6 +73,19 @@ class FieldSwitch(models.Model):
         unique_together = [("module", "field_key")]
 
 
+def money_columns(verbose: str):
+    """amount / currency / unit, plus a normalised value (amount x unit) for sorting and range
+    filters within one currency. Use: a_amount, a_currency, a_unit, a_value = money_columns("A")."""
+    from .registry import CURRENCIES, UNITS
+
+    return (
+        models.DecimalField(verbose, max_digits=20, decimal_places=4, null=True, blank=True),
+        models.CharField(max_length=3, choices=CURRENCIES, blank=True),
+        models.CharField(max_length=5, choices=UNITS, blank=True),
+        models.DecimalField(max_digits=30, decimal_places=4, null=True, blank=True, editable=False),
+    )
+
+
 class Record(models.Model):
     """Abstract base for every main record: stamps and archive.
 
@@ -109,3 +122,27 @@ class Record(models.Model):
                         money_value(getattr(self, f"{prefix}_amount"), getattr(self, f"{prefix}_unit")),
                     )
         super().save(*args, **kwargs)
+
+
+class Note(models.Model):
+    """A dated entry in a record's interaction log (outreach, deals): something someone did or
+    heard, or an automatic stage change. Linked by module key + record id so every module
+    with a timeline shares one table."""
+
+    KINDS = [("note", "Note"), ("call", "Call"), ("meeting", "Meeting"), ("email", "Email"), ("stage", "Stage change")]
+
+    module = models.CharField(max_length=30)
+    record_id = models.PositiveBigIntegerField()
+    kind = models.CharField(max_length=10, choices=KINDS, default="note")
+    date = models.DateField()
+    text = models.TextField(blank=True)
+    meta = models.JSONField(default=dict, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date", "-created_at", "-id"]
+        indexes = [models.Index(fields=["module", "record_id"])]

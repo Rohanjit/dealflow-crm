@@ -15,7 +15,8 @@ FIELDS = [
     FieldDef("designation", "Designation", "text", B, list_default=True, searchable=True,
              aliases=["job title", "position", "role", "job role"]),
     FieldDef("firm", "Firm / company", "link", B, list_default=True, filterable=True, searchable=True,
-             always_on=True, targets={"investors": "investor"}, target_labels={"investors": "Investor side"},
+             always_on=True, targets={"investors": "investor", "companies": "company"},
+             target_labels={"investors": "Investor side", "companies": "Company side"},
              help="The investor firm or client company this person works at.",
              aliases=["firm", "company", "organisation", "organization", "investor", "fund", "firm name",
                       "company name", "employer", "account"]),
@@ -96,7 +97,7 @@ def duplicate_keys(values: dict) -> list[str]:
 
 
 def subtitle(c: Contact) -> str:
-    firm = c.investor.firm_name if c.investor_id else ""
+    firm = c.investor.firm_name if c.investor_id else (c.company.name if c.company_id else "")
     return " · ".join(p for p in (c.designation, firm) if p)
 
 

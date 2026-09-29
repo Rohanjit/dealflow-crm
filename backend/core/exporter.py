@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import io
 
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from .models import ChoiceOption
-from .records import link_value, read_value
+from .records import read_value
 from .registry import ModuleDef
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -51,6 +53,7 @@ def export_workbook(mod: ModuleDef, qs, user, enabled: dict, columns: list[str] 
     headers += ["Created by", "Created on", "Last edited by", "Last edited on"]
 
     option_labels = dict(ChoiceOption.objects.values_list("pk", "label"))
+    user_names = dict(get_user_model().objects.values_list("pk", "full_name"))
     date_fmt = EXCEL_DATE.get(user.date_format, "dd/mm/yyyy")
     num_fmt = EXCEL_NUMBER.get(user.number_grouping, "#,##0.##")
 
@@ -69,40 +72,33 @@ def export_workbook(mod: ModuleDef, qs, user, enabled: dict, columns: list[str] 
         row, fmts = [], []
         for f in fields:
             t = f.type
+            v = read_value(obj, f)  # the API shape; also covers company-level fields
             if t == "money":
-                amt = getattr(obj, f"{f.key}_amount")
-                cur, unit = getattr(obj, f"{f.key}_currency"), getattr(obj, f"{f.key}_unit")
-                row += [float(amt) if amt is not None else None, " ".join(p for p in (cur, unit) if p) if amt is not None else None]
+                amt = v["amount"]
+                row += [float(amt) if amt is not None else None,
+                        " ".join(p for p in (v["currency"], v["unit"]) if p) if amt is not None else None]
                 fmts += [num_fmt, None]
                 continue
             if t == "dropdown":
-                if f.multi:
-                    v = ", ".join(o.label for o in getattr(obj, f.key).all())
-                else:
-                    pk = getattr(obj, f"{f.key}_id")
-                    v = option_labels.get(pk) if pk else None
+                v = ", ".join(option_labels.get(pk, "") for pk in v) if f.multi else option_labels.get(v)
             elif t == "tags":
-                v = ", ".join(tg.name for tg in getattr(obj, f.key).all())
+                v = ", ".join(v)
             elif t == "user":
-                u = getattr(obj, f.key)
-                v = u.full_name if u else None
+                v = user_names.get(v)
             elif t == "link":
-                link = link_value(obj, f)
-                v = link["title"] if link else None
+                v = v["title"] if v else None
             elif t == "birthday":
-                v = birthday_text(read_value(obj, f))
+                v = birthday_text(v)
             elif t in ("choice", "tristate"):
-                raw = getattr(obj, f.key)
-                v = dict(f.choices or []).get(raw, raw) or None
+                v = dict(f.choices or []).get(v, v) or None
             elif t == "boolean":
-                v = "Yes" if getattr(obj, f.key) else "No"
+                v = "Yes" if v else "No"
             elif t in ("decimal", "percent"):
-                d = getattr(obj, f.key)
-                v = float(d) if d is not None else None
-            else:
-                v = getattr(obj, f.key)
-                if v == "":
-                    v = None
+                v = float(v) if v is not None else None
+            elif t == "date":
+                v = dt.date.fromisoformat(v) if v else None
+            elif v == "":
+                v = None
             row.append(v)
             fmts.append(date_fmt if t == "date" else (num_fmt if t in ("decimal",) else None))
         for u, when in ((obj.created_by, obj.created_at), (obj.updated_by, obj.updated_at)):

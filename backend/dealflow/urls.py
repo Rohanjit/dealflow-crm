@@ -31,6 +31,8 @@ api = [
     path("m/<str:module>/import/check/", c.ImportCheckView.as_view()),
     path("m/<str:module>/import/commit/", c.ImportCommitView.as_view()),
     path("m/<str:module>/<int:pk>/", c.RecordDetailView.as_view()),
+    path("m/<str:module>/<int:pk>/notes/", c.NotesView.as_view()),
+    path("notes/<int:pk>/", c.NoteDetailView.as_view()),
     path("archive/", c.ArchiveListView.as_view()),
     path("archive/<str:module>/<int:pk>/", c.ArchiveItemView.as_view()),
     path("settings/firm/", c.FirmSettingsView.as_view()),

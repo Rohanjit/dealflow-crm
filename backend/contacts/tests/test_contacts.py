@@ -142,11 +142,11 @@ class ContactListTests(ContactTestBase):
     def test_schema_segments_and_sections(self):
         schema = self.client.get("/api/schema/").json()
         contacts = next(m for m in schema["modules"] if m["key"] == "contacts")
-        self.assertEqual(contacts["segments"], {"param": "firm_type", "options": [
+        self.assertEqual(contacts["segments"], {"param": "firm_type", "default": "", "options": [
             {"value": "", "label": "All"}, {"value": "investors", "label": "Investor side"},
-            {"value": "none", "label": "Not linked"}]})
+            {"value": "companies", "label": "Company side"}, {"value": "none", "label": "Not linked"}]})
         firm = next(f for f in contacts["fields"] if f["key"] == "firm")
-        self.assertEqual(firm["targets"], ["investors"])
+        self.assertEqual(firm["targets"], ["investors", "companies"])
         self.assertFalse(firm["can_disable"])
         investors = next(m for m in schema["modules"] if m["key"] == "investors")
         sections = {s["key"]: s["status"] for s in investors["sections"]}
@@ -205,7 +205,7 @@ class ContactImportTests(ContactTestBase):
         up = self.upload(f)
         self.assertEqual([m["field"] for m in up["mapping"]],
                          ["full_name", "full_name", "linkedin", "work_email", "firm", "designation", "birthday", None])
-        self.assertEqual(up["can_create_links"], {"firm": ["investors"]})
+        self.assertEqual(up["can_create_links"], {"firm": ["investors", "companies"]})
 
         r = self.client.post(self.BASE + "check/", {"token": up["token"], "mapping": up["mapping"]}, format="json").json()
         rows = {x["row"]: x for x in r["rows"]}
@@ -250,7 +250,7 @@ class ContactImportTests(ContactTestBase):
         role = self.make_role("Contacts", {"contacts": ["view", "create"], "investors": ["view"]})
         c = self.client_for(self.make_user("c@firm.com", role))
         up = c.post(self.BASE + "upload/", {"file": xlsx([["Name", "Company"], ["A", "New Firm"]])}, format="multipart").json()
-        self.assertEqual(up["can_create_links"], {"firm": []})
+        self.assertEqual(up["can_create_links"], {"firm": []})  # Investors: view only; Outreach: none
         opts = {"token": up["token"], "mapping": up["mapping"], "create_links": {"firm": "investors"}, "include_rows": [2]}
         r = c.post(self.BASE + "commit/", opts, format="json").json()
         self.assertEqual(r["created"], 1)

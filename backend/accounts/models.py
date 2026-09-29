@@ -5,7 +5,7 @@ from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.db import models
 from django.utils import timezone
 
-from core.modules import ACTIONS, MODULES
+from core.modules import ACTIONS, DERIVED_PERMISSIONS, MODULES
 
 
 class Role(models.Model):
@@ -26,14 +26,18 @@ class Role(models.Model):
         return self.name
 
     def module_perms(self) -> dict:
-        """{module: {view, create, edit, delete}} for every module."""
+        """{module: {view, create, edit, delete}} for every module, plus derived record types
+        (companies follow Outreach and Active Deals)."""
         if self.is_admin:
-            return {m: {a: True for a in ACTIONS} for m, _ in MODULES}
-        rows = {p.module: p for p in self.module_permissions.all()}
-        out = {}
-        for m, _ in MODULES:
-            p = rows.get(m)
-            out[m] = {a: bool(p and getattr(p, f"can_{a}")) for a in ACTIONS}
+            out = {m: {a: True for a in ACTIONS} for m, _ in MODULES}
+        else:
+            rows = {p.module: p for p in self.module_permissions.all()}
+            out = {}
+            for m, _ in MODULES:
+                p = rows.get(m)
+                out[m] = {a: bool(p and getattr(p, f"can_{a}")) for a in ACTIONS}
+        for derived, sources in DERIVED_PERMISSIONS.items():
+            out[derived] = {a: any(out[src][a] for src in sources) for a in ACTIONS}
         return out
 
     def flags(self) -> dict:
@@ -118,7 +122,8 @@ class User(AbstractBaseUser):
             return False
         if self.role.is_admin:
             return True
-        return self.role.module_permissions.filter(module=module, **{f"can_{action}": True}).exists()
+        modules = DERIVED_PERMISSIONS.get(module, [module])
+        return self.role.module_permissions.filter(module__in=modules, **{f"can_{action}": True}).exists()
 
     def has_flag(self, flag: str) -> bool:
         return self.is_active and self.role.flags().get(flag, False)

@@ -317,6 +317,16 @@ def parse_birthday(raw: str, user_format: str) -> str:
     return f"{year:04d}-{month:02d}-{day:02d}" if year else f"{month:02d}-{day:02d}"
 
 
+class _Pending:
+    """A link to a record that doesn't exist yet but will be created when the import runs."""
+
+    def __repr__(self):
+        return "PENDING"
+
+
+PENDING = _Pending()
+
+
 class RowContext:
     """Lookups shared by all rows of one import."""
 
@@ -336,6 +346,7 @@ class RowContext:
                     if mkey not in self.links:
                         self.links[mkey] = self._link_index(mkey)
         self.pending_records: dict[str, set[str]] = {}
+        self.pending_keys: dict[str, set[str]] = {}
         self.created_records: dict[str, int] = {}
         self.options: dict[str, dict[str, ChoiceOption]] = {}
         for f in mod.fields:
@@ -355,7 +366,7 @@ class RowContext:
         tmod = get_module(mkey)
         exact: dict[str, list[int]] = {}
         norm: dict[str, list[int]] = {}
-        titles = tmod.model.objects.filter(archived_at__isnull=True).values_list("pk", tmod.title_field)
+        titles = tmod.model.objects.filter(archived_at__isnull=True).values_list("pk", tmod.title_lookup)
         for pk, title in titles:
             exact.setdefault((title or "").strip().lower(), []).append(pk)
             if k := name_key(tmod, title):
@@ -367,21 +378,28 @@ class RowContext:
         name = " ".join(raw.split())
         if not name:
             return None
-        for mkey, _ in active_targets(f):
-            idx, tmod = self.links[mkey], get_module(mkey)
-            for bucket, key in (("exact", name.lower()), ("norm", name_key(tmod, name))):
-                hits = idx[bucket].get(key) or []
-                if len(hits) == 1:
-                    return f"{mkey}:{hits[0]}"
-                if len(hits) > 1:
-                    warnings.append(f"{f.label}: “{name}” matches {len(hits)} {tmod.label.lower()}, left blank.")
-                    return None
+        # Exact names first (across investors and companies), then names with generic words ignored.
+        for bucket in ("exact", "norm"):
+            hits = []
+            for mkey, _ in active_targets(f):
+                tmod = get_module(mkey)
+                key = name.lower() if bucket == "exact" else name_key(tmod, name)
+                hits += [(mkey, pk) for pk in self.links[mkey][bucket].get(key) or []]
+            if len(hits) == 1:
+                return f"{hits[0][0]}:{hits[0][1]}"
+            if len(hits) > 1:
+                warnings.append(f"{f.label}: “{name}” matches {len(hits)} records, left blank.")
+                return None
         create_in = self.create_links.get(f.key)
         if create_in:
             tmod = get_module(create_in)
             if not commit:
-                self.pending_records.setdefault(tmod.label, set()).add(name)
-                return None
+                # Rows naming the same new firm ("Nova Retail", "Nova Retail Pvt Ltd") create it once.
+                seen = self.pending_keys.setdefault(create_in, set())
+                if (k := name_key(tmod, name)) not in seen:
+                    seen.add(k)
+                    self.pending_records.setdefault(tmod.label, set()).add(name)
+                return PENDING
             obj = apply_values(tmod.model(), tmod, {tmod.title_field: name[:255]}, self.user)
             idx = self.links[create_in]
             idx["exact"].setdefault(name.lower(), []).append(obj.pk)
@@ -487,17 +505,41 @@ def _existing_keys(mod: ModuleDef) -> dict[str, list[tuple[int, str]]]:
     index: dict[str, list[tuple[int, str]]] = {}
     if not mod.duplicate_keys:
         return index
-    text_fields = [f.key for f in mod.fields if f.type in ("text", "url", "email", "phone")]
-    links = [(f.key, mkey, f"{attr}_id") for f in mod.fields if f.type == "link" for mkey, attr in active_targets(f)]
-    cols = [*text_fields, *{c for _, _, c in links}]
+    own = [f for f in mod.fields if not f.via]
+    text_fields = [f.key for f in own if f.type in ("text", "url", "email", "phone", "choice")]
+    links = [(f.key, mkey, f"{attr}_id") for f in own if f.type == "link" for mkey, attr in active_targets(f)]
+    cols = list(dict.fromkeys([*text_fields, *(c for _, _, c in links), mod.title_lookup]))
     for rec in mod.model.objects.filter(archived_at__isnull=True).values("pk", *cols):
         values = {k: rec[k] for k in text_fields}
         for key, mkey, col in links:
             if rec[col] is not None:
                 values[key] = f"{mkey}:{rec[col]}"
         for k in mod.duplicate_keys(values):
-            index.setdefault(k, []).append((rec["pk"], rec[mod.title_field]))
+            index.setdefault(k, []).append((rec["pk"], rec[mod.title_lookup]))
     return index
+
+
+def _row_title(mod: ModuleDef, row: list[str], mapping: list[dict], data: dict) -> str:
+    """What to call a row on the review screen: the name as written in the file."""
+    f = mod.field_map[mod.title_field]
+    if f.type != "link":
+        return data.get(mod.title_field) or ""
+    cells = [row[i] for i, m in enumerate(mapping) if m.get("field") == mod.title_field and i < len(row)]
+    return " ".join(c.strip() for c in cells if c.strip())
+
+
+def _clean_row(mod: ModuleDef, data: dict, errors: dict, enabled: dict):
+    """Validate a row like a form would, but leave company-level details alone where the cell is
+    blank (a pipeline sheet shouldn't wipe what's already known about a company)."""
+    data = {k: v for k, v in data.items() if k not in errors}
+    pending = {k for k, v in data.items() if v is PENDING}
+    for k in list(data):
+        f = mod.field_map.get(k)
+        if k in pending or (f and f.via and data[k] in ("", None, [], {"amount": None, "currency": "", "unit": ""})):
+            del data[k]
+    values, v_errors = clean_values(mod, data, enabled=enabled, importing=True)
+    # A record that will be created on import counts as filled in.
+    return values, {k: msg for k, msg in v_errors.items() if k not in pending}
 
 
 def check_rows(mod: ModuleDef, rows, mapping, user, enabled, add_missing_options=False, create_links=None) -> dict:
@@ -507,7 +549,7 @@ def check_rows(mod: ModuleDef, rows, mapping, user, enabled, add_missing_options
     results = []
     for n, row in enumerate(rows, start=2):  # row 1 is the header
         data, errors, warnings = row_to_data(row, mapping, ctx)
-        _, v_errors = clean_values(mod, {k: v for k, v in data.items() if k not in errors}, enabled=enabled)
+        _, v_errors = _clean_row(mod, data, errors, enabled)
         for k, msg in v_errors.items():
             errors.setdefault(k, msg)
         dup_of, dup_row = [], None
@@ -522,7 +564,7 @@ def check_rows(mod: ModuleDef, rows, mapping, user, enabled, add_missing_options
         results.append(
             {
                 "row": n,
-                "title": data.get(mod.title_field) or "",
+                "title": _row_title(mod, row, mapping, data),
                 "errors": {mod.field_map[k].label if k in mod.field_map else k: v for k, v in errors.items()},
                 "warnings": warnings,
                 "duplicate_of": dup_of,
@@ -549,12 +591,12 @@ def commit_rows(mod: ModuleDef, rows, mapping, user, enabled, include_rows: set[
         if n not in include_rows:
             continue
         data, errors, _ = row_to_data(row, mapping, ctx, commit=True)
-        values, v_errors = clean_values(mod, {k: v for k, v in data.items() if k not in errors}, enabled=enabled)
+        values, v_errors = _clean_row(mod, data, errors, enabled)
         errors.update(v_errors)
         if errors:
             failed.append({"row": n, "errors": errors})
             continue
-        apply_values(mod.model(), mod, values, user)
+        apply_values(mod.model(), mod, values, user, importing=True)
         created += 1
     return {
         "created": created,

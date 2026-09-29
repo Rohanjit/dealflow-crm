@@ -8,7 +8,7 @@ CHANNEL_CHOICES = [("email", "Email"), ("call", "Call"), ("whatsapp", "WhatsApp"
 
 
 class Contact(Record):
-    """A person at an investor firm or at a client company (the company link arrives with Outreach)."""
+    """A person at an investor firm or at a client company."""
 
     # Basics
     full_name = models.CharField(max_length=255)
@@ -16,6 +16,9 @@ class Contact(Record):
     # "Firm / company" is one link field; each possible target has its own column.
     investor = models.ForeignKey(
         "investors.Investor", on_delete=models.SET_NULL, null=True, blank=True, related_name="contacts"
+    )
+    company = models.ForeignKey(
+        "outreach.Company", on_delete=models.SET_NULL, null=True, blank=True, related_name="contacts"
     )
     department = models.CharField(max_length=255, blank=True)
 

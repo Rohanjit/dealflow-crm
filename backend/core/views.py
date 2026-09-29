@@ -1,5 +1,7 @@
+import datetime as dt
+
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, ProtectedError
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -14,8 +16,8 @@ from accounts.permissions import IsActiveUser, flag_required
 
 from . import backups, importer
 from .exporter import export_workbook
-from .models import ChoiceList, ChoiceOption, FieldSwitch, FirmSettings
-from .modules import BUILT_MODULES, MODULE_LABELS
+from .models import ChoiceList, ChoiceOption, FieldSwitch, FirmSettings, Note
+from .modules import BUILT_MODULES
 from .pagination import StandardPagination
 from .records import apply_values, clean_values, filter_queryset, serialize, with_related
 from .registry import CURRENCIES, UNITS, active_targets, all_modules, enabled_map, get_module
@@ -30,7 +32,7 @@ def _module(key: str):
 def _require(user, module: str, action: str):
     if not user.can(module, action):
         verb = {"view": "see", "create": "add to", "edit": "edit", "delete": "delete from"}[action]
-        raise PermissionDenied(f"Your role can't {verb} {MODULE_LABELS[module]}.")
+        raise PermissionDenied(f"Your role can't {verb} {get_module(module).label}.")
 
 
 # ---------------------------------------------------------------- schema
@@ -57,7 +59,7 @@ def _section(s: dict, perms: dict) -> dict:
     target = s.get("module") or s.get("available_with")
     if target not in BUILT_MODULES:
         status_ = "coming"
-    elif not perms[target]["view"]:
+    elif not perms.get(target, {}).get("view"):
         status_ = "hidden"
     else:
         status_ = "ready"
@@ -66,6 +68,8 @@ def _section(s: dict, perms: dict) -> dict:
 
 def _segments(mod) -> dict | None:
     """Quick switch above a list, e.g. All · Investor side · Company side · Not linked."""
+    if mod.segment_param:
+        return {"param": mod.segment_param, "options": mod.segment_options or [], "default": mod.segment_default}
     if not mod.segment_field:
         return None
     f = mod.field(mod.segment_field)
@@ -73,7 +77,7 @@ def _segments(mod) -> dict | None:
     options = [{"value": "", "label": "All"}]
     options += [{"value": m, "label": f.target_labels.get(m, get_module(m).label)} for m, _ in targets]
     options.append({"value": "none", "label": "Not linked"})
-    return {"param": f"{f.key}_type", "options": options}
+    return {"param": f"{f.key}_type", "options": options, "default": ""}
 
 
 def _can_lookup(user, module: str) -> bool:
@@ -103,15 +107,15 @@ class LookupView(APIView):
         else:
             qs = mod.model.objects.filter(archived_at__isnull=True)
             if q := (request.query_params.get("q") or "").strip():
-                qs = qs.filter(**{f"{mod.title_field}__icontains": q})
-            qs = qs.order_by(mod.title_field)[:20]
+                qs = qs.filter(**{f"{mod.title_lookup}__icontains": q})
+            qs = qs.order_by(mod.title_lookup, "pk")[:20]
         qs = with_related(qs, mod)
         return Response(
             [
                 {
                     "module": module,
                     "id": o.pk,
-                    "title": getattr(o, mod.title_field),
+                    "title": mod.title_of(o),
                     "subtitle": mod.subtitle(o) if mod.subtitle else "",
                     "archived": o.archived_at is not None,
                 }
@@ -149,6 +153,8 @@ class SchemaView(APIView):
                     "fields": fields,
                     "sections": [_section(s, perms) for s in mod.sections],
                     "segments": _segments(mod),
+                    "pipeline": mod.pipeline.schema() if mod.pipeline else None,
+                    "timeline": mod.timeline,
                     "perms": perms[mod.key],
                 }
             )
@@ -233,6 +239,95 @@ class RecordExportView(APIView):
         resp = HttpResponse(data, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         resp["Content-Disposition"] = f'attachment; filename="dealflow-{module}-{stamp}.xlsx"'
         return resp
+
+
+# ---------------------------------------------------------------- interaction log
+
+
+NOTE_KINDS = {k for k, _ in Note.KINDS} - {"stage"}
+
+
+def note_payload(n: Note, user) -> dict:
+    return {
+        "id": n.pk,
+        "kind": n.kind,
+        "date": n.date.isoformat(),
+        "text": n.text,
+        "meta": n.meta,
+        "created_by": {"id": n.created_by_id, "name": n.created_by.full_name} if n.created_by else None,
+        "created_at": n.created_at.isoformat(),
+        "updated_at": n.updated_at.isoformat(),
+        "can_edit": n.kind != "stage" and (n.created_by_id == user.pk or user.is_admin),
+    }
+
+
+def _clean_note(data: dict, partial=False) -> dict:
+    out, errors = {}, {}
+    if "kind" in data or not partial:
+        kind = data.get("kind") or "note"
+        if kind not in NOTE_KINDS:
+            errors["kind"] = "Pick note, call, meeting or email."
+        out["kind"] = kind
+    if "date" in data or not partial:
+        raw = data.get("date")
+        try:
+            out["date"] = dt.date.fromisoformat(str(raw)[:10]) if raw else timezone.localdate()
+        except ValueError:
+            errors["date"] = "Enter a date as YYYY-MM-DD."
+    if "text" in data or not partial:
+        text = str(data.get("text") or "").strip()
+        if not text:
+            errors["text"] = "Write what happened."
+        out["text"] = text[:20000]
+    if errors:
+        raise ValidationError(errors)
+    return out
+
+
+class NotesView(APIView):
+    """A record's interaction log: dated notes plus automatic stage changes."""
+
+    def _record(self, request, module, pk, action):
+        mod = _module(module)
+        if not mod.timeline:
+            raise NotFound("This module has no interaction log.")
+        _require(request.user, module, action)
+        if not mod.model.objects.filter(pk=pk, archived_at__isnull=True).exists():
+            raise NotFound(f"This {mod.singular.lower()} doesn't exist or has been archived.")
+        return mod
+
+    def get(self, request, module, pk):
+        mod = self._record(request, module, pk, "view")
+        notes = Note.objects.filter(module=mod.key, record_id=pk).select_related("created_by")
+        return Response([note_payload(n, request.user) for n in notes])
+
+    def post(self, request, module, pk):
+        mod = self._record(request, module, pk, "edit")
+        n = Note.objects.create(module=mod.key, record_id=pk, created_by=request.user, **_clean_note(request.data))
+        return Response(note_payload(n, request.user), status=status.HTTP_201_CREATED)
+
+
+class NoteDetailView(APIView):
+    def _note(self, request, pk) -> Note:
+        n = get_object_or_404(Note.objects.select_related("created_by"), pk=pk)
+        if not request.user.can(n.module, "view"):
+            raise NotFound
+        if n.kind == "stage":
+            raise PermissionDenied("Stage changes are recorded automatically and can't be changed.")
+        if n.created_by_id != request.user.pk and not request.user.is_admin:
+            raise PermissionDenied("Only the person who wrote this note (or an admin) can change it.")
+        return n
+
+    def patch(self, request, pk):
+        n = self._note(request, pk)
+        for k, v in _clean_note(request.data, partial=True).items():
+            setattr(n, k, v)
+        n.save()
+        return Response(note_payload(n, request.user))
+
+    def delete(self, request, pk):
+        self._note(request, pk).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # ---------------------------------------------------------------- import
@@ -336,7 +431,7 @@ class SearchView(APIView):
                         "module": mod.key,
                         "module_label": mod.label,
                         "id": obj.pk,
-                        "title": getattr(obj, mod.title_field),
+                        "title": mod.title_of(obj),
                         "subtitle": mod.subtitle(obj) if mod.subtitle else "",
                     }
                 )
@@ -358,16 +453,16 @@ class ArchiveListView(APIView):
         for mod in all_modules():
             if mod.key not in BUILT_MODULES or (module and module != mod.key):
                 continue
-            qs = mod.model.objects.filter(archived_at__isnull=False).select_related("archived_by")
+            qs = with_related(mod.model.objects.filter(archived_at__isnull=False), mod)
             if q:
-                qs = qs.filter(**{f"{mod.title_field}__icontains": q})
+                qs = qs.filter(**{f"{mod.title_lookup}__icontains": q})
             for obj in qs.order_by("-archived_at")[:500]:
                 out.append(
                     {
                         "module": mod.key,
                         "module_label": mod.label,
                         "id": obj.pk,
-                        "title": getattr(obj, mod.title_field),
+                        "title": mod.title_of(obj),
                         "archived_at": obj.archived_at.isoformat(),
                         "archived_by": obj.archived_by.full_name if obj.archived_by else None,
                     }
@@ -397,7 +492,14 @@ class ArchiveItemView(APIView):
         if not request.user.is_admin:
             raise PermissionDenied("Only admins can delete records permanently.")
         mod, obj = self._get(module, pk)
-        obj.delete()
+        try:
+            with transaction.atomic():
+                Note.objects.filter(module=mod.key, record_id=obj.pk).delete()
+                obj.delete()
+        except ProtectedError as e:
+            kinds = sorted({type(o)._meta.verbose_name_plural for o in e.protected_objects})
+            raise ValidationError({"detail": f"{mod.title_of(obj)} still has {' and '.join(kinds)}. "
+                                             "Delete those permanently first."})
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -475,7 +577,7 @@ class FieldSwitchView(APIView):
                     "fields": [
                         {"key": f.key, "label": f.label, "group": f.group, "type": f.type,
                          "enabled": enabled[f.key], "can_disable": f.can_disable, "required": f.required}
-                        for f in mod.fields
+                        for f in mod.fields if not f.via
                     ],
                 }
             )
@@ -489,9 +591,13 @@ class FieldSwitchView(APIView):
             f = mod.field(key)
         except KeyError:
             raise ValidationError({"field_key": "Unknown field."})
+        if f.via:
+            owner = get_module(f.via_module)
+            raise ValidationError({"field_key": f"{f.label} belongs to {owner.label}; switch it there."})
         enabled = bool(request.data.get("enabled"))
         if not enabled and not f.can_disable:
-            raise ValidationError({"field_key": f"{f.label} is required and can't be switched off."})
+            why = "is required" if f.required else "is used by other screens"
+            raise ValidationError({"field_key": f"{f.label} {why} and can't be switched off."})
         FieldSwitch.objects.update_or_create(module=module, field_key=key, defaults={"enabled": enabled})
         return Response({"module": module, "field_key": key, "enabled": enabled})
 

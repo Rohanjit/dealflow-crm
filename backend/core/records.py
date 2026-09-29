@@ -30,7 +30,36 @@ def dec_str(d: Decimal | None) -> str | None:
     return s
 
 
+def holder(obj, f: FieldDef):
+    """The record that stores a field's value: itself, or the linked record for company-level fields."""
+    if obj is None or not f.via:
+        return obj
+    return getattr(obj, f.via)
+
+
+def empty_value(f: FieldDef):
+    t = f.type
+    if t == "money":
+        return {"amount": None, "currency": "", "unit": ""}
+    if t == "tags" or (t == "dropdown" and f.multi):
+        return []
+    if t == "boolean":
+        return False
+    if t == "tristate":
+        return "unknown"
+    if t in ("text", "longtext", "url", "email", "phone", "choice"):
+        return ""
+    return None
+
+
 def read_value(obj, f: FieldDef):
+    h = holder(obj, f)
+    if h is None:
+        return empty_value(f)
+    return _read(h, f)
+
+
+def _read(obj, f: FieldDef):
     t = f.type
     if t == "money":
         return {
@@ -47,7 +76,7 @@ def read_value(obj, f: FieldDef):
     if t == "user":
         return getattr(obj, f"{f.key}_id")
     if t == "link":
-        return link_value(obj, f)
+        return _link_value(obj, f)
     if t == "birthday":
         md = getattr(obj, f.key)
         if not md:
@@ -64,6 +93,11 @@ def read_value(obj, f: FieldDef):
 
 def link_value(obj, f: FieldDef) -> dict | None:
     """{module, id, title, archived} for whichever target the record links to."""
+    h = holder(obj, f)
+    return _link_value(h, f) if h is not None else None
+
+
+def _link_value(obj, f: FieldDef) -> dict | None:
     for mkey, attr in active_targets(f):
         if getattr(obj, f"{attr}_id") is None:
             continue
@@ -72,7 +106,7 @@ def link_value(obj, f: FieldDef) -> dict | None:
         return {
             "module": mkey,
             "id": target.pk,
-            "title": getattr(target, tmod.title_field),
+            "title": tmod.title_of(target),
             "archived": target.archived_at is not None,
         }
     return None
@@ -83,7 +117,7 @@ def _user_ref(u):
 
 
 def serialize(obj, mod: ModuleDef) -> dict:
-    out = {"id": obj.pk, "_title": getattr(obj, mod.title_field)}
+    out = {"id": obj.pk, "_title": mod.title_of(obj)}
     for f in mod.fields:
         out[f.key] = read_value(obj, f)
     out["_stamps"] = {
@@ -101,13 +135,15 @@ def with_related(qs: QuerySet, mod: ModuleDef) -> QuerySet:
     select = ["created_by", "updated_by", "archived_by"]
     prefetch = []
     for f in mod.fields:
+        if f.via:
+            select.append(f.via)
         if f.is_m2m:
-            prefetch.append(f.key)
+            prefetch.append(f.path())
         elif f.type in ("dropdown", "user"):
-            select.append(f.key)
+            select.append(f.path())
         elif f.type == "link":
-            select.extend(attr for _, attr in active_targets(f))
-    return qs.select_related(*select).prefetch_related(*prefetch)
+            select.extend(f.path(attr) for _, attr in active_targets(f))
+    return qs.select_related(*dict.fromkeys(select)).prefetch_related(*dict.fromkeys(prefetch))
 
 
 # ---------------------------------------------------------------- validating
@@ -268,7 +304,7 @@ def clean_one(f: FieldDef, v, instance=None):
         unit = (v.get("unit") or "").strip()
         if amount is None:
             return {"amount": None, "currency": "", "unit": ""}
-        if amount < 0:
+        if amount < 0 and not f.allow_negative:
             raise FieldError("Amount can't be negative.")
         if not currency:
             raise FieldError("Pick a currency.")
@@ -329,7 +365,7 @@ def _clean_link(f: FieldDef, v, instance):
     if not target:
         raise FieldError(f"That {tmod.singular.lower()} doesn't exist any more.")
     if target.archived_at is not None and _current_link(instance, f) != (mkey, pk):
-        raise FieldError(f"{getattr(target, tmod.title_field)} is in the Archive. Restore it first.")
+        raise FieldError(f"{tmod.title_of(target)} is in the Archive. Restore it first.")
     return (mkey, target)
 
 
@@ -371,18 +407,33 @@ def _clean_birthday(v):
     return {"md": f"{month:02d}-{day:02d}", "year": year}
 
 
-def clean_values(mod: ModuleDef, data: dict, *, enabled: dict, instance=None, partial=False):
-    """Validate incoming API data. Returns (values, errors). Disabled fields are ignored."""
+def _via_record(mod: ModuleDef, f: FieldDef, values: dict, instance):
+    """The record a company-level field will be saved to: the one being linked in this same
+    request if any, otherwise the one already linked."""
+    for lf in mod.fields:
+        if lf.type == "link" and not lf.via and lf.key in values:
+            for _, attr in active_targets(lf):
+                if attr == f.via:
+                    v = values[lf.key]
+                    return v[1] if v else None
+    return holder(instance, f) if instance is not None and instance.pk else None
+
+
+def clean_values(mod: ModuleDef, data: dict, *, enabled: dict, instance=None, partial=False, importing=False):
+    """Validate incoming API data. Returns (values, errors). Disabled fields are ignored.
+    `importing` relaxes rules meant for people working in the app (e.g. reasons for exits)."""
     values, errors = {}, {}
-    for f in mod.fields:
+    # Own fields first, so company-level fields know which company they're being saved to.
+    for f in sorted(mod.fields, key=lambda x: bool(x.via)):
         if not enabled.get(f.key, True):
             continue
         if f.key not in data:
             if f.required and not partial and not (instance and instance.pk):
                 errors[f.key] = "This field is required."
             continue
+        owner = _via_record(mod, f, values, instance) if f.via else instance
         try:
-            v = clean_one(f, data[f.key], instance)
+            v = clean_one(f, data[f.key], owner)
         except FieldError as e:
             errors[f.key] = str(e)
             continue
@@ -390,6 +441,14 @@ def clean_values(mod: ModuleDef, data: dict, *, enabled: dict, instance=None, pa
             errors[f.key] = "This field is required."
             continue
         values[f.key] = v
+    if mod.pipeline:
+        from . import pipeline
+
+        for k, msg in pipeline.validate(mod, values, instance, importing).items():
+            errors.setdefault(k, msg)
+    if mod.validate:
+        for k, msg in mod.validate(values, instance, importing).items():
+            errors.setdefault(k, msg)
     # Cross-field rule shared by modules: min must not exceed max for paired money fields.
     for f in mod.fields:
         other = "max_" + f.key[4:]
@@ -430,10 +489,20 @@ def tags_from_names(names: list[str]) -> list[Tag]:
 
 
 @transaction.atomic
-def apply_values(obj, mod: ModuleDef, values: dict, user):
+def apply_values(obj, mod: ModuleDef, values: dict, user, importing=False):
+    from . import pipeline
+
+    old = None
+    if mod.pipeline:
+        p = mod.pipeline
+        old = (getattr(obj, p.stage_field), getattr(obj, p.status_field)) if obj.pk else (None, None)
     m2m = {}
+    via: dict[str, tuple[str, dict]] = {}
     for key, v in values.items():
         f = mod.field(key)
+        if f.via:
+            via.setdefault(f.via, (f.via_module, {}))[1][key] = v
+            continue
         if f.type == "money":
             setattr(obj, f"{key}_amount", v["amount"])
             setattr(obj, f"{key}_currency", v["currency"])
@@ -449,12 +518,20 @@ def apply_values(obj, mod: ModuleDef, values: dict, user):
             m2m[key] = tags_from_names(v) if f.type == "tags" else v
         else:
             setattr(obj, key, v)
+    # Company-level fields are saved on the linked company (shared by all its outreach).
+    for attr, (module_key, vals) in via.items():
+        target = getattr(obj, attr)
+        if target is not None:
+            apply_values(target, get_module(module_key), vals, user)
+    event = pipeline.before_save(obj, mod, values, old, importing) if mod.pipeline else None
     if not obj.pk:
         obj.created_by = user
     obj.updated_by = user
     obj.save()
     for key, items in m2m.items():
         getattr(obj, key).set(items)
+    if event:
+        pipeline.record_event(obj, mod, event, user)
     return obj
 
 
@@ -483,15 +560,15 @@ def _search_condition(mod: ModuleDef, q: str, enabled: dict) -> Q:
         if f.type == "link":
             # Contacts are found by their firm's name, for example.
             for mkey, attr in active_targets(f):
-                cond |= Q(**{f"{attr}__{get_module(mkey).title_field}__icontains": q})
+                cond |= Q(**{f"{f.path(attr)}__{get_module(mkey).title_lookup}__icontains": q})
         else:
-            cond |= Q(**{f"{f.key}__icontains": q})
+            cond |= Q(**{f"{f.path()}__icontains": q})
     return cond
 
 
 def _link_filter(qs: QuerySet, f: FieldDef, params) -> QuerySet:
     """?firm=investors:5,investors:9 (specific records) and ?firm_type=investors|none (which side)."""
-    targets = dict(active_targets(f))
+    targets = {m: f.path(attr) for m, attr in active_targets(f)}
     if raw := params.get(f.key):
         cond = Q()
         for token in _csv(raw):
@@ -501,7 +578,7 @@ def _link_filter(qs: QuerySet, f: FieldDef, params) -> QuerySet:
         qs = qs.filter(cond) if cond else qs.none()
     typ = params.get(f"{f.key}_type")
     if typ == "none":
-        qs = qs.filter(**{f"{attr}__isnull": True for attr in targets.values()})
+        qs = qs.filter(**{f"{col}__isnull": True for col in targets.values()})
     elif typ in targets:
         qs = qs.filter(**{f"{targets[typ]}__isnull": False})
     return qs
@@ -513,30 +590,36 @@ def _order_terms(mod: ModuleDef, key: str, desc: bool) -> list:
     def direction(expr):
         return expr.desc(nulls_last=True) if desc else expr.asc(nulls_last=True)
 
+    def blank_last(cond: dict):
+        return Case(When(**cond, then=Value(1)), default=Value(0), output_field=IntegerField())
+
     if key in ("created_at", "updated_at"):
         return [direction(F(key))]
     f = mod.field_map.get(key)
     if not f or not f.sortable:
         return []
-    t = f.type
+    t, col = f.type, f.path()
     if t == "money":
         # Amounts only compare within a currency, so group by currency first.
-        blank_last = Case(When(**{f"{key}_value__isnull": True}, then=Value(1)), default=Value(0), output_field=IntegerField())
-        return [blank_last, F(f"{key}_currency").asc(), direction(F(f"{key}_value"))]
+        return [blank_last({f"{col}_value__isnull": True}), F(f"{col}_currency").asc(), direction(F(f"{col}_value"))]
     if t == "dropdown":
         # The list's own order (e.g. seniority for decision-maker levels), then name.
-        return [direction(F(f"{key}__order")), direction(F(f"{key}__label"))]
+        return [direction(F(f"{col}__order")), direction(F(f"{col}__label"))]
     if t == "user":
-        return [direction(F(f"{key}__full_name"))]
+        return [direction(F(f"{col}__full_name"))]
     if t == "link":
-        cols = [F(f"{attr}__{get_module(m).title_field}") for m, attr in active_targets(f)]
+        cols = [F(f"{f.path(attr)}__{get_module(m).title_lookup}") for m, attr in active_targets(f)]
         if not cols:
             return []
         return [direction(cols[0] if len(cols) == 1 else Coalesce(*cols))]
-    if t in ("text", "url", "email", "phone", "choice"):
-        blank_last = Case(When(**{key: ""}, then=Value(1)), default=Value(0), output_field=IntegerField())
-        return [blank_last, direction(F(key))]
-    return [direction(F(key))]
+    if t in ("choice", "tristate"):
+        # Fixed options sort in their own order (Cold, Warm, Strong; stages in pipeline order).
+        position = Case(*[When(**{col: v}, then=Value(i)) for i, (v, _) in enumerate(f.choices or [])],
+                        default=Value(None), output_field=IntegerField())
+        return [direction(position)]
+    if t in ("text", "url", "email", "phone"):
+        return [blank_last({col: ""}), direction(F(col))]
+    return [direction(F(col))]
 
 
 def filter_queryset(qs: QuerySet, mod: ModuleDef, params, user, enabled: dict) -> QuerySet:
@@ -546,7 +629,7 @@ def filter_queryset(qs: QuerySet, mod: ModuleDef, params, user, enabled: dict) -
 
     distinct = False
     for f in mod.fields:
-        k, t = f.key, f.type
+        k, t, col = f.key, f.type, f.path()
         if t == "link":
             # Applied even when switched off: other screens (e.g. an investor's contacts) rely on it.
             qs = _link_filter(qs, f, params)
@@ -554,36 +637,36 @@ def filter_queryset(qs: QuerySet, mod: ModuleDef, params, user, enabled: dict) -
         if not f.filterable or not enabled.get(f.key, True):
             continue
         if t == "dropdown" and (ids := _ints(params.get(k, ""))):
-            qs = qs.filter(**{f"{k}__in": ids})
+            qs = qs.filter(**{f"{col}__in": ids})
             distinct = distinct or f.multi
         elif t == "user" and (raw := params.get(k)):
             ids = [user.pk if p == "me" else p for p in _csv(raw)]
             none = "none" in ids
             ids = [i for i in ids if i != "none"]
-            cond = Q(**{f"{k}__in": _ints(",".join(str(i) for i in ids))}) if ids else Q(pk__in=[])
+            cond = Q(**{f"{col}__in": _ints(",".join(str(i) for i in ids))}) if ids else Q(pk__in=[])
             if none:
-                cond |= Q(**{f"{k}__isnull": True})
+                cond |= Q(**{f"{col}__isnull": True})
             qs = qs.filter(cond)
         elif t in ("choice", "tristate") and (vals := _csv(params.get(k, ""))):
-            qs = qs.filter(**{f"{k}__in": vals})
+            qs = qs.filter(**{f"{col}__in": vals})
         elif t == "boolean" and params.get(k) in ("true", "false"):
-            qs = qs.filter(**{k: params.get(k) == "true"})
+            qs = qs.filter(**{col: params.get(k) == "true"})
         elif t == "tags" and (names := _csv(params.get(k, ""))):
             cond = Q()
             for n in names:
-                cond |= Q(**{f"{k}__name__iexact": n})
+                cond |= Q(**{f"{col}__name__iexact": n})
             qs = qs.filter(cond)
             distinct = True
         elif t == "birthday" and (months := _ints(params.get(f"{k}_month", ""))):
             cond = Q()
             for m in months:
                 if 1 <= m <= 12:
-                    cond |= Q(**{f"{k}__startswith": f"{m:02d}-"})
+                    cond |= Q(**{f"{col}__startswith": f"{m:02d}-"})
             qs = qs.filter(cond) if cond else qs
         elif t in ("text",) and (raw := params.get(k)):
-            qs = qs.filter(**{f"{k}__icontains": raw})
+            qs = qs.filter(**{f"{col}__icontains": raw})
         elif t in ("integer", "decimal", "percent", "money", "date"):
-            col = f"{k}_value" if t == "money" else k
+            target = f"{col}_value" if t == "money" else col
             lo_key, hi_key = (f"{k}_from", f"{k}_to") if t == "date" else (f"{k}_min", f"{k}_max")
             conv = _to_date if t == "date" else _to_decimal
             for pk, op in ((lo_key, "gte"), (hi_key, "lte")):
@@ -595,8 +678,8 @@ def filter_queryset(qs: QuerySet, mod: ModuleDef, params, user, enabled: dict) -
                     if t == "money":
                         val = val * UNIT_MULTIPLIER.get(params.get(f"{k}_unit", ""), Decimal(1))
                         if cur := params.get(f"{k}_currency"):
-                            qs = qs.filter(**{f"{k}_currency": cur})
-                    qs = qs.filter(**{f"{col}__{op}": val})
+                            qs = qs.filter(**{f"{col}_currency": cur})
+                    qs = qs.filter(**{f"{target}__{op}": val})
 
     if mod.extra_filters:
         qs = mod.extra_filters(qs, params)
