@@ -12,7 +12,9 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import { useMe, useSchema, useUsers } from "../context";
-import { formatBirthday, formatDate, formatDateAndTime, formatMoney, groupDigits, whatsappLink, type Prefs } from "../format";
+import {
+  formatBirthday, formatBytes, formatDate, formatDateAndTime, formatMoney, groupDigits, whatsappLink, type Prefs,
+} from "../format";
 import type { FieldSchema, LinkValue, Money, Schema, UserLookup } from "../types";
 import BirthdayInput from "./BirthdayInput";
 import LinkInput, { MultiLinkInput } from "./LinkInput";
@@ -62,7 +64,9 @@ export function textValue(f: FieldSchema, v: unknown, ctx: { schema?: Schema; us
     case "money": return formatMoney(v as Money, ctx.prefs);
     case "date": return formatDate(v as string, ctx.prefs);
     case "datetime": return formatDateAndTime(v as string, ctx.prefs);
-    case "integer": return f.key.includes("vintage") || f.key.includes("year") ? String(v) : groupDigits(v as number, ctx.prefs.number_grouping);
+    case "integer":
+      if (f.key === "file_size") return formatBytes(v as number);
+      return f.key.includes("vintage") || f.key.includes("year") ? String(v) : groupDigits(v as number, ctx.prefs.number_grouping);
     case "decimal": return groupDigits(v as string, ctx.prefs.number_grouping);
     case "percent": return `${v}%`;
     case "boolean": return v ? "Yes" : "No";

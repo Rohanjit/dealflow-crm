@@ -15,7 +15,7 @@ import { formatDate, formatDateTime } from "../format";
 type Role = { id: number; name: string; is_admin: boolean };
 type User = {
   id: number; email: string; full_name: string; role: Role; is_active: boolean; must_change_password: boolean;
-  last_login: string | null; date_joined: string;
+  last_login: string | null; date_joined: string; has_vault_pin: boolean;
 };
 type Invite = {
   id: number; token: string; role: { id: number; name: string }; note: string; created_by: string | null;
@@ -50,6 +50,23 @@ export default function UsersSettings() {
           refresh();
         } catch (e) {
           notifyError(e, "Couldn't reset");
+        }
+      },
+    });
+  }
+
+  function resetPin(u: User) {
+    modals.openConfirmModal({
+      title: `Reset ${u.full_name}'s Vault PIN?`,
+      children: <Text size="sm">Their PIN is cleared. Next time they open the Vault they set a new one, confirming it with their account password.</Text>,
+      labels: { confirm: "Reset Vault PIN", cancel: "Cancel" },
+      onConfirm: async () => {
+        try {
+          await api(`users/${u.id}/reset-vault-pin/`, { body: {} });
+          notifyOk(`${u.full_name}'s Vault PIN was reset.`);
+          refresh();
+        } catch (e) {
+          notifyError(e, "Couldn't reset the PIN");
         }
       },
     });
@@ -110,6 +127,7 @@ export default function UsersSettings() {
                         <Menu.Dropdown>
                           <Menu.Item onClick={() => setEditing(u)}>Edit</Menu.Item>
                           <Menu.Item onClick={() => reset(u)}>Reset password</Menu.Item>
+                          {u.has_vault_pin && <Menu.Item onClick={() => resetPin(u)}>Reset Vault PIN</Menu.Item>}
                           {u.id !== me.id && (u.is_active
                             ? <Menu.Item color="red" onClick={() => setActive(u, false)}>Deactivate</Menu.Item>
                             : <Menu.Item onClick={() => setActive(u, true)}>Reactivate</Menu.Item>)}

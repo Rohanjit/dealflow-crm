@@ -4,7 +4,7 @@
 
 Dealflow tracks the full life of a mandate, from the first approach to a company through to closing, alongside the investor relationships that make deals happen. It runs on your own laptop or server, so confidential deal data never leaves your firm.
 
-> **Status:** in development. V1 is being built module by module. Foundation, Investors, Contacts, Outreach, Active Deals and Tasks & Reminders are done.
+> **Status:** in development. All six V1 modules (Investors, Contacts, Outreach, Active Deals, Tasks & Reminders, Vault) are built; security hardening comes next, before the first public release.
 
 ## What's in V1
 

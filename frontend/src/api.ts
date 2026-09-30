@@ -75,6 +75,7 @@ export async function api<T = unknown>(path: string, opts: Options = {}): Promis
   if (!res.ok) {
     const err = new ApiError(res.status, data);
     if (err.code === "password_change_required") window.dispatchEvent(new Event("dealflow:password-change"));
+    if (err.code?.startsWith("vault_")) window.dispatchEvent(new Event("dealflow:vault-locked"));
     if (res.status === 403 && /credentials were not provided|not authenticated/i.test(err.message)) {
       window.dispatchEvent(new Event("dealflow:signed-out"));
     }

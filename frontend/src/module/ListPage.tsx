@@ -6,9 +6,9 @@ import { DateInput } from "@mantine/dates";
 import { useDebouncedCallback, useDebouncedValue } from "@mantine/hooks";
 import {
   IconAdjustmentsHorizontal, IconArrowDown, IconArrowUp, IconColumns3, IconDownload, IconFileImport, IconLayoutKanban,
-  IconPlus, IconSearch, IconTable,
+  IconLock, IconPlus, IconSearch, IconTable,
 } from "@tabler/icons-react";
-import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -19,11 +19,17 @@ import { errorMessage } from "../components/errors";
 import { MONTH_NAMES } from "../format";
 import type { FieldSchema, LookupItem, ModuleSchema, Page, RecordData, Schema } from "../types";
 import MyTasks from "../tasks/MyTasks";
+import { afterVaultChange } from "../vault/api";
+import VaultGate from "../vault/VaultGate";
 import BoardView from "./BoardView";
 import { FieldValue } from "./fields";
 import { useModuleLabels } from "./LinkInput";
 
 const PAGE_SIZE = 50;
+// How a list counts its records when the module's name doesn't work as a plural ("2 vault").
+const NOUNS: Record<string, [string, string]> = {
+  vault: ["document", "documents"], tasks: ["task", "tasks"], deals: ["deal", "deals"],
+};
 const RESERVED = new Set(["q", "ordering", "page"]);
 
 function loadColumns(module: ModuleSchema): string[] {
@@ -54,7 +60,8 @@ export default function ListPage() {
   const { module, schema, isLoading } = useModuleSchema(key);
   if (isLoading) return <Center py="xl"><Loader /></Center>;
   if (!module || !schema) return <Navigate to="/" replace />;
-  return <ListInner key={module.key} module={module} schema={schema} />;
+  const inner = <ListInner key={module.key} module={module} schema={schema} />;
+  return module.key === "vault" ? <VaultGate>{inner}</VaultGate> : inner;
 }
 
 function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema }) {
@@ -124,7 +131,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
       <Group justify="space-between" align="flex-end">
         <div>
           <Title order={2}>{module.label}</Title>
-          <Text c="dimmed" size="sm">{mine ? "Assigned to you and not done yet" : data ? `${total.toLocaleString(me.number_grouping === "indian" ? "en-IN" : "en-US")} ${total === 1 ? module.singular.toLowerCase() : module.label.toLowerCase()}` : " "}</Text>
+          <Text c="dimmed" size="sm">{mine ? "Assigned to you and not done yet" : data ? `${total.toLocaleString(me.number_grouping === "indian" ? "en-IN" : "en-US")} ${total === 1 ? (NOUNS[module.key]?.[0] ?? module.singular.toLowerCase()) : (NOUNS[module.key]?.[1] ?? module.label.toLowerCase())}` : " "}</Text>
         </div>
         <Group gap="xs">
           {module.perms.create && module.importable && (
@@ -133,8 +140,11 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
           <Button variant="default" leftSection={<IconDownload size={16} />} onClick={() => download(`m/${module.key}/export/?${exportParams}`)}>
             Export to Excel
           </Button>
+          {module.key === "vault" && <LockButton />}
           {module.perms.create && (
-            <Button leftSection={<IconPlus size={16} />} component={Link} to={`/m/${module.key}/new`}>New {module.singular.toLowerCase()}</Button>
+            <Button leftSection={<IconPlus size={16} />} component={Link} to={`/m/${module.key}/new`}>
+              {module.key === "vault" ? "Upload" : `New ${module.singular.toLowerCase()}`}
+            </Button>
           )}
         </Group>
       </Group>
@@ -147,7 +157,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
       <Group gap="xs">
         <TextInput
           style={{ flex: 1, maxWidth: 420 }}
-          placeholder={`Search ${module.label.toLowerCase()}`}
+          placeholder={`Search ${NOUNS[module.key]?.[1] ?? module.label.toLowerCase()}`}
           leftSection={<IconSearch size={16} />}
           value={search}
           rightSection={search ? <CloseButton size="sm" onClick={() => { setSearch(""); setParam({ q: null }); }} /> : null}
@@ -248,6 +258,17 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
   );
 }
 
+/** Close the Vault now rather than waiting for it to close after 15 idle minutes. */
+function LockButton() {
+  const qc = useQueryClient();
+  return (
+    <Button variant="default" leftSection={<IconLock size={16} />}
+      onClick={async () => afterVaultChange(qc, await api("vault/lock/", { method: "POST" }))}>
+      Lock
+    </Button>
+  );
+}
+
 function loadView(module: string): "board" | "table" {
   try {
     return localStorage.getItem(`dealflow.view.${module}`) === "table" ? "table" : "board";
@@ -301,7 +322,7 @@ function EmptyState({ module, filtered }: { module: ModuleSchema; filtered: bool
       </Text>
       {!filtered && module.perms.create && (
         <Group mt="xs">
-          <Button size="xs" component={Link} to={`/m/${module.key}/new`}>New {module.singular.toLowerCase()}</Button>
+          <Button size="xs" component={Link} to={`/m/${module.key}/new`}>{module.key === "vault" ? "Upload documents" : `New ${module.singular.toLowerCase()}`}</Button>
           {module.importable && (
             <Button size="xs" variant="default" component={Link} to={`/m/${module.key}/import`}>Import from Excel</Button>
           )}

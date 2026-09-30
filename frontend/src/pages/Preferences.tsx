@@ -5,6 +5,8 @@ import { api } from "../api";
 import { useApp } from "../context";
 import { notifyError, notifyOk } from "../components/errors";
 import { formatDate, groupDigits } from "../format";
+import { useVaultStatus } from "../vault/api";
+import { SetPinForm } from "../vault/VaultGate";
 import ChangePassword from "./ChangePassword";
 
 export default function Preferences() {
@@ -50,6 +52,28 @@ export default function Preferences() {
         </Stack>
       </Paper>
       <ChangePassword />
+      {me.perms.vault?.view && <VaultPin />}
     </Stack>
+  );
+}
+
+function VaultPin() {
+  const { data } = useVaultStatus();
+  const [done, setDone] = useState(false);
+  if (!data) return null;
+  return (
+    <Paper withBorder p="lg">
+      <Stack>
+        <Title order={4}>Vault PIN</Title>
+        {done ? (
+          <Text size="sm">Your Vault PIN is {data.has_pin ? "changed" : "set"}.</Text>
+        ) : (
+          <SetPinForm changing={data.has_pin} onDone={() => setDone(true)} />
+        )}
+        {data.has_pin && !done && (
+          <Text size="xs" c="dimmed">Forgotten it? Ask someone who manages users to reset it; you then set a new one.</Text>
+        )}
+      </Stack>
+    </Paper>
   );
 }

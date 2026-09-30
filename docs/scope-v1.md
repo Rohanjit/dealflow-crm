@@ -173,6 +173,11 @@ No separate Interactions module: interactions are captured as dated notes inside
 - Access: role-based permission plus a separate per-user Vault PIN.
 - Document fields: title, category (NDA, Engagement letter, Teaser, IM, Financial model, Term sheet, DD report, Definitive agreement, Other), description, uploaded by, upload date, file type/size.
 - Tagging: to a company (outreach/active deal) and/or an investor. One document can carry multiple tags.
+- Defaults chosen while building (30 Sep 2026, open to change):
+  - Accepted files: PDF, Word, Excel, PowerPoint, OpenDocument, CSV, text, email (.msg/.eml), images and ZIP, up to 50 MB each. A file's contents must match its extension.
+  - Documents can be tagged to a company, an outreach attempt, a deal or an investor. A deal's and an outreach attempt's pages also show documents tagged to their company; a company's page shows those of its deals and outreach too.
+  - The PIN is 4 to 8 digits, set by each person (confirmed with their password). The Vault stays open for 15 minutes after its last use; five wrong PINs lock it for 15 minutes. People who manage users can reset a forgotten PIN.
+  - Vault document titles appear in search only while your Vault is open.
 
 ---
 

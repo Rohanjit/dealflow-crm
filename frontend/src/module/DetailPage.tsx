@@ -9,6 +9,9 @@ import { useApp, useModuleSchema } from "../context";
 import DealTracker from "../deals/DealTracker";
 import { useCompleteTask } from "../tasks/api";
 import TasksPanel from "../tasks/TasksPanel";
+import DocumentsPanel from "../vault/DocumentsPanel";
+import FileCard from "../vault/FileCard";
+import VaultGate from "../vault/VaultGate";
 import { errorMessage, notifyError, notifyOk } from "../components/errors";
 import { formatDateTime } from "../format";
 import type { FieldSchema, LinkValue, ModuleSchema, RecordData } from "../types";
@@ -22,6 +25,11 @@ import Timeline from "./Timeline";
 const PARENT_LINK: Record<string, string> = { deal_investors: "deal" };
 
 export default function DetailPage() {
+  const { module: key } = useParams();
+  return key === "vault" ? <VaultGate><DetailInner /></VaultGate> : <DetailInner />;
+}
+
+function DetailInner() {
   const { module: key, id } = useParams();
   const { module, schema, isLoading } = useModuleSchema(key);
   const { info, me } = useApp();
@@ -128,6 +136,7 @@ export default function DetailPage() {
       </Group>
 
       {p && <PipelineBar module={module} record={r} />}
+      {module.key === "vault" && <FileCard doc={r} />}
 
       <Grid gutter="lg" align="flex-start">
       <Grid.Col span={{ base: 12, lg: module.timeline ? 8 : 12 }}>
@@ -135,7 +144,8 @@ export default function DetailPage() {
       {module.sections.filter((s) => s.status === "ready" && s.module).map((s) => (
         s.panel === "tracker" ? <DealTracker key={s.key} section={s} deal={r} />
           : s.panel === "tasks" ? <TasksPanel key={s.key} section={s} parent={module} record={r} />
-            : <RelatedSection key={s.key} section={s} parent={module} record={r} />
+            : s.panel === "documents" ? <DocumentsPanel key={s.key} section={s} parent={module} record={r} />
+              : <RelatedSection key={s.key} section={s} parent={module} record={r} />
       ))}
 
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">

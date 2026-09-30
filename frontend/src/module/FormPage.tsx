@@ -8,6 +8,8 @@ import { useMe, useModuleSchema } from "../context";
 import { errorMessage, fieldErrors, notifyOk } from "../components/errors";
 import type { FieldSchema, LinkValue, ModuleSchema, RecordData } from "../types";
 import { emptyValue, FieldInput } from "./fields";
+import UploadPage from "../vault/UploadPage";
+import VaultGate from "../vault/VaultGate";
 import { exitForField } from "./pipeline";
 
 /** New records can start with a link filled in from the page address: ?firm=investors:12 */
@@ -34,6 +36,19 @@ function visible(f: FieldSchema, module: ModuleSchema, editing: boolean, record?
 }
 
 export default function FormPage() {
+  const { module: key, id } = useParams();
+  if (key !== "vault") return <FormInner />;
+  return <VaultGate>{id ? <FormInner /> : <VaultUpload />}</VaultGate>;
+}
+
+function VaultUpload() {
+  const { module, isLoading } = useModuleSchema("vault");
+  if (isLoading) return <Center py="xl"><Loader /></Center>;
+  if (!module?.perms.create) return <Navigate to="/m/vault" replace />;
+  return <UploadPage module={module} />;
+}
+
+function FormInner() {
   const { module: key, id } = useParams();
   const { module, isLoading } = useModuleSchema(key);
   const me = useMe();
