@@ -8,11 +8,10 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.parsers import MultiPartParser
-from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.permissions import IsActiveUser, flag_required
+from accounts.permissions import IsActiveUser, PublicEndpoint, flag_required
 
 from . import backups, importer
 from .exporter import export_workbook
@@ -772,7 +771,7 @@ class BackupRestoreView(APIView):
 
 
 class HealthView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [PublicEndpoint]
     authentication_classes = []
 
     def get(self, request):

@@ -98,10 +98,22 @@ if DATABASES["default"]["ENGINE"] == "django.db.backends.sqlite3":
     DATABASES["default"]["CONN_MAX_AGE"] = 0
 
 AUTH_USER_MODEL = "accounts.User"
+# New passwords (and Vault PINs) are hashed with Argon2id. PBKDF2 stays second in the list only so
+# passwords saved before the switch can still be checked; Django re-hashes them with Argon2id at
+# the next successful sign-in.
+PASSWORD_HASHERS = [
+    "django.contrib.auth.hashers.Argon2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+]
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+        "OPTIONS": {"user_attributes": ["email", "full_name"]},
+    },
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 12}},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+    {"NAME": "accounts.validators.PasswordHistoryValidator", "OPTIONS": {"count": 12}},
 ]
 
 LANGUAGE_CODE = "en"

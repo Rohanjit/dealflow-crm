@@ -38,7 +38,7 @@ export default function Setup() {
           <TextInput label="Firm name" required autoFocus value={v.firm_name} onChange={set("firm_name")} error={errors.firm_name} />
           <TextInput label="Your name" required value={v.full_name} onChange={set("full_name")} error={errors.full_name} />
           <TextInput label="Work email" type="email" required value={v.email} onChange={set("email")} error={errors.email} description="You'll sign in with this." />
-          <PasswordInput label="Password" required value={v.password} onChange={set("password")} error={errors.password} description="At least 8 characters, not all numbers." />
+          <PasswordInput label="Password" required value={v.password} onChange={set("password")} error={errors.password} description="At least 12 characters. Not your name or email, and not a common password." />
           <Button type="submit" loading={busy} mt="xs">Create firm and Admin account</Button>
         </Stack>
       </form>

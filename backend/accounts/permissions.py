@@ -2,6 +2,16 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission
 
 
+class PublicEndpoint(BasePermission):
+    """The few endpoints that have to work before anyone signs in: app start-up, first-time setup,
+    sign-in, sign-out, accepting an invite and the health check. Every other endpoint needs an
+    active, signed-in user (IsActiveUser is the default). core/tests/test_endpoint_access.py walks
+    every URL and fails if anything outside that list answers without a session."""
+
+    def has_permission(self, request, view):
+        return True
+
+
 class IsActiveUser(BasePermission):
     """Default for every API view: signed in, active, and not waiting on a forced
     password change."""

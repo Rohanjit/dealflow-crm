@@ -11,7 +11,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied, ValidationError
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
@@ -19,11 +19,14 @@ from rest_framework.views import APIView
 from core.models import FirmSettings
 from core.modules import ACTIONS, BUILT_MODULES, MODULES
 
-from .models import DATE_FORMATS, NUMBER_GROUPINGS, Invite, Role, RoleModulePermission, User
-from .permissions import IsActiveUser, flag_required
+from . import lockout
+from .models import DATE_FORMATS, NUMBER_GROUPINGS, Invite, Role, RoleModulePermission, SignInLock, User
+from .permissions import IsActiveUser, PublicEndpoint, flag_required
 
 
 class LoginThrottle(AnonRateThrottle):
+    """Per IP address, on top of the per-email lock-out in accounts/lockout.py."""
+
     rate = "10/min"
     scope = "login"
 
@@ -42,7 +45,11 @@ def me_payload(user: User) -> dict:
     }
 
 
-def _password_errors(password, user=None):
+def _password_errors(password, user=None, *, email="", full_name=""):
+    """Validation messages for a new password, or None. `user` is the account it's for; for an
+    account that doesn't exist yet, pass the email and name so the password can't be built from them."""
+    if user is None:
+        user = User(email=email, full_name=full_name)
     try:
         validate_password(password or "", user)
     except DjangoValidationError as e:
@@ -63,7 +70,7 @@ def _temp_password():
 class AppView(APIView):
     """First call the frontend makes: is setup needed, who am I."""
 
-    permission_classes = [AllowAny]
+    permission_classes = [PublicEndpoint]
 
     def get(self, request):
         fs = FirmSettings.load()
@@ -84,7 +91,8 @@ class AppView(APIView):
 class SetupView(APIView):
     """One-time setup wizard: firm name + the first Admin account."""
 
-    permission_classes = [AllowAny]
+    permission_classes = [PublicEndpoint]
+    throttle_classes = [LoginThrottle]
 
     def post(self, request):
         d = request.data
@@ -101,7 +109,7 @@ class SetupView(APIView):
             validate_email(email)
         except DjangoValidationError:
             errors["email"] = "Enter a valid email address."
-        if msg := _password_errors(password):
+        if msg := _password_errors(password, email=email, full_name=name):
             errors["password"] = msg
         if errors:
             raise ValidationError(errors)
@@ -123,21 +131,27 @@ class SetupView(APIView):
 
 
 class LoginView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [PublicEndpoint]
     throttle_classes = [LoginThrottle]
 
     def post(self, request):
-        email = str(request.data.get("email") or "").strip().lower()
-        password = request.data.get("password") or ""
+        email = lockout.normalise(request.data.get("email"))
+        password = str(request.data.get("password") or "")
+        # Same answers whether or not the email has an account: a locked address is refused before
+        # any password check, and Django runs the hasher for unknown emails too, so timing matches.
+        lockout.check(email)
         user = authenticate(request, username=email, password=password)
         if not user or not user.is_active:
+            if until := lockout.record_failure(email):
+                raise lockout.SignInLocked(until)
             raise ValidationError({"detail": "That email and password don't match."})
-        login(request, user)
+        lockout.clear(email)
+        login(request, user)  # new session key, so a planted session id is useless
         return Response(me_payload(user))
 
 
 class LogoutView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [PublicEndpoint]
 
     def post(self, request):
         logout(request)
@@ -176,13 +190,19 @@ class ChangePasswordView(APIView):
 
     def post(self, request):
         u = request.user
-        if not u.check_password(request.data.get("current_password") or ""):
+        current = str(request.data.get("current_password") or "")
+        lockout.check(u.email)
+        if not u.check_password(current):
+            # Counts towards the sign-in lock-out; once locked, this session ends too.
+            if until := lockout.record_failure(u.email):
+                logout(request)
+                raise lockout.SignInLocked(until)
             raise ValidationError({"current_password": "Your current password is wrong."})
-        new = request.data.get("new_password") or ""
+        new = str(request.data.get("new_password") or "")
+        if new == current:
+            raise ValidationError({"new_password": "Pick a password different from the current one."})
         if msg := _password_errors(new, u):
             raise ValidationError({"new_password": msg})
-        if new == request.data.get("current_password"):
-            raise ValidationError({"new_password": "Pick a password different from the current one."})
         u.set_password(new)
         u.must_change_password = False
         u.save()
@@ -193,7 +213,11 @@ class ChangePasswordView(APIView):
 # ---------------------------------------------------------------- users
 
 
-def user_payload(u: User) -> dict:
+def user_payload(u: User, locks: dict | None = None) -> dict:
+    if locks is None:
+        until = lockout.locked_until(u.email)
+    else:
+        until = locks.get(u.email.lower())
     return {
         "id": u.pk,
         "email": u.email,
@@ -204,6 +228,7 @@ def user_payload(u: User) -> dict:
         "last_login": u.last_login.isoformat() if u.last_login else None,
         "date_joined": u.date_joined.isoformat(),
         "has_vault_pin": bool(u.vault_pin),
+        "signin_locked_until": until.isoformat() if until else None,
     }
 
 
@@ -232,7 +257,11 @@ class UserListView(APIView):
     permission_classes = [flag_required("manage_users")]
 
     def get(self, request):
-        return Response([user_payload(u) for u in User.objects.select_related("role")])
+        locks = {
+            r.email: r.locked_until
+            for r in SignInLock.objects.filter(locked_until__gt=timezone.now())
+        }
+        return Response([user_payload(u, locks) for u in User.objects.select_related("role")])
 
     def post(self, request):
         d = request.data
@@ -250,8 +279,8 @@ class UserListView(APIView):
         role = Role.objects.filter(pk=d.get("role")).first()
         if not role:
             errors["role"] = "Pick a role."
-        temp = (d.get("temp_password") or "").strip() or _temp_password()
-        if msg := _password_errors(temp):
+        temp = str(d.get("temp_password") or "").strip() or _temp_password()
+        if msg := _password_errors(temp, email=email, full_name=name):
             errors["temp_password"] = msg
         if errors:
             raise ValidationError(errors)
@@ -312,14 +341,27 @@ class UserResetPasswordView(APIView):
     def post(self, request, pk):
         u = get_object_or_404(User, pk=pk)
         _guard_admin_changes(request.user, u, None)
-        temp = (request.data.get("temp_password") or "").strip() or _temp_password()
+        temp = str(request.data.get("temp_password") or "").strip() or _temp_password()
         if msg := _password_errors(temp, u):
             raise ValidationError({"temp_password": msg})
         u.set_password(temp)
         u.must_change_password = True
         u.save()
         _end_sessions(u)
+        lockout.clear(u.email)  # they'll sign in with the new password straight away
         return Response({"temp_password": temp})
+
+
+class UserUnlockView(APIView):
+    """Lift a sign-in lock-out early (accounts/lockout.py)."""
+
+    permission_classes = [flag_required("manage_users")]
+
+    def post(self, request, pk):
+        u = get_object_or_404(User.objects.select_related("role"), pk=pk)
+        _guard_admin_changes(request.user, u, None)
+        lockout.clear(u.email)
+        return Response(user_payload(u))
 
 
 def _end_sessions(user: User):
@@ -423,7 +465,6 @@ class RoleDetailView(APIView):
 def invite_payload(i: Invite) -> dict:
     return {
         "id": i.pk,
-        "token": i.token,
         "role": {"id": i.role_id, "name": i.role.name},
         "note": i.note,
         "created_by": i.created_by.full_name if i.created_by else None,
@@ -448,10 +489,9 @@ class InviteListView(APIView):
         if not role:
             raise ValidationError({"role": "Pick a role."})
         _guard_admin_changes(request.user, None, role)
-        i = Invite.objects.create(
-            role=role, note=str(request.data.get("note") or "").strip()[:150], created_by=request.user
-        )
-        return Response(invite_payload(i), status=status.HTTP_201_CREATED)
+        i, token = Invite.issue(role=role, note=str(request.data.get("note") or "").strip()[:150], created_by=request.user)
+        # The only time the token leaves the server: the database keeps just its hash.
+        return Response({**invite_payload(i), "token": token}, status=status.HTTP_201_CREATED)
 
 
 class InviteRevokeView(APIView):
@@ -465,11 +505,11 @@ class InviteRevokeView(APIView):
 
 
 class InviteAcceptView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [PublicEndpoint]
     throttle_classes = [LoginThrottle]
 
     def _invite(self, token):
-        i = Invite.objects.select_related("role").filter(token=token).first()
+        i = Invite.by_token(token, Invite.objects.select_related("role"))
         if not i or not i.is_usable:
             raise ValidationError({"detail": "This invite link has expired or was already used. Ask your admin for a new one."})
         return i
@@ -492,12 +532,12 @@ class InviteAcceptView(APIView):
                 errors["email"] = "An account with this email already exists. Sign in instead."
         except DjangoValidationError:
             errors["email"] = "Enter a valid email address."
-        if msg := _password_errors(password):
+        if msg := _password_errors(password, email=email, full_name=name):
             errors["password"] = msg
         if errors:
             raise ValidationError(errors)
         with transaction.atomic():
-            i = Invite.objects.select_for_update().select_related("role").filter(token=token).first()
+            i = Invite.by_token(token, Invite.objects.select_for_update().select_related("role"))
             if not i or not i.is_usable:
                 raise ValidationError({"detail": "This invite link has expired or was already used."})
             u = User.objects.create_user(email=email, password=password, full_name=name, role=i.role)

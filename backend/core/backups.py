@@ -22,7 +22,8 @@ from django.utils import timezone
 
 FORMAT_VERSION = 1
 NAME_RE = re.compile(r"^dealflow-(daily|manual|pre-restore)-\d{8}-\d{6}\.zip$")
-EXCLUDE = ["contenttypes", "auth.permission", "sessions"]
+# Sign-in lock-out counters are short-lived and not worth restoring.
+EXCLUDE = ["contenttypes", "auth.permission", "sessions", "accounts.signinlock"]
 
 
 class BackupError(Exception):

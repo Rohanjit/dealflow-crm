@@ -15,10 +15,10 @@ import { formatDate, formatDateTime } from "../format";
 type Role = { id: number; name: string; is_admin: boolean };
 type User = {
   id: number; email: string; full_name: string; role: Role; is_active: boolean; must_change_password: boolean;
-  last_login: string | null; date_joined: string; has_vault_pin: boolean;
+  last_login: string | null; date_joined: string; has_vault_pin: boolean; signin_locked_until: string | null;
 };
 type Invite = {
-  id: number; token: string; role: { id: number; name: string }; note: string; created_by: string | null;
+  id: number; token?: string; role: { id: number; name: string }; note: string; created_by: string | null;
   created_at: string; expires_at: string; used_at: string | null; used_by: string | null; revoked: boolean; usable: boolean;
 };
 
@@ -72,6 +72,16 @@ export default function UsersSettings() {
     });
   }
 
+  async function unlock(u: User) {
+    try {
+      await api(`users/${u.id}/unlock/`, { body: {} });
+      notifyOk(`${u.full_name} can sign in again.`);
+      refresh();
+    } catch (e) {
+      notifyError(e, "Couldn't unlock");
+    }
+  }
+
   async function setActive(u: User, active: boolean) {
     try {
       await api(`users/${u.id}/`, { method: "PATCH", body: { is_active: active } });
@@ -116,6 +126,11 @@ export default function UsersSettings() {
                   <Table.Td><Badge variant="light" color={u.role.is_admin ? "navy" : "gray"} tt="none">{u.role.name}</Badge></Table.Td>
                   <Table.Td>
                     {!u.is_active ? <Badge color="gray" variant="outline">Deactivated</Badge>
+                      : u.signin_locked_until ? (
+                        <Tooltip label={`Too many wrong passwords. Unlocks at ${formatDateTime(u.signin_locked_until, me)}.`}>
+                          <Badge color="red" variant="light">Sign-in locked</Badge>
+                        </Tooltip>
+                      )
                       : u.must_change_password ? <Badge color="orange" variant="light">Temporary password</Badge>
                       : <Badge color="teal" variant="light">Active</Badge>}
                   </Table.Td>
@@ -126,6 +141,7 @@ export default function UsersSettings() {
                         <Menu.Target><ActionIcon variant="subtle" aria-label="Actions"><IconDots size={16} /></ActionIcon></Menu.Target>
                         <Menu.Dropdown>
                           <Menu.Item onClick={() => setEditing(u)}>Edit</Menu.Item>
+                          {u.signin_locked_until && <Menu.Item onClick={() => unlock(u)}>Unlock sign-in</Menu.Item>}
                           <Menu.Item onClick={() => reset(u)}>Reset password</Menu.Item>
                           {u.has_vault_pin && <Menu.Item onClick={() => resetPin(u)}>Reset Vault PIN</Menu.Item>}
                           {u.id !== me.id && (u.is_active
@@ -144,7 +160,8 @@ export default function UsersSettings() {
 
       {openInvites.length > 0 && (
         <Paper withBorder p="lg">
-          <Title order={5} mb="sm">Open invite links</Title>
+          <Title order={5} mb="xs">Open invite links</Title>
+          <Text size="xs" c="dimmed" mb="sm">For safety, a link is shown only when it's created. If one gets lost, revoke it and create a new one.</Text>
           <Table className="df-table" verticalSpacing="xs">
             <Table.Thead><Table.Tr><Table.Th>For</Table.Th><Table.Th>Role</Table.Th><Table.Th>Expires</Table.Th><Table.Th /></Table.Tr></Table.Thead>
             <Table.Tbody>
@@ -155,7 +172,6 @@ export default function UsersSettings() {
                   <Table.Td><Text size="sm">{formatDate(i.expires_at.slice(0, 10), me)}</Text></Table.Td>
                   <Table.Td>
                     <Group gap="xs" justify="flex-end">
-                      <CopyLink token={i.token} />
                       <Button size="xs" variant="subtle" color="red" onClick={() => revoke(i)}>Revoke</Button>
                     </Group>
                   </Table.Td>
@@ -294,9 +310,10 @@ function InviteModal({ roleOptions, onClose }: { roleOptions: { value: string; l
         <Stack>
           <Text size="sm">Send this link by email, WhatsApp or any channel. It works once and expires in 7 days. The person sets their own password and joins as <b>{invite.role.name}</b>.</Text>
           <Group gap="xs" wrap="nowrap">
-            <TextInput readOnly value={inviteUrl(invite.token)} style={{ flex: 1 }} onFocus={(e) => e.currentTarget.select()} />
-            <CopyLink token={invite.token} />
+            <TextInput readOnly value={inviteUrl(invite.token!)} style={{ flex: 1 }} onFocus={(e) => e.currentTarget.select()} />
+            <CopyLink token={invite.token!} />
           </Group>
+          <Alert color="orange" variant="light">Copy it now: this link won't be shown again.</Alert>
           <Group justify="flex-end"><Button onClick={onClose}>Done</Button></Group>
         </Stack>
       ) : (

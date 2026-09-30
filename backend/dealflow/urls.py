@@ -20,6 +20,7 @@ api = [
     path("users/lookup/", a.UserLookupView.as_view()),
     path("users/<int:pk>/", a.UserDetailView.as_view()),
     path("users/<int:pk>/reset-password/", a.UserResetPasswordView.as_view()),
+    path("users/<int:pk>/unlock/", a.UserUnlockView.as_view()),
     path("roles/", a.RoleListView.as_view()),
     path("roles/<int:pk>/", a.RoleDetailView.as_view()),
     path("invites/", a.InviteListView.as_view()),

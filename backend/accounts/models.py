@@ -1,3 +1,4 @@
+import hashlib
 import secrets
 from datetime import timedelta
 
@@ -134,7 +135,36 @@ class User(AbstractBaseUser):
         return self.is_active and self.role.flags().get(flag, False)
 
 
+class PasswordHistory(models.Model):
+    """Hashes of a person's recent passwords, so they can't go back to one (accounts/validators.py).
+    Only hashes are kept, the same way the current password is."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="password_history")
+    password = models.CharField(max_length=128)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+
+
+class SignInLock(models.Model):
+    """Wrong passwords per email address (accounts/lockout.py). Keyed by the address typed, not by
+    account, so sign-in answers the same way whether or not an account exists."""
+
+    email = models.CharField(max_length=254, unique=True)
+    failures = models.PositiveSmallIntegerField(default=0)
+    last_failure_at = models.DateTimeField(null=True, blank=True)
+    locked_until = models.DateTimeField(null=True, blank=True)
+
+
+def hash_token(token: str) -> str:
+    """Invite links carry 256 random bits, so a plain SHA-256 is enough to make a stored copy
+    useless without letting anyone rebuild the link from the database."""
+    return hashlib.sha256(str(token).encode()).hexdigest()
+
+
 def _invite_token():
+    """Kept for migration 0001, which referenced it as a default; new invites use Invite.issue()."""
     return secrets.token_urlsafe(32)
 
 
@@ -144,9 +174,10 @@ def _invite_expiry():
 
 class Invite(models.Model):
     """One-time link an admin shares by any channel. The person sets their own
-    password; the role is fixed by the admin."""
+    password; the role is fixed by the admin. Only a hash of the link's token is stored:
+    the link itself is shown once, when it's created."""
 
-    token = models.CharField(max_length=64, unique=True, default=_invite_token)
+    token_hash = models.CharField(max_length=64, unique=True, editable=False)
     role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name="invites")
     note = models.CharField(max_length=150, blank=True, help_text="Who it is for, for the admin's reference")
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="+")
@@ -162,3 +193,13 @@ class Invite(models.Model):
     @property
     def is_usable(self) -> bool:
         return not self.revoked and self.used_at is None and self.expires_at > timezone.now()
+
+    @classmethod
+    def issue(cls, **fields) -> tuple["Invite", str]:
+        """Create an invite; returns it with the raw token, which isn't kept anywhere."""
+        token = secrets.token_urlsafe(32)
+        return cls.objects.create(token_hash=hash_token(token), **fields), token
+
+    @classmethod
+    def by_token(cls, token: str, queryset=None):
+        return (queryset if queryset is not None else cls.objects).filter(token_hash=hash_token(token)).first()

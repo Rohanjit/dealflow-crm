@@ -2,6 +2,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
@@ -21,6 +22,10 @@ class DataDirMixin:
         )
         cls._override.enable()
         super().setUpClass()
+
+    def setUp(self):
+        super().setUp()
+        cache.clear()  # rate limits (e.g. sign-in per IP) live in the cache; don't carry them between tests
 
     @classmethod
     def tearDownClass(cls):

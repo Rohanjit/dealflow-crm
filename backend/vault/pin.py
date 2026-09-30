@@ -68,7 +68,11 @@ def record_failure(user) -> int:
 
 
 def pin_matches(user, pin: str) -> bool:
-    return bool(user.vault_pin) and check_password(str(pin or ""), user.vault_pin)
+    def upgrade(raw):  # re-hash PINs saved with an older hasher (PBKDF2 -> Argon2id)
+        user.vault_pin = make_password(raw)
+        user.save(update_fields=["vault_pin"])
+
+    return bool(user.vault_pin) and check_password(str(pin or ""), user.vault_pin, setter=upgrade)
 
 
 def record_success(user):

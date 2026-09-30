@@ -8,6 +8,7 @@ import time
 from django.core.management.base import BaseCommand
 from django.db import close_old_connections
 
+from accounts import lockout
 from core.backups import BackupError, create_backup, due_for_daily_backup
 
 log = logging.getLogger("dealflow.scheduler")
@@ -32,6 +33,10 @@ class Command(BaseCommand):
                 log.warning("Backup skipped: %s", e)
             except Exception:
                 log.exception("Daily backup failed")
+            try:
+                lockout.prune()
+            except Exception:
+                log.exception("Pruning sign-in lock-outs failed")
             if opts["once"]:
                 return
             time.sleep(opts["interval"])
