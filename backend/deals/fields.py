@@ -168,14 +168,8 @@ DEALS = register(
         sections=[
             {"key": "tracker", "label": "Investor tracker", "module": "deal_investors", "link_field": "deal",
              "panel": "tracker"},
-            {
-                "key": "tasks",
-                "label": "Tasks",
-                "module": "tasks",
-                "link_field": "related",
-                "columns": ["title", "due", "priority", "status", "assigned_to"],
-                "order": "status,due",
-            },
+            {"key": "tasks", "label": "Tasks", "module": "tasks", "link_field": "related", "panel": "tasks",
+             "order": "status,due"},
             {
                 "key": "contacts",
                 "label": "Company contacts",

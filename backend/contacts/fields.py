@@ -113,5 +113,9 @@ MODULE = register(
         subtitle=subtitle,
         duplicate_keys=duplicate_keys,
         segment_field="firm",
+        sections=[
+            {"key": "tasks", "label": "Tasks", "module": "tasks", "link_field": "related", "panel": "tasks",
+             "order": "status,due"},
+        ],
     )
 )

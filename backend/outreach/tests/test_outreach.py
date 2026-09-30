@@ -259,7 +259,8 @@ class ContactsCompanySideTests(OutreachBase):
         schema = self.client.get("/api/schema/").json()
         outreach = next(m for m in schema["modules"] if m["key"] == "outreach")
         self.assertEqual({s["key"]: (s["status"], s.get("via")) for s in outreach["sections"]},
-                         {"deal": ("ready", None), "contacts": ("ready", "company"), "history": ("ready", "company")})
+                         {"tasks": ("ready", None), "deal": ("ready", None), "contacts": ("ready", "company"),
+                          "history": ("ready", "company")})
         self.assertEqual(outreach["pipeline"]["stages"][0], {"value": "identified", "label": "Identified"})
         self.assertTrue(outreach["timeline"])
         self.assertTrue(o["id"])

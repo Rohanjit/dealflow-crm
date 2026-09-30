@@ -1,7 +1,6 @@
-from django.db.models import Q
 from django.utils import timezone
 
-from core.registry import FieldDef, ModuleDef, register
+from core.registry import FieldDef, ModuleDef, active_targets, get_module, register
 
 from .models import PRIORITIES, STATUSES, Task
 
@@ -46,12 +45,17 @@ def task_filters(qs, params, user=None):
     return qs
 
 
+def related_title(t: Task) -> str:
+    """The name of what the task is about (a deal and an outreach attempt are named after their company)."""
+    f = next(f for f in FIELDS if f.key == "related")
+    for mkey, attr in active_targets(f):
+        if getattr(t, f"{attr}_id") is not None:
+            return get_module(mkey).title_of(getattr(t, attr))
+    return ""
+
+
 def task_subtitle(t: Task) -> str:
-    related = next((x for x in (t.deal, t.outreach, t.investor, t.contact) if x is not None), None)
-    about = ""
-    if related is not None:
-        about = related.company.name if hasattr(related, "company_id") else str(related)
-    return " · ".join(p for p in (about, t.get_status_display()) if p)
+    return " · ".join(p for p in (related_title(t), t.get_status_display()) if p)
 
 
 def task_before_save(obj: Task, values: dict, user):
@@ -81,9 +85,3 @@ TASKS = register(
     )
 )
 
-
-def due_now(qs, now=None):
-    """Tasks due by now: dated before today, or today with no time or a time that has passed."""
-    now = now or timezone.localtime()
-    today, clock = now.date(), now.time().replace(second=0, microsecond=0)
-    return qs.filter(Q(due__lt=today) | Q(due=today, due_time__isnull=True) | Q(due=today, due_time__lte=clock))

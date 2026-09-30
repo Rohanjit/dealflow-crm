@@ -141,6 +141,8 @@ MODULE = register(
                 "columns": ["full_name", "designation", "decision_level", "primary_contact", "work_email", "mobile"],
                 "order": "-primary_contact,decision_level,full_name",
             },
+            {"key": "tasks", "label": "Tasks", "module": "tasks", "link_field": "related", "panel": "tasks",
+             "order": "status,due"},
             {
                 "key": "deal_history",
                 "label": "Deal history",
