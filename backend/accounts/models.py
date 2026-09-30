@@ -97,6 +97,11 @@ class User(AbstractBaseUser):
     must_change_password = models.BooleanField(default=False)
     date_joined = models.DateTimeField(default=timezone.now)
 
+    # Vault PIN (see vault/pin.py): hashed like a password; wrong tries lock the Vault for a while.
+    vault_pin = models.CharField(max_length=128, blank=True)
+    vault_pin_failures = models.PositiveSmallIntegerField(default=0)
+    vault_locked_until = models.DateTimeField(null=True, blank=True)
+
     # Per-user display preferences, applied only by the frontend.
     date_format = models.CharField(max_length=12, choices=DATE_FORMATS, default="DD/MM/YYYY")
     number_grouping = models.CharField(max_length=15, choices=NUMBER_GROUPINGS, default="indian")

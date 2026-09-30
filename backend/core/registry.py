@@ -275,6 +275,9 @@ class ModuleDef:
     before_save: Callable | None = None
     importable: bool = True  # offered in Import from Excel
     in_search: bool = True  # shown in the global search (the investor tracker isn't: investors already are)
+    # Extra check before any read or write, on top of role permissions: (request) -> None, raising
+    # PermissionDenied when closed. The Vault uses it for its PIN.
+    gate: Callable | None = None
 
     def title_of(self, obj) -> str:
         return self.title_fn(obj) if self.title_fn else getattr(obj, self.title_field)

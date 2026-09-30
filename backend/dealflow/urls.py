@@ -7,6 +7,7 @@ from accounts import views as a
 from core import views as c
 from deals import views as d
 from tasks import views as t
+from vault import views as v
 
 api = [
     path("app/", a.AppView.as_view()),
@@ -49,6 +50,13 @@ api = [
     path("dashboard/", d.DashboardView.as_view()),
     path("deals/<int:pk>/matches/", d.MatchesView.as_view()),
     path("tasks/alerts/", t.TaskAlertsView.as_view()),
+    path("vault/status/", v.VaultStatusView.as_view()),
+    path("vault/pin/", v.VaultPinView.as_view()),
+    path("vault/unlock/", v.VaultUnlockView.as_view()),
+    path("vault/lock/", v.VaultLockView.as_view()),
+    path("vault/upload/", v.VaultUploadView.as_view()),
+    path("vault/<int:pk>/download/", v.VaultDownloadView.as_view()),
+    path("users/<int:pk>/reset-vault-pin/", v.UserVaultPinResetView.as_view()),
     path("health/", c.HealthView.as_view()),
 ]
 

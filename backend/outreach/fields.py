@@ -105,6 +105,7 @@ COMPANIES = register(
                 "columns": ["full_name", "designation", "decision_level", "primary_contact", "work_email", "mobile"],
                 "order": "-primary_contact,decision_level,full_name",
             },
+            {"key": "documents", "label": "Documents", "module": "vault", "panel": "documents"},
             {
                 "key": "deals",
                 "label": "Deals",
@@ -253,6 +254,7 @@ OUTREACH = register(
         sections=[
             {"key": "tasks", "label": "Tasks", "module": "tasks", "link_field": "related", "panel": "tasks",
              "order": "status,due"},
+            {"key": "documents", "label": "Documents", "module": "vault", "panel": "documents"},
             {
                 "key": "deal",
                 "label": "Deal",

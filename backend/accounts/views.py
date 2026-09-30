@@ -203,6 +203,7 @@ def user_payload(u: User) -> dict:
         "must_change_password": u.must_change_password,
         "last_login": u.last_login.isoformat() if u.last_login else None,
         "date_joined": u.date_joined.isoformat(),
+        "has_vault_pin": bool(u.vault_pin),
     }
 
 

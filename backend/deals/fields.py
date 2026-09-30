@@ -179,7 +179,7 @@ DEALS = register(
                 "columns": ["full_name", "designation", "decision_level", "primary_contact", "work_email", "mobile"],
                 "order": "-primary_contact,decision_level,full_name",
             },
-            {"key": "documents", "label": "Documents", "available_with": "vault"},
+            {"key": "documents", "label": "Documents", "module": "vault", "panel": "documents"},
         ],
     )
 )

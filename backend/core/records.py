@@ -12,6 +12,7 @@ from django.core.validators import EmailValidator, URLValidator
 from django.db import transaction
 from django.db.models import Case, F, IntegerField, Q, QuerySet, Value, When
 from django.db.models.functions import Coalesce
+from django.utils import timezone
 
 from .models import ChoiceOption, Tag
 from .registry import CURRENCY_CODES, UNIT_MULTIPLIER, FieldDef, ModuleDef, active_targets, get_module
@@ -96,6 +97,8 @@ def _read(obj, f: FieldDef):
     if t in ("decimal", "percent"):
         return dec_str(v)
     if t == "date":
+        if isinstance(v, dt.datetime):  # a timestamp shown as a date (e.g. "Uploaded on"): the firm's day
+            v = timezone.localtime(v).date()
         return v.isoformat() if v else None
     return v
 
@@ -683,6 +686,13 @@ def _link_filter(qs: QuerySet, mod: ModuleDef, f: FieldDef, params) -> QuerySet:
     return qs
 
 
+def _is_timestamp(mod: ModuleDef, key: str) -> bool:
+    try:
+        return mod.model._meta.get_field(key).get_internal_type() == "DateTimeField"
+    except Exception:
+        return False
+
+
 def _order_terms(mod: ModuleDef, key: str, desc: bool) -> list:
     """Order-by expressions for one field. Empty values always sort last."""
 
@@ -769,6 +779,8 @@ def filter_queryset(qs: QuerySet, mod: ModuleDef, params, user, enabled: dict) -
             qs = qs.filter(**{f"{col}__icontains": raw})
         elif t in ("integer", "decimal", "percent", "money", "date", "datetime"):
             target = f"{col}_value" if t == "money" else col
+            if t == "date" and not f.via and _is_timestamp(mod, f.key):
+                target = f"{col}__date"
             dated = t in ("date", "datetime")
             lo_key, hi_key = (f"{k}_from", f"{k}_to") if dated else (f"{k}_min", f"{k}_max")
             conv = _to_date if dated else _to_decimal

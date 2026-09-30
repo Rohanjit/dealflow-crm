@@ -143,6 +143,7 @@ MODULE = register(
             },
             {"key": "tasks", "label": "Tasks", "module": "tasks", "link_field": "related", "panel": "tasks",
              "order": "status,due"},
+            {"key": "documents", "label": "Documents", "module": "vault", "panel": "documents"},
             {
                 "key": "deal_history",
                 "label": "Deal history",

@@ -150,7 +150,7 @@ class ContactListTests(ContactTestBase):
         self.assertFalse(firm["can_disable"])
         investors = next(m for m in schema["modules"] if m["key"] == "investors")
         sections = {s["key"]: s["status"] for s in investors["sections"]}
-        self.assertEqual(sections, {"contacts": "ready", "tasks": "ready", "deal_history": "ready"})
+        self.assertEqual(sections, {"contacts": "ready", "tasks": "ready", "documents": "ready", "deal_history": "ready"})
         # someone who can't see contacts doesn't get the section
         u = self.make_user("inv@firm.com", self.make_role("Investors only", {"investors": ["view"]}))
         investors = self.client_for(u).get("/api/schema/").json()["modules"][0]

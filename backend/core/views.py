@@ -35,6 +35,20 @@ def _require(user, module: str, action: str):
         raise PermissionDenied(f"Your role can't {verb} {get_module(module).label}.")
 
 
+def _open(request, mod):
+    """The module's own extra check (the Vault's PIN), after the role check."""
+    if mod.gate:
+        mod.gate(request)
+
+
+def _is_open(request, mod) -> bool:
+    try:
+        _open(request, mod)
+    except PermissionDenied:
+        return False
+    return True
+
+
 # ---------------------------------------------------------------- schema
 
 
@@ -101,6 +115,7 @@ class LookupView(APIView):
         mod = _module(module)
         if not _can_lookup(request.user, module):
             raise PermissionDenied(f"Your role can't see {mod.label}.")
+        _open(request, mod)
         ids = [int(p) for p in (request.query_params.get("ids") or "").split(",") if p.strip().isdigit()]
         if ids:
             qs = mod.model.objects.filter(pk__in=ids[:100])
@@ -176,6 +191,7 @@ class RecordListView(APIView):
     def get(self, request, module):
         mod = _module(module)
         _require(request.user, module, "view")
+        _open(request, mod)
         enabled = enabled_map(module)
         qs = mod.model.objects.filter(archived_at__isnull=True)
         qs = with_related(filter_queryset(qs, mod, request.query_params, request.user, enabled), mod)
@@ -186,6 +202,9 @@ class RecordListView(APIView):
     def post(self, request, module):
         mod = _module(module)
         _require(request.user, module, "create")
+        _open(request, mod)
+        if module == "vault":
+            raise ValidationError({"detail": "Upload documents through the Vault's upload page."})
         values, errors = clean_values(mod, request.data, enabled=enabled_map(module))
         if errors:
             raise ValidationError(errors)
@@ -204,11 +223,13 @@ class RecordDetailView(APIView):
     def get(self, request, module, pk):
         mod = _module(module)
         _require(request.user, module, "view")
+        _open(request, mod)
         return Response(serialize(self._get(mod, pk), mod))
 
     def patch(self, request, module, pk):
         mod = _module(module)
         _require(request.user, module, "edit")
+        _open(request, mod)
         obj = self._get(mod, pk)
         values, errors = clean_values(mod, request.data, enabled=enabled_map(module), instance=obj, partial=True)
         if errors:
@@ -220,6 +241,7 @@ class RecordDetailView(APIView):
         """Deleting archives the record. Only admins can remove it for good (from the Archive)."""
         mod = _module(module)
         _require(request.user, module, "delete")
+        _open(request, mod)
         obj = self._get(mod, pk)
         obj.archived_at = timezone.now()
         obj.archived_by = request.user
@@ -231,6 +253,7 @@ class RecordExportView(APIView):
     def get(self, request, module):
         mod = _module(module)
         _require(request.user, module, "view")
+        _open(request, mod)
         enabled = enabled_map(module)
         qs = mod.model.objects.filter(archived_at__isnull=True)
         qs = with_related(filter_queryset(qs, mod, request.query_params, request.user, enabled), mod)
@@ -293,6 +316,7 @@ class NotesView(APIView):
         if not mod.timeline:
             raise NotFound("This module has no interaction log.")
         _require(request.user, module, action)
+        _open(request, mod)
         if not mod.model.objects.filter(pk=pk, archived_at__isnull=True).exists():
             raise NotFound(f"This {mod.singular.lower()} doesn't exist or has been archived.")
         return mod
@@ -427,6 +451,8 @@ class SearchView(APIView):
         for mod in all_modules():
             if mod.key not in BUILT_MODULES or not mod.in_search or not request.user.can(mod.key, "view"):
                 continue
+            if not _is_open(request, mod):  # a locked Vault keeps its document titles out of search
+                continue
             enabled = enabled_map(mod.key)
             qs = filter_queryset(
                 mod.model.objects.filter(archived_at__isnull=True), mod, {"q": q}, request.user, enabled
@@ -461,6 +487,8 @@ class ArchiveListView(APIView):
         for mod in all_modules():
             if mod.key not in BUILT_MODULES or (module and module != mod.key):
                 continue
+            if not _is_open(request, mod):
+                continue
             qs = with_related(mod.model.objects.filter(archived_at__isnull=False), mod)
             if q:
                 qs = qs.filter(**{f"{mod.title_lookup}__icontains": q})
@@ -485,6 +513,7 @@ class ArchiveItemView(APIView):
 
     def _get(self, module, pk):
         mod = _module(module)
+        _open(self.request, mod)
         return mod, get_object_or_404(mod.model, pk=pk, archived_at__isnull=False)
 
     def post(self, request, module, pk):

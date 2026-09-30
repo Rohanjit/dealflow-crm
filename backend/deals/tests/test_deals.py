@@ -295,7 +295,7 @@ class TrackerTests(DealBase):
         schema = self.client.get("/api/schema/").json()
         inv = next(m for m in schema["modules"] if m["key"] == "investors")
         self.assertEqual({s["key"]: s["status"] for s in inv["sections"]},
-                         {"contacts": "ready", "tasks": "ready", "deal_history": "ready"})
+                         {"contacts": "ready", "tasks": "ready", "documents": "ready", "deal_history": "ready"})
 
     def test_permissions_follow_active_deals(self):
         viewer = self.make_user("v@firm.com", self.make_role("Viewers", {"deals": ["view"], "investors": ["view"]}))
