@@ -173,6 +173,11 @@ def restore_backup(fileobj) -> dict:
                     with connection.cursor() as c:
                         c.execute("SET CONSTRAINTS ALL IMMEDIATE")
                 call_command("flush", interactive=False, verbosity=0)
+                if connection.vendor == "postgresql":
+                    # Records can point at ones loaded later (a contact at a company from Outreach),
+                    # so foreign keys are checked at commit rather than row by row.
+                    with connection.cursor() as c:
+                        c.execute("SET CONSTRAINTS ALL DEFERRED")
                 call_command("loaddata", str(data_file), verbosity=0)
             media = Path(settings.MEDIA_ROOT)
             if media.exists():

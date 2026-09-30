@@ -41,6 +41,29 @@ class BackupTests(APITestBase):
         self.assertEqual((media / "doc.txt").read_text(), "secret deal memo")
         self.assertTrue(r.json()["safety_backup"].startswith("dealflow-pre-restore-"))
 
+    def test_restore_with_records_linked_across_modules(self):
+        """Records pointing at ones from modules loaded later (a contact at an Outreach company) restore
+        on Postgres as well as SQLite."""
+        from contacts.models import Contact
+        from deals.models import Deal, DealInvestor
+        from tasks.models import Task
+
+        c = self.client
+        inv = c.post("/api/m/investors/", {"firm_name": "Blume"}, format="json").json()
+        co = c.post("/api/m/companies/", {"name": "Acme Foods"}, format="json").json()
+        c.post("/api/m/contacts/", {"full_name": "Ravi", "firm": f"companies:{co['id']}"}, format="json")
+        o = c.post("/api/m/outreach/", {"company": f"companies:{co['id']}", "stage": "won"}, format="json").json()
+        deal = Deal.objects.get(outreach_id=o["id"])
+        c.post("/api/m/deal_investors/", {"deal": f"deals:{deal.pk}", "investor": f"investors:{inv['id']}"}, format="json")
+        c.post("/api/m/tasks/", {"title": "Call Ravi", "related": f"deals:{deal.pk}"}, format="json")
+        before = (Contact.objects.get().company_id, Deal.objects.count(), DealInvestor.objects.count(), Task.objects.count())
+        blob = open(backups.create_backup("manual"), "rb").read()
+        Task.objects.all().delete()
+        r = c.post("/api/backups/restore/", {"file": SimpleUploadedFile("b.zip", blob), "confirm": "RESTORE"}, format="multipart")
+        self.assertEqual(r.status_code, 200, r.content)
+        after = (Contact.objects.get().company_id, Deal.objects.count(), DealInvestor.objects.count(), Task.objects.count())
+        self.assertEqual(after, before)
+
     def test_restore_rejects_garbage_and_needs_confirm(self):
         r = self.client.post("/api/backups/restore/", {"file": SimpleUploadedFile("b.zip", b"nope"), "confirm": "RESTORE"}, format="multipart")
         self.assertEqual(r.status_code, 400)
