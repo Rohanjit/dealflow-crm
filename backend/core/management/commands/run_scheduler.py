@@ -9,6 +9,7 @@ from django.core.management.base import BaseCommand
 from django.db import close_old_connections
 
 from accounts import lockout
+from core import health
 from core.backups import BackupError, create_backup, due_for_daily_backup
 
 log = logging.getLogger("dealflow.scheduler")
@@ -25,6 +26,7 @@ class Command(BaseCommand):
         log.info("Scheduler started")
         while True:
             close_old_connections()
+            health.beat()
             try:
                 if due_for_daily_backup():
                     p = create_backup("daily")

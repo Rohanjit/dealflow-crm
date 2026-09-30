@@ -1,5 +1,6 @@
 import json
 
+from django.conf import settings
 from django.db import transaction
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
@@ -41,6 +42,7 @@ def status_payload(request) -> dict:
         "idle_minutes": vp.IDLE_MINUTES,
         "accepted": ACCEPTED,
         "max_file_mb": max_bytes() // (1024 * 1024),
+        "max_upload_mb": settings.VAULT_MAX_UPLOAD_MB,
     }
 
 

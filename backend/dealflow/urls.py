@@ -5,6 +5,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 
 from accounts import views as a
 from core import views as c
+from core.health import healthz
 from deals import views as d
 from tasks import views as t
 from vault import views as v
@@ -58,7 +59,6 @@ api = [
     path("vault/upload/", v.VaultUploadView.as_view()),
     path("vault/<int:pk>/download/", v.VaultDownloadView.as_view()),
     path("users/<int:pk>/reset-vault-pin/", v.UserVaultPinResetView.as_view()),
-    path("health/", c.HealthView.as_view()),
 ]
 
 
@@ -80,6 +80,7 @@ def spa(request, rest=""):
 
 
 urlpatterns = [
+    path("healthz", healthz),
     path("api/", include(api)),
     re_path(r"^api/(?P<rest>.*)$", api_not_found),
     re_path(r"^(?P<rest>.*)$", spa),

@@ -25,6 +25,8 @@ from .registry import CURRENCIES, FieldDef, ModuleDef, active_targets, get_modul
 User = get_user_model()
 
 MAX_ROWS = 20_000
+MAX_COLUMNS = 200
+MAX_BLANK_ROWS = 1_000  # blank rows tolerated before the cap counts them
 TOKEN_TTL = 24 * 3600
 CU_SUFFIX = ":cu"  # mapping target for a column holding a money field's currency + unit ("INR Cr")
 
@@ -58,7 +60,12 @@ def read_rows(filename: str, data: bytes) -> list[list[str]]:
         except Exception:
             raise ImportError_("This Excel file couldn't be opened. Save it as .xlsx and try again.")
         ws = wb.worksheets[0]
-        rows = [[_cell_to_str(c) for c in row] for row in ws.iter_rows(values_only=True)]
+        # Stream with hard caps, so a small file that expands hugely can't exhaust memory.
+        rows = []
+        for row in ws.iter_rows(values_only=True, max_col=MAX_COLUMNS):
+            rows.append([_cell_to_str(c) for c in row])
+            if len(rows) > MAX_ROWS + 1 + MAX_BLANK_ROWS:
+                break
         wb.close()
     elif name.endswith(".csv") or name.endswith(".txt"):
         for enc in ("utf-8-sig", "cp1252", "latin-1"):

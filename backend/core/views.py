@@ -1,5 +1,6 @@
 import datetime as dt
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Max, ProtectedError
 from django.http import FileResponse, Http404, HttpResponse
@@ -11,7 +12,7 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.permissions import IsActiveUser, PublicEndpoint, flag_required
+from accounts.permissions import IsActiveUser, flag_required
 
 from . import backups, importer
 from .exporter import export_workbook
@@ -373,8 +374,8 @@ class ImportUploadView(APIView):
         f = request.FILES.get("file")
         if not f:
             raise ValidationError({"file": "Choose a file to upload."})
-        if f.size > 20 * 1024 * 1024:
-            raise ValidationError({"file": "Files are limited to 20 MB."})
+        if f.size > settings.IMPORT_MAX_FILE_MB * 1024 * 1024:
+            raise ValidationError({"file": f"Files are limited to {settings.IMPORT_MAX_FILE_MB} MB."})
         try:
             rows = importer.read_rows(f.name, f.read())
         except importer.ImportError_ as e:
@@ -769,10 +770,3 @@ class BackupRestoreView(APIView):
             raise ValidationError({"file": str(e)})
         return Response(result)
 
-
-class HealthView(APIView):
-    permission_classes = [PublicEndpoint]
-    authentication_classes = []
-
-    def get(self, request):
-        return Response({"ok": True})

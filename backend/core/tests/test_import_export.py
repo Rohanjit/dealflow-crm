@@ -166,3 +166,47 @@ class ExportTests(APITestBase):
     def test_export_needs_view(self):
         u = self.make_user("n@firm.com", Role.objects.create(name="Nobody"))
         self.assertEqual(self.client_for(u).get("/api/m/investors/export/").status_code, 403)
+
+
+class FormulaSafetyTests(APITestBase):
+    """Spreadsheet formula injection: text that looks like a formula must never run in Excel."""
+
+    RISKY = ['=HYPERLINK("http://evil.example","Open")', "+91 98200 12345", "-2+3+cmd|' /C calc'!A0", "@SUM(A1:A2)"]
+
+    def test_export_writes_formula_like_text_as_plain_text(self):
+        for i, text in enumerate(self.RISKY):
+            r = self.client.post("/api/m/investors/", {"firm_name": text if i == 0 else f"Firm {i}", "notes": text}, format="json")
+            self.assertEqual(r.status_code, 201, r.content)
+        data = self.client.get("/api/m/investors/export/").content
+        import zipfile
+        sheet_xml = zipfile.ZipFile(io.BytesIO(data)).read("xl/worksheets/sheet1.xml").decode()
+        self.assertNotIn("<f>", sheet_xml)  # no formula elements anywhere
+        ws = load_workbook(io.BytesIO(data)).active
+        cells = [c for row in ws.iter_rows(min_row=2) for c in row if isinstance(c.value, str) and c.value in self.RISKY]
+        self.assertGreaterEqual(len(cells), len(self.RISKY))
+        for c in cells:
+            self.assertEqual(c.data_type, "s")
+            self.assertTrue(c.quotePrefix)  # shown as typed, stays text if edited
+
+    def test_formula_text_round_trips_unchanged(self):
+        self.client.post("/api/m/investors/", {"firm_name": "=1+1 Capital"}, format="json")
+        data = self.client.get("/api/m/investors/export/").content
+        self.client.delete(f"/api/m/investors/{Investor.objects.get().pk}/")
+        up = self.client.post(f"{BASE}upload/", {"file": SimpleUploadedFile("e.xlsx", data)}, format="multipart").json()
+        r = self.client.post(f"{BASE}commit/", {"token": up["token"], "mapping": up["mapping"], "include_rows": [2]}, format="json")
+        self.assertEqual(r.json()["created"], 1, r.content)
+        self.assertEqual(Investor.objects.get(archived_at__isnull=True).firm_name, "=1+1 Capital")
+
+    def test_imported_formulas_arrive_as_their_values(self):
+        # Excel files are read for the values Excel showed, never the formulas behind them.
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["Firm name"])
+        ws.append(["=1+1"])
+        buf = io.BytesIO()
+        wb.save(buf)
+        up = self.client.post(f"{BASE}upload/", {"file": SimpleUploadedFile("f.xlsx", buf.getvalue())}, format="multipart")
+        # openpyxl stores no cached value, so the formula cell reads as empty rather than as "=1+1".
+        self.assertIn(up.status_code, (200, 400))
+        if up.status_code == 200:
+            self.assertNotIn("=1+1", str(up.json()))

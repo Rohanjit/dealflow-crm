@@ -36,6 +36,19 @@ def _datetime_cell(value: str | None):
     return dt.datetime.combine(d, dt.time.fromisoformat(at)) if at else d
 
 
+# Text starting with one of these could run as a formula (or a DDE command) when the sheet is opened.
+FORMULA_STARTS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def neutralise(cell):
+    """Keep risky text as plain text: typed as a string and marked with Excel's quote prefix, so it
+    shows exactly as stored (a '+91' phone number stays readable) and never runs, even if someone
+    later edits the cell."""
+    if isinstance(cell.value, str) and cell.value.startswith(FORMULA_STARTS):
+        cell.data_type = "s"
+        cell.quotePrefix = True
+
+
 EXCEL_DATE = {"DD/MM/YYYY": "dd/mm/yyyy", "MM/DD/YYYY": "mm/dd/yyyy", "YYYY-MM-DD": "yyyy-mm-dd"}
 # Excel shows grouping by the viewer's locale; the Indian format needs an explicit pattern.
 EXCEL_NUMBER = {
@@ -71,6 +84,7 @@ def export_workbook(mod: ModuleDef, qs, user, enabled: dict, columns: list[str] 
     ws.title = mod.label[:31]
     ws.append(headers)
     for c in ws[1]:
+        neutralise(c)
         c.font = Font(bold=True, color="FFFFFF")
         c.fill = PatternFill("solid", fgColor="1F3A5F")
         c.alignment = Alignment(vertical="center", wrap_text=True)
@@ -122,6 +136,8 @@ def export_workbook(mod: ModuleDef, qs, user, enabled: dict, columns: list[str] 
         for i, fmt in enumerate(fmts, start=1):
             if fmt:
                 ws.cell(row=r, column=i).number_format = fmt
+        for c in ws[r]:
+            neutralise(c)
 
     for i, h in enumerate(headers, start=1):
         ws.column_dimensions[get_column_letter(i)].width = min(max(len(h) + 2, 14), 40)

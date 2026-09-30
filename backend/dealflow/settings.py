@@ -40,6 +40,8 @@ def _secret_key() -> str:
 SECRET_KEY = _secret_key()
 DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
 ALLOWED_HOSTS = [h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "*").split(",") if h.strip()]
+if "*" not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS += ["localhost", "127.0.0.1"]  # the container's own health check
 CSRF_TRUSTED_ORIGINS = [
     o.strip() for o in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()
 ]
@@ -63,10 +65,13 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "dealflow.security.SecurityHeadersMiddleware",
+    "dealflow.security.RequestSizeMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
+    "dealflow.security.CsrfTokenHeaderMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -133,17 +138,47 @@ STORAGES = {
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# ---------------------------------------------------------------- browser and transport security
+# DEALFLOW_HTTPS=1 when Dealflow is reached over HTTPS through a reverse proxy that terminates TLS:
+# secure-only cookies, HSTS, redirects from plain HTTP, and trust in the proxy's X-Forwarded-Proto.
+HTTPS = os.environ.get("DEALFLOW_HTTPS", os.environ.get("DEALFLOW_SECURE_COOKIES", "0")) == "1"
+
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 14
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
-# Firms may run behind their own HTTPS proxy; turn these on there.
-SESSION_COOKIE_SECURE = os.environ.get("DEALFLOW_SECURE_COOKIES", "0") == "1"
-CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
+CSRF_COOKIE_HTTPONLY = True  # the app gets the token from a response header (dealflow/security.py)
+SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = HTTPS
+if HTTPS:
+    # __Host- cookies are refused by browsers unless secure, host-only and site-wide.
+    SESSION_COOKIE_NAME = "__Host-sessionid"
+    CSRF_COOKIE_NAME = "__Host-csrftoken"
+    SECURE_SSL_REDIRECT = True
+    SECURE_REDIRECT_EXEMPT = [r"^healthz$"]  # the container health check calls it over plain HTTP
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_HSTS_SECONDS = 60 * 60 * 24 * 365
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+# Origin only, never the path: invite links must not leak into anyone's logs through Referer.
+# (no-referrer would make browsers send "Origin: null" on changes, which the CSRF check refuses.)
+SECURE_REFERRER_POLICY = "strict-origin"
+SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
+X_FRAME_OPTIONS = "DENY"
 
-DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024
+# ---------------------------------------------------------------- request and upload sizes
+# JSON bodies stay small; files are limited per endpoint by dealflow.security.RequestSizeMiddleware
+# before anything is read. Uploads above 5 MB spool to the data volume, not the container's /tmp.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 1000
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
+FILE_UPLOAD_TEMP_DIR = DATA_DIR / "tmp"
+FILE_UPLOAD_TEMP_DIR.mkdir(parents=True, exist_ok=True)
+FILE_UPLOAD_PERMISSIONS = 0o640
 VAULT_MAX_FILE_MB = int(os.environ.get("DEALFLOW_VAULT_MAX_FILE_MB", "50"))
-FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+VAULT_MAX_UPLOAD_MB = int(os.environ.get("DEALFLOW_VAULT_MAX_UPLOAD_MB", "1024"))  # all files in one upload
+IMPORT_MAX_FILE_MB = int(os.environ.get("DEALFLOW_IMPORT_MAX_FILE_MB", "20"))
+RESTORE_MAX_MB = int(os.environ.get("DEALFLOW_RESTORE_MAX_MB", "4096"))
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
@@ -152,12 +187,15 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 50,
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "EXCEPTION_HANDLER": "rest_framework.views.exception_handler",
+    # Proxies in front of Dealflow, so per-IP limits see the client's address, not the proxy's.
+    "NUM_PROXIES": int(os.environ.get("DEALFLOW_PROXY_COUNT", "1" if HTTPS else "0")),
 }
 
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "filters": {"redact": {"()": "dealflow.redaction.RedactingFilter"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "filters": ["redact"]}},
     "root": {"handlers": ["console"], "level": os.environ.get("LOG_LEVEL", "INFO")},
     "loggers": {"django.request": {"level": "ERROR"}},
 }

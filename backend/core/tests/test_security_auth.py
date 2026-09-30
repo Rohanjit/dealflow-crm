@@ -263,7 +263,7 @@ class InviteTokenTests(SecurityTestBase):
 class EndpointAccessTests(SecurityTestBase):
     """Every API endpoint refuses anonymous callers, except the few that must work before sign-in."""
 
-    PUBLIC = {"app/", "setup/", "auth/login/", "auth/logout/", "invites/accept/<str:token>/", "health/"}
+    PUBLIC = {"app/", "setup/", "auth/login/", "auth/logout/", "invites/accept/<str:token>/"}
 
     def api_routes(self):
         from dealflow.urls import api

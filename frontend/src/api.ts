@@ -40,9 +40,17 @@ function parseErrorBody(body: unknown): { message: string; fields: Record<string
   return { message, fields, code };
 }
 
-function csrfToken(): string {
-  const m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
-  return m ? decodeURIComponent(m[1]) : "";
+// The CSRF cookie is HttpOnly; every API answer carries the current token in a header instead.
+let csrf = "";
+
+function remember(res: Response) {
+  const t = res.headers.get("X-CSRFToken");
+  if (t) csrf = t;
+}
+
+async function csrfToken(): Promise<string> {
+  if (!csrf) remember(await fetch("/api/app/", { credentials: "same-origin" }));
+  return csrf;
 }
 
 type Options = { method?: string; body?: unknown; form?: FormData; signal?: AbortSignal };
@@ -50,7 +58,7 @@ type Options = { method?: string; body?: unknown; form?: FormData; signal?: Abor
 export async function api<T = unknown>(path: string, opts: Options = {}): Promise<T> {
   const method = opts.method ?? (opts.body !== undefined || opts.form ? "POST" : "GET");
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (method !== "GET") headers["X-CSRFToken"] = csrfToken();
+  if (method !== "GET") headers["X-CSRFToken"] = await csrfToken();
   let body: BodyInit | undefined;
   if (opts.form) body = opts.form;
   else if (opts.body !== undefined) {
@@ -64,6 +72,7 @@ export async function api<T = unknown>(path: string, opts: Options = {}): Promis
     credentials: "same-origin",
     signal: opts.signal,
   });
+  remember(res);
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   let data: unknown = undefined;

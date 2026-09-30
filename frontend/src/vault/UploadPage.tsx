@@ -97,6 +97,9 @@ export default function UploadPage({ module }: { module: ModuleSchema }) {
   }
 
   const good = picked.filter((p) => !p.problem).length;
+  const totalMb = picked.filter((p) => !p.problem).reduce((n, p) => n + p.file.size, 0) / (1024 * 1024);
+  const maxUploadMb = status?.max_upload_mb ?? 1024;
+  const tooBig = totalMb > maxUploadMb;
   return (
     <Stack gap="lg" maw={1000}>
       <Breadcrumbs>
@@ -104,6 +107,7 @@ export default function UploadPage({ module }: { module: ModuleSchema }) {
         <Text size="sm">Upload</Text>
       </Breadcrumbs>
       <Title order={2}>Upload documents</Title>
+      {tooBig && <Alert color="orange">These files add up to {Math.ceil(totalMb)} MB. Upload at most {maxUploadMb} MB at a time.</Alert>}
       {problems.length > 0 && <Alert color="red">{problems.map((p, i) => <div key={i}>{p}</div>)}</Alert>}
 
       <Paper withBorder radius="md" p="lg">
@@ -153,7 +157,7 @@ export default function UploadPage({ module }: { module: ModuleSchema }) {
 
       <Group justify="flex-end" pb="xl">
         <Button variant="default" component={Link} to={returnTo ?? "/m/vault"}>Cancel</Button>
-        <Button onClick={upload} loading={busy} disabled={!good} leftSection={<IconCloudUpload size={16} />}>
+        <Button onClick={upload} loading={busy} disabled={!good || tooBig} leftSection={<IconCloudUpload size={16} />}>
           {good > 1 ? `Upload ${good} documents` : "Upload"}
         </Button>
       </Group>
