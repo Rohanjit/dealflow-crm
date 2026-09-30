@@ -163,6 +163,10 @@ No separate Interactions module: interactions are captured as dated notes inside
 - Optionally linked to an outreach record, active deal, investor or contact (and shown on that record).
 - Views: My tasks (today/overdue/upcoming); all tasks filterable by user, deal or status.
 - In-app notifications for due and overdue tasks.
+- Defaults chosen while building (30 Sep 2026, open to change):
+  - A task with only a date is due all that day; one with a time is due at that time. Times follow the firm's server clock.
+  - Reminders: a bell in the header with today's and overdue tasks, a notice on opening the app when something is overdue, when a timed task falls due, and when someone else assigns you a task. No emails (email notifications are not in V1).
+  - New tasks are assigned to whoever creates them unless changed; a task can be left unassigned.
 
 ### 6. Vault
 - File uploads only, stored on the firm's own server (Docker volume).

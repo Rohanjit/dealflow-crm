@@ -35,6 +35,9 @@ class TaskBasicsTests(TaskBase):
         self.assertIn("due", r.json())
         r = self.client.post(URL, {"due": "2026-10-12"}, format="json")
         self.assertIn("title", r.json())
+        # a form sending blank choices gets the defaults
+        blank = self.post({"title": "From the form", "priority": "", "status": ""})
+        self.assertEqual((blank["priority"], blank["status"]), ("medium", "open"))
 
     def test_read_only_fields_ignored(self):
         other = self.make_user("o@firm.com", self.make_role("Team", {"tasks": ["view", "create", "edit"]}))
@@ -152,7 +155,7 @@ class TaskAlertsTests(TaskBase):
             body = self.client.get("/api/tasks/alerts/").json()
         self.assertEqual(body["now"], "2026-10-12T15:00")
         self.assertEqual([t["id"] for t in body["overdue"]], [late["id"], passed["id"]])
-        self.assertEqual([t["id"] for t in body["today"]], [allday["id"], later["id"]])
+        self.assertEqual([t["id"] for t in body["today"]], [later["id"], allday["id"]])  # timed first
         self.assertEqual(body["count"], 4)
 
     def test_needs_tasks_access(self):

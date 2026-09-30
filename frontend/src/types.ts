@@ -49,6 +49,8 @@ export type FieldSchema = {
   via_module: string | null;
   pipeline_role: "stage" | "status" | "entered" | "exit" | null; // exit: a reason or date asked when leaving
   readonly: boolean; // set by the app, never typed in (e.g. "From outreach")
+  default_me: boolean; // user fields: a new record starts with whoever adds it
+  default: string | null; // choice fields: the starting value for a new record
 };
 
 export type Section = {

@@ -18,6 +18,7 @@ import { useMe, useModuleSchema, useSchema, useUsers } from "../context";
 import { errorMessage } from "../components/errors";
 import { MONTH_NAMES } from "../format";
 import type { FieldSchema, LookupItem, ModuleSchema, Page, RecordData, Schema } from "../types";
+import MyTasks from "../tasks/MyTasks";
 import BoardView from "./BoardView";
 import { FieldValue } from "./fields";
 import { useModuleLabels } from "./LinkInput";
@@ -78,6 +79,8 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
   };
   const [view, setView] = useState<"board" | "table">(() => (module.pipeline ? loadView(module.key) : "table"));
   const board = !!module.pipeline && view === "board";
+  // Tasks open on "My tasks", a grouped to-do list rather than a table.
+  const mine = module.key === "tasks" && segValue === "mine";
   const apiParams = withSegment(new URLSearchParams(params));
   apiParams.set("page_size", String(PAGE_SIZE));
   const queryString = apiParams.toString();
@@ -86,7 +89,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
     queryKey: ["records", module.key, queryString],
     queryFn: () => api<Page<RecordData>>(`m/${module.key}/?${queryString}`),
     placeholderData: keepPreviousData,
-    enabled: !board,
+    enabled: !board && !mine,
   });
 
   const setParam = (updates: Record<string, string | null>, resetPage = true) => {
@@ -121,7 +124,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
       <Group justify="space-between" align="flex-end">
         <div>
           <Title order={2}>{module.label}</Title>
-          <Text c="dimmed" size="sm">{data ? `${total.toLocaleString(me.number_grouping === "indian" ? "en-IN" : "en-US")} ${total === 1 ? module.singular.toLowerCase() : module.label.toLowerCase()}` : " "}</Text>
+          <Text c="dimmed" size="sm">{mine ? "Assigned to you and not done yet" : data ? `${total.toLocaleString(me.number_grouping === "indian" ? "en-IN" : "en-US")} ${total === 1 ? module.singular.toLowerCase() : module.label.toLowerCase()}` : " "}</Text>
         </div>
         <Group gap="xs">
           {module.perms.create && module.importable && (
@@ -153,7 +156,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
         <Button variant={activeFilters.length ? "light" : "default"} leftSection={<IconAdjustmentsHorizontal size={16} />} onClick={() => setFiltersOpen(true)}>
           Filters{activeFilters.length ? ` (${countFilters(activeFilters)})` : ""}
         </Button>
-        {!board && <ColumnPicker module={module} columns={shown.map((f) => f.key)} onChange={(c) => { setColumns(c); saveColumns(module.key, c); }} />}
+        {!board && !mine && <ColumnPicker module={module} columns={shown.map((f) => f.key)} onChange={(c) => { setColumns(c); saveColumns(module.key, c); }} />}
         {module.pipeline && (
           <SegmentedControl size="sm" value={view} onChange={(v) => { setView(v as "board" | "table"); saveView(module.key, v); }}
             data={[
@@ -173,7 +176,9 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
         {isFetching && <Loader size="xs" />}
       </Group>
 
-      {board ? (
+      {mine ? (
+        <MyTasks module={module} params={params} />
+      ) : board ? (
         <BoardView module={module} params={params} />
       ) : error ? (
         <Paper withBorder p="lg"><Text c="red">{errorMessage(error)}</Text></Paper>
@@ -222,7 +227,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
         </Paper>
       )}
 
-      {!board && total > PAGE_SIZE && (
+      {!board && !mine && total > PAGE_SIZE && (
         <Group justify="space-between">
           <Text size="sm" c="dimmed">
             Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}

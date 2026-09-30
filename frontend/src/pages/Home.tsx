@@ -1,5 +1,5 @@
 import { Button, Group, Paper, SimpleGrid, Stack, Text, ThemeIcon, Title } from "@mantine/core";
-import { IconBriefcase, IconBuildingBank, IconFileImport, IconPlus, IconTargetArrow, IconUsers } from "@tabler/icons-react";
+import { IconBriefcase, IconBuildingBank, IconChecklist, IconFileImport, IconPlus, IconTargetArrow, IconUsers } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
 
 import { useApp, useSchema } from "../context";
@@ -10,8 +10,9 @@ const CARDS: Record<string, { icon: typeof IconBriefcase; color: string; blurb: 
   contacts: { icon: IconUsers, color: "grape", blurb: "People at investor firms and client companies: how to reach them and who knows them best." },
   outreach: { icon: IconTargetArrow, color: "orange", blurb: "Companies you're approaching for mandates, from first contact to mandate won." },
   deals: { icon: IconBriefcase, color: "navy", blurb: "Mandates being executed: stages, deal team, fees, and each deal's investor tracker with suggested investors." },
+  tasks: { icon: IconChecklist, color: "violet", blurb: "To-dos with due dates and reminders, tied to the deals, outreach, investors and contacts they're about." },
 };
-const OPEN_LABEL: Record<string, string> = { outreach: "Open pipeline", deals: "Open active deals" };
+const OPEN_LABEL: Record<string, string> = { outreach: "Open pipeline", deals: "Open active deals", tasks: "Open my tasks" };
 
 export default function Home() {
   const { info, me } = useApp();

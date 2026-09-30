@@ -103,6 +103,7 @@ class FieldDef:
     allow_negative: bool = False  # money/number fields that can be below zero (EBITDA, PAT)
     readonly: bool = False  # set by the app (e.g. "Created by"), never by forms or imports
     default_me: bool = False  # user fields: a new record starts with whoever adds it (a task's assignee)
+    default: str | None = None  # choice fields: the value used when none is given (e.g. a task's priority)
 
     def __post_init__(self):
         assert self.type in FIELD_TYPES, f"Unknown field type {self.type}"
@@ -153,6 +154,7 @@ class FieldDef:
             "pipeline_role": self.pipeline_role,
             "readonly": self.readonly,
             "default_me": self.default_me,
+            "default": self.default,
         }
 
 

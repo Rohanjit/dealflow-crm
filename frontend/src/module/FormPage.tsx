@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { api } from "../api";
-import { useModuleSchema } from "../context";
+import { useMe, useModuleSchema } from "../context";
 import { errorMessage, fieldErrors, notifyOk } from "../components/errors";
 import type { FieldSchema, LinkValue, ModuleSchema, RecordData } from "../types";
 import { emptyValue, FieldInput } from "./fields";
@@ -36,6 +36,7 @@ function visible(f: FieldSchema, module: ModuleSchema, editing: boolean, record?
 export default function FormPage() {
   const { module: key, id } = useParams();
   const { module, isLoading } = useModuleSchema(key);
+  const me = useMe();
   const nav = useNavigate();
   const qc = useQueryClient();
   const [params] = useSearchParams();
@@ -86,6 +87,8 @@ export default function FormPage() {
     for (const f of module.fields) {
       if (editing) init[f.key] = rec.data![f.key];
       else if (f.pipeline_role === "stage" && module.pipeline) init[f.key] = module.pipeline.stages[0].value;
+      else if (f.default_me && f.type === "user" && !f.multi) init[f.key] = me.id;
+      else if (f.default != null && !params.get(f.key)) init[f.key] = f.default;
       else init[f.key] = prefill(f, params.get(f.key)) ?? emptyValue(f);
     }
     setValues(init);

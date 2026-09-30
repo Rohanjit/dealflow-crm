@@ -41,12 +41,13 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <MantineProvider theme={theme} defaultColorScheme="light">
       <QueryClientProvider client={queryClient}>
-        <ModalsProvider>
-          <Notifications position="top-right" />
-          <BrowserRouter>
+        {/* Inside the router, so notices and dialogs can hold links. */}
+        <BrowserRouter>
+          <ModalsProvider>
+            <Notifications position="bottom-right" />
             <App />
-          </BrowserRouter>
-        </ModalsProvider>
+          </ModalsProvider>
+        </BrowserRouter>
       </QueryClientProvider>
     </MantineProvider>
   </React.StrictMode>,

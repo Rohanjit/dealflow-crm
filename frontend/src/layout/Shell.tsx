@@ -11,6 +11,7 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import { api } from "../api";
 import { useApp, resetSession } from "../context";
 import Logo from "../components/Logo";
+import TaskBell from "../tasks/TaskBell";
 import GlobalSearch from "./GlobalSearch";
 
 const ICONS: Record<string, typeof IconHome> = {
@@ -58,6 +59,8 @@ export default function Shell() {
             </UnstyledButton>
           </Group>
           <GlobalSearch />
+          <Group gap="xs" wrap="nowrap">
+          <TaskBell />
           <Menu position="bottom-end" width={220}>
             <Menu.Target>
               <UnstyledButton>
@@ -74,6 +77,7 @@ export default function Shell() {
               <Menu.Item onClick={signOut} leftSection={<IconLogout size={16} />}>Sign out</Menu.Item>
             </Menu.Dropdown>
           </Menu>
+          </Group>
         </Group>
       </AppShell.Header>
 

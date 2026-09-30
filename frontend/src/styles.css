@@ -74,3 +74,7 @@ body {
   min-width: 3px;
   border-radius: 0 4px 4px 0; /* square at the baseline, rounded at the data end */
 }
+
+/* Task lists */
+.df-task-row + .df-task-row { border-top: 1px solid var(--mantine-color-gray-2); }
+.df-task-row:hover { background: var(--mantine-color-gray-0); }

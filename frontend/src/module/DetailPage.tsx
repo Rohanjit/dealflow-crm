@@ -1,12 +1,14 @@
 import { Anchor, Badge, Breadcrumbs, Button, Center, Grid, Group, Loader, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import { modals } from "@mantine/modals";
-import { IconArchive, IconArrowUpRight, IconPencil } from "@tabler/icons-react";
+import { IconArchive, IconArrowUpRight, IconCheck, IconPencil, IconRotate } from "@tabler/icons-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api";
 import { useApp, useModuleSchema } from "../context";
 import DealTracker from "../deals/DealTracker";
+import { useCompleteTask } from "../tasks/api";
+import TasksPanel from "../tasks/TasksPanel";
 import { errorMessage, notifyError, notifyOk } from "../components/errors";
 import { formatDateTime } from "../format";
 import type { FieldSchema, LinkValue, ModuleSchema, RecordData } from "../types";
@@ -25,6 +27,7 @@ export default function DetailPage() {
   const { info, me } = useApp();
   const nav = useNavigate();
   const qc = useQueryClient();
+  const complete = useCompleteTask();
   const rec = useQuery({
     queryKey: ["record", key, id],
     queryFn: () => api<RecordData>(`m/${key}/${id}/`),
@@ -110,6 +113,11 @@ export default function DetailPage() {
           <HeaderBadges r={r} module={module} />
         </div>
         <Group gap="xs">
+          {module.key === "tasks" && module.perms.edit && (
+            r.status === "done"
+              ? <Button variant="default" leftSection={<IconRotate size={16} />} onClick={() => complete(r, false)}>Reopen</Button>
+              : <Button variant="light" color="teal" leftSection={<IconCheck size={16} />} onClick={() => complete(r, true)}>Mark as done</Button>
+          )}
           {module.perms.delete && (
             <Button variant="default" color="red" leftSection={<IconArchive size={16} />} onClick={archive}>Delete</Button>
           )}
@@ -125,9 +133,9 @@ export default function DetailPage() {
       <Grid.Col span={{ base: 12, lg: module.timeline ? 8 : 12 }}>
       <Stack gap="lg">
       {module.sections.filter((s) => s.status === "ready" && s.module).map((s) => (
-        s.panel === "tracker"
-          ? <DealTracker key={s.key} section={s} deal={r} />
-          : <RelatedSection key={s.key} section={s} parent={module} record={r} />
+        s.panel === "tracker" ? <DealTracker key={s.key} section={s} deal={r} />
+          : s.panel === "tasks" ? <TasksPanel key={s.key} section={s} parent={module} record={r} />
+            : <RelatedSection key={s.key} section={s} parent={module} record={r} />
       ))}
 
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
@@ -181,6 +189,7 @@ const HEADER_FIELDS: Record<string, string[]> = {
   outreach: ["transaction_type", "expected_size", "lead_banker"],
   deals: ["transaction_type", "target_raise", "lead_banker", "exclusivity"],
   deal_investors: ["deal"],
+  tasks: ["status", "priority", "due", "assigned_to", "related"],
 };
 
 function HeaderBadges({ r, module }: { r: RecordData; module: ModuleSchema }) {

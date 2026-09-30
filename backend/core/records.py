@@ -515,6 +515,8 @@ def clean_values(mod: ModuleDef, data: dict, *, enabled: dict, instance=None, pa
         except FieldError as e:
             errors[f.key] = str(e)
             continue
+        if f.default is not None and _is_empty(v):
+            v = f.default  # a blank choice falls back to its default (a task is Medium priority unless set)
         if f.required and _is_empty(v):
             errors[f.key] = "This field is required."
             continue
