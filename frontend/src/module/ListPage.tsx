@@ -128,7 +128,6 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
 
   return (
     <Stack gap="md">
-      <ModuleTabs current={module.key} />
       <PageHeader icon={moduleIcon(module.key)} title={module.label}
         sub={mine ? "Assigned to you and not done yet" : data ? `${total.toLocaleString(me.number_grouping === "indian" ? "en-IN" : "en-US")} ${total === 1 ? (NOUNS[module.key]?.[0] ?? module.singular.toLowerCase()) : (NOUNS[module.key]?.[1] ?? module.label.toLowerCase())}` : "\u00a0"}
         actions={
@@ -148,6 +147,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
           </>
         } />
 
+      <ModuleTabs current={module.key} />
       <Group gap="xs" justify="space-between" wrap="wrap" mt={4}>
         <Group gap={4} wrap="wrap">
           {module.pipeline && (

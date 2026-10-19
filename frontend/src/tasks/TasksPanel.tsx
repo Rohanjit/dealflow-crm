@@ -1,6 +1,6 @@
 // Tasks about one record (an outreach attempt, deal, investor or contact), on that record's page.
 
-import { Badge, Button, Group, Loader, Paper, Text, UnstyledButton } from "@mantine/core";
+import { Badge, Button, Group, Paper, Stack, Text, UnstyledButton } from "@mantine/core";
 import { IconChevronDown, IconChevronRight, IconPlus } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -13,6 +13,7 @@ import type { ModuleSchema, Page, RecordData, Section } from "../types";
 import { useReminders } from "./api";
 import { localNow } from "./due";
 import TaskRow from "./TaskRow";
+import { Skeleton } from "../components/ui";
 
 export default function TasksPanel({ section, parent, record }: { section: Section; parent: ModuleSchema; record: RecordData }) {
   const { module: tasks } = useModuleSchema("tasks");
@@ -43,7 +44,7 @@ export default function TasksPanel({ section, parent, record }: { section: Secti
         )}
       </Group>
       {isLoading ? (
-        <Group px="lg" pb="lg"><Loader size="sm" /></Group>
+        <Stack gap={8} px="lg" pb="lg"><Skeleton h={26} /><Skeleton h={26} w="70%" /></Stack>
       ) : error ? (
         <Text c="red" size="sm" px="lg" pb="lg">{errorMessage(error)}</Text>
       ) : rows.length === 0 ? (

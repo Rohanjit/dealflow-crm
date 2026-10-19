@@ -1,7 +1,7 @@
 // Documents about a record (a company, outreach attempt, deal or investor), on that record's page.
 // Behind the Vault PIN: when the Vault is locked the panel offers to open it right here.
 
-import { ActionIcon, Anchor, Badge, Button, Group, Loader, Paper, ScrollArea, Table, Text, Tooltip } from "@mantine/core";
+import { ActionIcon, Anchor, Badge, Button, Group, Paper, ScrollArea, Stack, Table, Text, Tooltip } from "@mantine/core";
 import { IconCloudUpload, IconDownload, IconLock } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -13,6 +13,7 @@ import { formatBytes, formatDate } from "../format";
 import type { ModuleSchema, Page, RecordData, Section } from "../types";
 import { downloadUrl, isVaultLock, useVaultStatus } from "./api";
 import { UnlockForm } from "./VaultGate";
+import { Skeleton } from "../components/ui";
 
 export default function DocumentsPanel({ section, parent, record }: { section: Section; parent: ModuleSchema; record: RecordData }) {
   const me = useMe();
@@ -46,7 +47,7 @@ export default function DocumentsPanel({ section, parent, record }: { section: S
         )}
       </Group>
       {!status ? (
-        <Group px="lg" pb="lg"><Loader size="sm" /></Group>
+        <Stack gap={8} px="lg" pb="lg"><Skeleton h={26} /><Skeleton h={26} w="70%" /></Stack>
       ) : !status.has_pin ? (
         <Text size="sm" c="dimmed" px="lg" pb="lg">
           Documents are in the Vault, behind a PIN. <Anchor component={Link} to="/m/vault" size="sm">Set your Vault PIN</Anchor> to see them.
@@ -59,7 +60,7 @@ export default function DocumentsPanel({ section, parent, record }: { section: S
           <UnlockForm compact />
         </div>
       ) : isLoading ? (
-        <Group px="lg" pb="lg"><Loader size="sm" /></Group>
+        <Stack gap={8} px="lg" pb="lg"><Skeleton h={26} /><Skeleton h={26} w="70%" /></Stack>
       ) : error ? (
         <Text c="red" size="sm" px="lg" pb="lg">{errorMessage(error)}</Text>
       ) : rows.length === 0 ? (

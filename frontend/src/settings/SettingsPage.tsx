@@ -1,4 +1,4 @@
-import { Group, NavLink, Paper, Select, Stack, Title } from "@mantine/core";
+import { Group, Select, Stack, UnstyledButton } from "@mantine/core";
 import { IconBuilding, IconDatabase, IconList, IconShieldLock, IconToggleRight, IconUsers } from "@tabler/icons-react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
@@ -9,6 +9,7 @@ import FieldSettings from "./FieldSettings";
 import FirmSettings from "./FirmSettings";
 import RolesSettings from "./RolesSettings";
 import UsersSettings from "./UsersSettings";
+import { moduleIcon, PageHeader } from "../components/ui";
 
 export default function SettingsPage() {
   const me = useMe();
@@ -26,18 +27,22 @@ export default function SettingsPage() {
 
   return (
     <Stack gap="lg" maw={1200}>
-      <Title order={2}>Settings</Title>
+      <PageHeader icon={moduleIcon("settings")} title="Settings" />
       <Select hiddenFrom="sm" data={tabs.map((t) => ({ value: t.path, label: t.label }))}
         value={tabs.find((t) => loc.pathname.startsWith(`/settings/${t.path}`))?.path ?? null}
         onChange={(v) => v && nav(`/settings/${v}`)} />
       <Group align="flex-start" gap="lg" wrap="nowrap">
-        <Paper withBorder p={6} w={220} style={{ flexShrink: 0 }} visibleFrom="sm">
-          {tabs.map((t) => (
-            <NavLink key={t.path} component={Link} to={`/settings/${t.path}`} label={t.label} leftSection={<t.icon size={18} />}
-              active={loc.pathname.startsWith(`/settings/${t.path}`)} />
-          ))}
-        </Paper>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <Stack gap={1} w={210} style={{ flexShrink: 0, position: "sticky", top: 56 }} visibleFrom="sm">
+          {tabs.map((t) => {
+            const on = loc.pathname.startsWith(`/settings/${t.path}`);
+            return (
+              <UnstyledButton key={t.path} component={Link} to={`/settings/${t.path}`} className="df-nav-item" data-active={on ? "" : undefined}>
+                <t.icon size={18} stroke={1.7} className="df-nav-icon" />{t.label}
+              </UnstyledButton>
+            );
+          })}
+        </Stack>
+        <div style={{ flex: 1, minWidth: 0 }} key={loc.pathname} className="df-page df-settings">
           <Routes>
             {tabs.map((t) => <Route key={t.path} path={t.path} element={t.el} />)}
             <Route path="*" element={<Navigate to={`/settings/${tabs[0].path}`} replace />} />

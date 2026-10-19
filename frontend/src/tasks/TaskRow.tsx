@@ -1,6 +1,7 @@
 // One task in a list: tick it off, see when it's due (red once overdue), what it's about and who has it.
 
 import { Anchor, Badge, Checkbox, Group, Text, Tooltip } from "@mantine/core";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useMe, useUsers } from "../context";
@@ -28,7 +29,9 @@ export default function TaskRow({
   const me = useMe();
   const { data: users } = useUsers();
   const complete = useCompleteTask();
-  const done = task.status === "done";
+  // Ticking shows the task as done straight away (tick, strike-through, fade) before the list updates.
+  const [ticked, setTicked] = useState<boolean | null>(null);
+  const done = ticked ?? task.status === "done";
   const due = task.due as string | null;
   const state = done ? "none" : dueState(due, now);
   const related = task.related as LinkValue | null;
@@ -40,15 +43,20 @@ export default function TaskRow({
   ].filter(Boolean);
 
   return (
-    <Group justify="space-between" wrap="nowrap" gap="sm" py={8} px="md" className="df-task-row">
+    <Group justify="space-between" wrap="nowrap" gap="sm" py={8} px="md" className="df-task-row"
+      data-done={done ? "" : undefined} style={ticked !== null && ticked !== (task.status === "done") ? { opacity: 0.55 } : undefined}>
       <Group gap="sm" wrap="nowrap" align="flex-start" style={{ minWidth: 0 }}>
         <Tooltip label={done ? "Mark as not done" : "Mark as done"} disabled={!canEdit}>
           <Checkbox mt={2} radius="xl" checked={done} disabled={!canEdit} aria-label={`${done ? "Reopen" : "Complete"} ${task._title}`}
-            onChange={(e) => complete(task, e.currentTarget.checked)} />
+            onChange={(e) => {
+              const next = e.currentTarget.checked;
+              setTicked(next);
+              window.setTimeout(() => { complete(task, next).finally(() => setTicked(null)); }, 420);
+            }} />
         </Tooltip>
         <div style={{ minWidth: 0 }}>
-          <Anchor component={Link} to={`/m/tasks/${task.id}`} size="sm" fw={500} c={done ? "dimmed" : undefined}
-            td={done ? "line-through" : undefined} style={{ wordBreak: "break-word" }}>{task._title}</Anchor>
+          <Anchor component={Link} to={`/m/tasks/${task.id}`} size="sm" fw={500} className="df-task-title"
+            style={{ wordBreak: "break-word" }}>{task._title}</Anchor>
           {meta.length > 0 && (
             <Group gap={6} wrap="wrap">
               {meta.map((m, i) => (

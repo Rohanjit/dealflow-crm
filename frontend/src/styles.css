@@ -82,6 +82,15 @@ body { background: #fff; color: var(--mantine-color-text); }
 .df-stage-cell:not(:disabled):hover { filter: brightness(.95); }
 .df-stage-cell:not(:disabled):active { transform: scale(.98); }
 
+/* NavLinks (lists inside settings) highlight in ink, not blue. */
+.mantine-NavLink-root { border-radius: 6px; font-weight: 500; }
+.mantine-NavLink-root:hover { background: var(--df-hover); }
+.mantine-NavLink-root[data-active] { background: var(--df-press); color: var(--mantine-color-text); }
+.mantine-NavLink-root[data-active] .mantine-NavLink-section { color: var(--mantine-color-text); }
+
+/* Settings panels: soft cards. */
+.df-settings .mantine-Paper-root[data-with-border] { box-shadow: 0 1px 2px rgba(15, 15, 15, .03); }
+
 /* Tabs: underlined, ink coloured, like view tabs above a table. */
 .mantine-Tabs-list::before { border-color: var(--df-line) !important; }
 .mantine-Tabs-tab { padding: 8px 4px; margin-right: 14px; font-weight: 500; color: var(--mantine-color-dimmed);
@@ -142,6 +151,10 @@ a.mantine-Paper-root:hover, .df-card-link:hover { box-shadow: var(--mantine-shad
 .df-nav-item:hover { background: var(--df-hover); color: var(--mantine-color-text); }
 .df-nav-item:active { background: var(--df-press); }
 .df-nav-item[data-active] { background: var(--df-press); color: var(--mantine-color-text); font-weight: 600; }
+.df-nav-link { color: inherit; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; outline: none; }
+.df-nav-link::after { content: ""; position: absolute; inset: 0; border-radius: 6px; }
+.df-nav-link:focus-visible::after { outline: 2px solid rgba(47, 128, 224, .55); outline-offset: -2px; }
+.df-nav-item .df-nav-extra { position: relative; z-index: 1; }
 .df-nav-item .df-nav-icon { color: var(--mantine-color-gray-7); flex-shrink: 0; transition: transform var(--df-medium) var(--df-ease); }
 .df-nav-item:hover .df-nav-icon { transform: scale(1.08); }
 .df-nav-item .df-nav-extra { margin-left: auto; display: flex; align-items: center; gap: 2px; }
@@ -254,12 +267,16 @@ tr:hover .df-open-chip { opacity: 1; transform: none; }
 .df-ghost-link:hover { background: var(--df-hover); color: var(--mantine-color-text); }
 
 /* Sections on record pages: a title line and a hairline, no heavy boxes. */
-.df-record .mantine-Paper-root[data-with-border] { border: none; border-top: 1px solid var(--df-line); border-radius: 0;
-  padding: 18px 0 0 !important; background: transparent; }
-.df-record .df-side .mantine-Paper-root[data-with-border] { border: none; border-radius: 10px; padding: 16px !important;
+/* Panels keep their inner padding, so pull them out by it: their text lines up with the page,
+   and the hairline above still spans only the content width. */
+.df-record .df-fade > .mantine-Paper-root[data-with-border] { border: none; border-radius: 0; background-color: transparent;
+  margin-inline: -20px; padding-top: 18px !important;
+  background-image: linear-gradient(var(--df-line), var(--df-line)); background-size: calc(100% - 40px) 1px;
+  background-position: 20px 0; background-repeat: no-repeat; }
+.df-record .df-side > .mantine-Paper-root[data-with-border] { border: none; border-radius: 10px; padding: 16px !important;
   background: var(--mantine-color-gray-0); }
 .df-stagebar { background: var(--mantine-color-gray-0); border-radius: 10px; padding: 14px 16px; }
-.df-stage-cell { hyphens: manual; overflow-wrap: break-word; }
+.df-stage-cell { hyphens: manual; -webkit-hyphens: manual; overflow-wrap: normal; }
 .df-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; color: var(--mantine-color-dimmed); font-size: 14px; }
 .df-facts > * + *::before { content: "·"; margin: 0 8px; color: var(--mantine-color-gray-5); }
 .df-section-title { font-size: 15px; font-weight: 600; }
@@ -272,6 +289,18 @@ tr:hover .df-open-chip { opacity: 1; transform: none; }
 
 .df-field-label { font-size: 13px; color: var(--mantine-color-dimmed); }
 .df-prewrap { white-space: pre-wrap; word-break: break-word; }
+
+/* Forms: sections separated by hairlines rather than boxes, and a save bar that stays in reach. */
+.df-form .mantine-Paper-root[data-with-border] { border: none; border-top: 1px solid var(--df-line); border-radius: 0;
+  padding: 20px 0 8px !important; background: transparent; }
+.df-savebar { position: sticky; bottom: 0; z-index: 20; padding: 12px 0 16px; margin-top: 4px;
+  background: linear-gradient(to top, #fff 70%, rgba(255, 255, 255, 0)); }
+
+/* Task lists and other sectioned lists read as plain lists, not cards. */
+.df-task-row .mantine-Anchor-root { text-decoration: none; }
+.df-task-row .mantine-Anchor-root:hover { text-decoration: underline; text-decoration-color: rgba(55, 53, 47, .35); }
+.df-plain .mantine-Paper-root[data-with-border] { border: none; border-top: 1px solid var(--df-line); border-radius: 0;
+  padding-left: 0 !important; padding-right: 0 !important; background: transparent; }
 
 /* ------------------------------------------------------------------ boards */
 
@@ -327,6 +356,12 @@ tr:hover .df-open-chip { opacity: 1; transform: none; }
 .df-palette-item .df-palette-enter { margin-left: auto; opacity: 0; color: var(--mantine-color-dimmed); }
 .df-palette-item[data-selected] .df-palette-enter { opacity: 1; }
 .df-kbd { font-family: inherit; font-size: 11px; color: var(--mantine-color-dimmed); border: 1px solid var(--df-line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; line-height: 16px; background: #fff; }
+
+.df-boot { animation: df-breathe 1.4s ease-in-out infinite; }
+@keyframes df-breathe { 0%, 100% { opacity: .55; transform: scale(.96); } 50% { opacity: 1; transform: scale(1); } }
+.df-ring { transform-origin: 50% 2px; animation: df-ring 700ms var(--df-ease); }
+@keyframes df-ring { 0% { transform: rotate(0); } 15% { transform: rotate(14deg); } 30% { transform: rotate(-12deg); }
+  45% { transform: rotate(8deg); } 60% { transform: rotate(-5deg); } 75% { transform: rotate(2deg); } 100% { transform: rotate(0); } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-delay: 0ms !important; transition-duration: 1ms !important; }

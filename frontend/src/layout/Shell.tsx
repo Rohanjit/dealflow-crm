@@ -152,13 +152,14 @@ export default function Shell() {
 
 function NavItem({ to, icon, label, active, extra }: { to: string; icon: string; label: string; active: boolean; extra?: ReactNode }) {
   const I = moduleIcon(icon);
+  // The row is a box; the label is the link and stretches over the row (so the "+" beside it can be
+  // a link of its own without nesting links).
   return (
-    <UnstyledButton component={Link} to={to} className="df-nav-item" data-active={active ? "" : undefined}
-      aria-current={active ? "page" : undefined}>
+    <div className="df-nav-item" data-active={active ? "" : undefined}>
       <I size={18} stroke={1.7} className="df-nav-icon" />
-      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+      <Link to={to} className="df-nav-link" aria-current={active ? "page" : undefined}>{label}</Link>
       {extra && <span className="df-nav-extra">{extra}</span>}
-    </UnstyledButton>
+    </div>
   );
 }
 

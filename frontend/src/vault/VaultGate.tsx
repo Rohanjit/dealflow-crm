@@ -1,7 +1,7 @@
 // The Vault's PIN screens. Everything in the Vault sits behind this: set a PIN the first time, enter
 // it to open the Vault, and see when a lock-out ends.
 
-import { Alert, Button, Center, Group, Loader, Paper, PasswordInput, Stack, Text, ThemeIcon, Title } from "@mantine/core";
+import { Alert, Button, Center, Group, Paper, PasswordInput, Stack, Text, ThemeIcon, Title } from "@mantine/core";
 import { IconLock, IconLockOpen } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
@@ -9,10 +9,11 @@ import { useState, type ReactNode } from "react";
 import { api } from "../api";
 import { errorMessage, fieldErrors } from "../components/errors";
 import { afterVaultChange, useVaultStatus, type VaultStatus } from "./api";
+import { PageSkeleton } from "../components/ui";
 
 export default function VaultGate({ children }: { children: ReactNode }) {
   const { data, isLoading, error } = useVaultStatus();
-  if (isLoading) return <Center py="xl"><Loader /></Center>;
+  if (isLoading) return <PageSkeleton />;
   if (error || !data) return <Text c="red">{errorMessage(error)}</Text>;
   if (!data.can_view) return <Text c="dimmed">Your role can't open the Vault.</Text>;
   if (!data.has_pin) return <Card title="Set your Vault PIN" icon={<IconLock size={22} />}><SetPinForm /></Card>;
@@ -27,7 +28,7 @@ function Card({ title, icon, children }: { title: string; icon: ReactNode; child
       <Paper withBorder radius="md" p="xl" w="100%" maw={420}>
         <Stack gap="md">
           <Group gap="sm">
-            <ThemeIcon variant="light" size="xl" radius="xl">{icon}</ThemeIcon>
+            <ThemeIcon variant="light" color="gray" size="xl" radius="md" className="df-page-icon" style={{ width: 44, height: 44 }}>{icon}</ThemeIcon>
             <Title order={3}>{title}</Title>
           </Group>
           {children}

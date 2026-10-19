@@ -1,6 +1,7 @@
-import { Center, Loader, Text } from "@mantine/core";
+import { Center, Text } from "@mantine/core";
 import { Navigate, Route, Routes } from "react-router-dom";
 
+import Logo from "./components/Logo";
 import { AppProvider, useAppInfo } from "./context";
 import Shell from "./layout/Shell";
 import DetailPage from "./module/DetailPage";
@@ -22,7 +23,7 @@ export default function App() {
   if (isLoading) {
     return (
       <Center h="100vh">
-        <Loader />
+        <div className="df-boot"><Logo size={40} /></div>
       </Center>
     );
   }

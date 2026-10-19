@@ -17,6 +17,14 @@ export default function TaskBell() {
   const { data } = useReminders();
   const [opened, setOpened] = useState(false);
   const seen = useRef<Map<number, "overdue" | "today"> | null>(null);
+  // The bell rings (a short wiggle) whenever the count goes up.
+  const [ring, setRing] = useState(0);
+  const lastCount = useRef<number | null>(null);
+  useEffect(() => {
+    if (!data) return;
+    if (lastCount.current !== null && data.count > lastCount.current) setRing((r) => r + 1);
+    lastCount.current = data.count;
+  }, [data]);
 
   useEffect(() => {
     if (!data) return;
@@ -69,7 +77,7 @@ export default function TaskBell() {
         <Tooltip label="Reminders" disabled={opened}>
           <Indicator label={data.count} size={16} disabled={!data.count} color={data.overdue.length ? "red" : "orange"} offset={4}>
             <ActionIcon variant="subtle" color="gray" size="lg" aria-label={`Reminders: ${data.count}`} onClick={() => setOpened((o) => !o)}>
-              <IconBell size={20} />
+              <IconBell size={20} key={ring} className={ring ? "df-ring" : undefined} />
             </ActionIcon>
           </Indicator>
         </Tooltip>

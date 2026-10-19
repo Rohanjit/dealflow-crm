@@ -116,7 +116,7 @@ export default function BoardView({ module, params }: { module: ModuleSchema; pa
 
   return (
     <>
-      <ScrollArea type="auto" offsetScrollbars>
+      <ScrollArea type="hover" scrollbarSize={8} offsetScrollbars>
         <DragDropContext onBeforeCapture={onBeforeCapture} onDragEnd={onDragEnd}>
           <Group align="flex-start" gap="lg" wrap="nowrap" pb="sm">
             {phases.map((ph) => (
@@ -174,7 +174,7 @@ function BoardColumn({
     );
   }
   return (
-    <Paper w={width} miw={width} radius="md" bg="transparent" p={4} style={{ flexShrink: 0 }}>
+    <Paper w={width} miw={width} radius="md" bg="gray.0" p={6} style={{ flexShrink: 0 }}>
       <Group gap={8} px={2} pb={8} wrap="nowrap" align="center">
         <span className={`df-tag df-tag-${TONE_TAG[color] ?? 0}`} style={{ fontWeight: 500 }}>{column.label}</span>
         <Text size="sm" c="dimmed" className="df-count">{records.length}</Text>
@@ -205,7 +205,7 @@ function BoardColumn({
                 </Draggable>
               ))}
               {provided.placeholder}
-              {records.length === 0 && !snapshot.isDraggingOver && (
+              {records.length === 0 && !snapshot.isDraggingOver && !(column.kind === "stage" && module.perms.create) && (
                 <Text size="xs" c="dimmed" ta="center" py="md">Nothing here</Text>
               )}
               {column.kind === "stage" && module.perms.create && !snapshot.isDraggingOver && (

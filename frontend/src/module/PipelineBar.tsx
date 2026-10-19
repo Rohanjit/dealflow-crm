@@ -13,7 +13,7 @@ import { exitOf, resumeVerb, stageLabel, stageOf, usePipelineMove } from "./pipe
  *  at random (browsers without hyphenation dictionaries otherwise split anywhere). */
 function breakable(label: string): string {
   return label.split(" ").map((w) => {
-    if (w.length < 11 || w.includes("-")) return w;
+    if (w.length < 9 || w.includes("-")) return w;
     const at = /(tion|ment|ship|ence|ance)$/.test(w) ? w.length - 4 : Math.ceil(w.length / 2);
     return `${w.slice(0, at)}\u00ad${w.slice(at)}`;
   }).join(" ");

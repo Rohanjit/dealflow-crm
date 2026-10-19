@@ -22,6 +22,7 @@ import LinkInput from "../module/LinkInput";
 import { exitOf, resumeVerb, stageLabel, stageOf, usePipelineMove } from "../module/pipeline";
 import type { LinkValue, Page, RecordData, Section } from "../types";
 import Suggestions from "./Suggestions";
+import { Skeleton } from "../components/ui";
 
 export default function DealTracker({ section, deal }: { section: Section; deal: RecordData }) {
   const me = useMe();
@@ -104,7 +105,7 @@ export default function DealTracker({ section, deal }: { section: Section; deal:
       </Group>
 
       {isLoading ? (
-        <Group px="lg" pb="lg"><Loader size="sm" /></Group>
+        <Stack gap={8} px="lg" pb="lg"><Skeleton h={26} /><Skeleton h={26} w="70%" /></Stack>
       ) : error ? (
         <Text c="red" size="sm" px="lg" pb="lg">{errorMessage(error)}</Text>
       ) : (

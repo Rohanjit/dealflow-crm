@@ -1,7 +1,8 @@
 // "My tasks": the signed-in person's unfinished tasks, grouped into Overdue, Today, Upcoming and
 // No due date, with a quick way to add one.
 
-import { Badge, Button, Group, Loader, Paper, Stack, Text, TextInput } from "@mantine/core";
+import { Badge, Button, Group, Paper, Stack, Text, TextInput } from "@mantine/core";
+import { Skeleton } from "../components/ui";
 import { DateInput } from "@mantine/dates";
 import { IconPlus } from "@tabler/icons-react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -78,7 +79,7 @@ export default function MyTasks({ module, params }: { module: ModuleSchema; para
         </form>
       )}
       {isLoading ? (
-        <Group><Loader size="sm" /></Group>
+        <Stack gap={10}>{[0, 1, 2, 3].map((i) => <Skeleton key={i} h={34} />)}</Stack>
       ) : error ? (
         <Text c="red" size="sm">{errorMessage(error)}</Text>
       ) : rows.length === 0 ? (
@@ -88,7 +89,7 @@ export default function MyTasks({ module, params }: { module: ModuleSchema; para
         </Paper>
       ) : (
         grouped.filter((g) => g.rows.length).map((g) => (
-          <Paper key={g.state} withBorder radius="md">
+          <Paper key={g.state} withBorder radius="md" className="df-fade">
             <Group gap="xs" px="md" pt="sm" pb={6}>
               <Text fw={600} size="sm" c={g.state === "overdue" ? "red.8" : undefined}>{g.label}</Text>
               <Badge size="sm" variant="light" color={g.color}>{g.rows.length}</Badge>

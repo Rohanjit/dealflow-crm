@@ -123,7 +123,7 @@ export default function UsersSettings() {
                   <Table.Td>
                     {!locked && (
                       <Menu position="bottom-end">
-                        <Menu.Target><ActionIcon variant="subtle" aria-label="Actions"><IconDots size={16} /></ActionIcon></Menu.Target>
+                        <Menu.Target><ActionIcon variant="subtle" color="gray" aria-label="Actions"><IconDots size={16} /></ActionIcon></Menu.Target>
                         <Menu.Dropdown>
                           <Menu.Item onClick={() => setEditing(u)}>Edit</Menu.Item>
                           <Menu.Item onClick={() => reset(u)}>Reset password</Menu.Item>

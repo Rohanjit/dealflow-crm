@@ -13,6 +13,7 @@ import { Link } from "react-router-dom";
 import { api, qs } from "../api";
 import { errorMessage } from "../components/errors";
 import type { LinkValue, RecordData } from "../types";
+import { Skeleton } from "../components/ui";
 
 type Reason = { factor: string; fit: "yes" | "partial" | "unknown" | "no"; text: string; points: number };
 type Match = { investor: LinkValue & { subtitle: string }; score: number; reasons: Reason[] };
@@ -87,7 +88,7 @@ export default function Suggestions({
           onChange={(e) => setQ(e.currentTarget.value)}
           rightSection={isFetching ? <Loader size={14} /> : q ? <CloseButton size="sm" onClick={() => setQ("")} /> : null} />
         {isLoading ? (
-          <Group><Loader size="sm" /></Group>
+          <Stack gap={8}><Skeleton h={40} /><Skeleton h={40} /><Skeleton h={40} w="80%" /></Stack>
         ) : error ? (
           <Text c="red" size="sm">{errorMessage(error)}</Text>
         ) : data && data.results.length === 0 ? (

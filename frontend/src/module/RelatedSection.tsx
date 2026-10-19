@@ -1,6 +1,6 @@
 // Records from another module linked to this one, e.g. an investor's contacts.
 
-import { Badge, Button, Group, Loader, Paper, ScrollArea, Table, Text } from "@mantine/core";
+import { Badge, Button, Group, Paper, ScrollArea, Stack, Table, Text } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
@@ -10,6 +10,7 @@ import { useSchema } from "../context";
 import { errorMessage } from "../components/errors";
 import type { LinkValue, ModuleSchema, Page, RecordData, Section } from "../types";
 import { FieldValue } from "./fields";
+import { Skeleton } from "../components/ui";
 
 export default function RelatedSection({ section, parent, record }: { section: Section; parent: ModuleSchema; record: RecordData }) {
   const nav = useNavigate();
@@ -49,7 +50,7 @@ export default function RelatedSection({ section, parent, record }: { section: S
         )}
       </Group>
       {isLoading ? (
-        <Group px="lg" pb="lg"><Loader size="sm" /></Group>
+        <Stack gap={8} px="lg" pb="lg"><Skeleton h={26} /><Skeleton h={26} w="70%" /></Stack>
       ) : error ? (
         <Text c="red" size="sm" px="lg" pb="lg">{errorMessage(error)}</Text>
       ) : count === 0 ? (

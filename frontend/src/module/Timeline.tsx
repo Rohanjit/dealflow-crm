@@ -2,7 +2,7 @@
 // stage changes. Newest first.
 
 import {
-  ActionIcon, Button, Group, Loader, Menu, Paper, SegmentedControl, Stack, Text, Textarea, ThemeIcon, Title,
+  ActionIcon, Button, Group, Menu, Paper, SegmentedControl, Stack, Text, Textarea, ThemeIcon, Title,
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { modals } from "@mantine/modals";
@@ -19,6 +19,7 @@ import { errorMessage, notifyError } from "../components/errors";
 import { formatDate } from "../format";
 import type { ModuleSchema, Note } from "../types";
 import { dateParser } from "./fields";
+import { Skeleton } from "../components/ui";
 
 const KINDS = [
   { value: "note", label: "Note", icon: IconNote, color: "gray" },
@@ -72,7 +73,7 @@ export default function Timeline({ module, recordId }: { module: ModuleSchema; r
           </Group>
         </Stack>
       )}
-      {isLoading ? <Loader size="sm" /> : error ? <Text c="red" size="sm">{errorMessage(error)}</Text> : (
+      {isLoading ? <Stack gap={8}><Skeleton h={34} /><Skeleton h={34} w="80%" /></Stack> : error ? <Text c="red" size="sm">{errorMessage(error)}</Text> : (
         <Stack gap="md">
           {data!.length === 0 && <Text size="sm" c="dimmed">Nothing logged yet.</Text>}
           {data!.map((n) => <Entry key={n.id} note={n} queryKey={key} />)}

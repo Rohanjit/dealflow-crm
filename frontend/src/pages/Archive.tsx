@@ -1,4 +1,4 @@
-import { Button, Center, Group, Loader, Paper, Select, Stack, Table, Text, TextInput, Title } from "@mantine/core";
+import { Button, Group, Paper, Select, Stack, Table, Text, TextInput } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import { IconSearch } from "@tabler/icons-react";
@@ -10,6 +10,7 @@ import { api, qs } from "../api";
 import { useApp } from "../context";
 import { notifyError, notifyOk } from "../components/errors";
 import { formatDateTime } from "../format";
+import { moduleIcon, PageHeader, TableSkeleton } from "../components/ui";
 
 type Item = {
   module: string; module_label: string; id: number; title: string; subtitle: string; archived_at: string; archived_by: string | null;
@@ -60,16 +61,14 @@ export default function ArchivePage() {
   const modules = info.modules.filter((m) => info.built_modules.includes(m.key));
   return (
     <Stack maw={1100}>
-      <div>
-        <Title order={2}>Archive</Title>
-        <Text c="dimmed" size="sm">Deleted records land here. Restore them, or {me.role.is_admin ? "delete them permanently" : "ask an admin to delete them permanently"}.</Text>
-      </div>
+      <PageHeader icon={moduleIcon("archive")} title="Archive"
+        sub={<>Deleted records land here. Restore them, or {me.role.is_admin ? "delete them permanently" : "ask an admin to delete them permanently"}.</>} />
       <Group>
         <TextInput placeholder="Search by name" leftSection={<IconSearch size={16} />} value={q} onChange={(e) => setQ(e.currentTarget.value)} w={300} />
         <Select placeholder="All modules" clearable data={modules.map((m) => ({ value: m.key, label: m.label }))} value={module} onChange={setModule} w={200} />
       </Group>
-      <Paper withBorder radius="md">
-        {isLoading ? <Center p="xl"><Loader /></Center> : (
+      <Paper withBorder radius="md" className="df-fade">
+        {isLoading ? <TableSkeleton cols={4} rows={5} /> : (
           <Table className="df-table" verticalSpacing="sm" horizontalSpacing="md">
             <Table.Thead>
               <Table.Tr><Table.Th>Name</Table.Th><Table.Th>Module</Table.Th><Table.Th>Deleted by</Table.Th><Table.Th>Deleted on</Table.Th><Table.Th /></Table.Tr>

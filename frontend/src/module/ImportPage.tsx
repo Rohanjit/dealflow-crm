@@ -1,8 +1,8 @@
 import {
-  Alert, Anchor, Badge, Breadcrumbs, Button, Center, Checkbox, FileInput, Group, List, Loader, Paper, ScrollArea,
+  Alert, Anchor, Badge, Breadcrumbs, Button, Checkbox, FileInput, Group, List, Paper, ScrollArea,
   SegmentedControl, Select, Stack, Stepper, Table, Text, Title,
 } from "@mantine/core";
-import { IconAlertTriangle, IconCheck, IconCopy, IconFileSpreadsheet, IconX } from "@tabler/icons-react";
+import { IconAlertTriangle, IconCheck, IconCopy, IconFileImport, IconFileSpreadsheet, IconX } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
@@ -11,6 +11,7 @@ import { api } from "../api";
 import { useModuleSchema } from "../context";
 import { errorMessage } from "../components/errors";
 import type { ModuleSchema, Schema } from "../types";
+import { PageHeader, PageSkeleton } from "../components/ui";
 
 type MapEntry = { field: string | null; currency: string; unit: string };
 type Upload = {
@@ -37,7 +38,7 @@ type Result = {
 export default function ImportPage() {
   const { module: key } = useParams();
   const { module, schema, isLoading } = useModuleSchema(key);
-  if (isLoading) return <Center py="xl"><Loader /></Center>;
+  if (isLoading) return <PageSkeleton />;
   if (!module || !schema || !module.perms.create) return <Navigate to="/" replace />;
   return <Wizard module={module} schema={schema} />;
 }
@@ -116,7 +117,7 @@ function Wizard({ module, schema }: { module: ModuleSchema; schema: Schema }) {
         <Anchor component={Link} to={`/m/${module.key}`} size="sm">{module.label}</Anchor>
         <Text size="sm">Import</Text>
       </Breadcrumbs>
-      <Title order={2}>Import {module.label.toLowerCase()}</Title>
+      <PageHeader icon={IconFileImport} title={`Import ${module.label.toLowerCase()}`} />
       <Stepper active={step} size="sm" allowNextStepsSelect={false} onStepClick={(s) => s < step && step < 3 && setStep(s)}>
         <Stepper.Step label="Upload" description="CSV or Excel" />
         <Stepper.Step label="Match columns" />

@@ -1,4 +1,4 @@
-import { Alert, Anchor, Breadcrumbs, Button, Center, Group, Loader, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
+import { Alert, Anchor, Breadcrumbs, Button, Group, Loader, Paper, SimpleGrid, Stack, Text } from "@mantine/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -6,6 +6,7 @@ import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-r
 import { api } from "../api";
 import { useMe, useModuleSchema } from "../context";
 import { errorMessage, fieldErrors, notifyOk } from "../components/errors";
+import { PageHeader, PageSkeleton, moduleIcon } from "../components/ui";
 import type { FieldSchema, LinkValue, ModuleSchema, RecordData } from "../types";
 import { emptyValue, FieldInput } from "./fields";
 import UploadPage from "../vault/UploadPage";
@@ -43,7 +44,7 @@ export default function FormPage() {
 
 function VaultUpload() {
   const { module, isLoading } = useModuleSchema("vault");
-  if (isLoading) return <Center py="xl"><Loader /></Center>;
+  if (isLoading) return <PageSkeleton />;
   if (!module?.perms.create) return <Navigate to="/m/vault" replace />;
   return <UploadPage module={module} />;
 }
@@ -120,7 +121,7 @@ function FormInner() {
     }
   }, [module, editing, rec.data, values, params]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (isLoading || (editing && rec.isLoading)) return <Center py="xl"><Loader /></Center>;
+  if (isLoading || (editing && rec.isLoading)) return <PageSkeleton rows={8} />;
   if (!module) return <Navigate to="/" replace />;
   if (editing ? !module.perms.edit : !module.perms.create) return <Navigate to={`/m/${module.key}`} replace />;
   if (rec.error) return <Text c="red">{errorMessage(rec.error)}</Text>;
@@ -172,14 +173,14 @@ function FormInner() {
   const viaLabel = (viaKey: string) => module.fields.find((f) => f.key === viaKey)?.label.toLowerCase() ?? viaKey;
 
   return (
-    <form onSubmit={save}>
-      <Stack gap="lg" maw={1000}>
+    <form onSubmit={save} className="df-form">
+      <Stack gap="lg" maw={920}>
         <Breadcrumbs>
           <Anchor component={Link} to={`/m/${module.key}`} size="sm">{module.label}</Anchor>
           {editing && <Anchor component={Link} to={cancelTo} size="sm">{rec.data!._title}</Anchor>}
           <Text size="sm">{editing ? "Edit" : "New"}</Text>
         </Breadcrumbs>
-        <Title order={2}>{title}</Title>
+        <PageHeader icon={moduleIcon(module.key)} title={title} />
         {error && <Alert color="red">{error}</Alert>}
         {module.groups.map((g) => {
           const gf = fields.filter((f) => f.group === g);
@@ -188,9 +189,9 @@ function FormInner() {
           const missing = vias.find((v) => !values[v]);
           const own = gf.filter((f) => !f.via || !missing);
           return (
-            <Paper key={g} withBorder p="lg" radius="md">
+            <Paper key={g} withBorder p="lg" radius="md" className="df-fade">
               <Group justify="space-between" mb="md">
-                <Text fw={600}>{g}</Text>
+                <Text className="df-section-title">{g}</Text>
                 {loadingLinked && vias.length > 0 && <Loader size="xs" />}
               </Group>
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" verticalSpacing="md">
@@ -210,7 +211,7 @@ function FormInner() {
             </Paper>
           );
         })}
-        <Group justify="flex-end" pb="xl">
+        <Group justify="flex-end" className="df-savebar">
           <Button variant="default" component={Link} to={cancelTo}>Cancel</Button>
           <Button type="submit" loading={busy}>{editing ? "Save changes" : `Add ${module.singular.toLowerCase()}`}</Button>
         </Group>

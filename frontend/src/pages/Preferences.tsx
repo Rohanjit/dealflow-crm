@@ -8,6 +8,8 @@ import { formatDate, groupDigits } from "../format";
 import { useVaultStatus } from "../vault/api";
 import { SetPinForm } from "../vault/VaultGate";
 import ChangePassword from "./ChangePassword";
+import { IconUserCircle } from "@tabler/icons-react";
+import { PageHeader } from "../components/ui";
 
 export default function Preferences() {
   const { me, refresh } = useApp();
@@ -30,7 +32,7 @@ export default function Preferences() {
 
   return (
     <Stack maw={720} gap="lg">
-      <Title order={2}>My preferences</Title>
+      <PageHeader icon={IconUserCircle} title="My preferences" sub="How dates and numbers look to you, and your Vault PIN." />
       <Paper withBorder p="lg">
         <Stack>
           <TextInput label="Name" value={v.full_name} onChange={(e) => setV({ ...v, full_name: e.currentTarget.value })} maw={360} />
