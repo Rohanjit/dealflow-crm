@@ -2,7 +2,9 @@
 // Drag a card to move it; exits ask for what they need first (a reason, a date, a note).
 
 import { Avatar, Box, Group, Paper, ScrollArea, Stack, Text, Tooltip } from "@mantine/core";
-import { DragDropContext, Draggable, Droppable, type BeforeCapture, type DropResult } from "@hello-pangea/dnd";
+import {
+  DragDropContext, Draggable, Droppable, type BeforeCapture, type DraggableStateSnapshot, type DraggingStyle, type DropResult, type NotDraggingStyle,
+} from "@hello-pangea/dnd";
 import { IconCalendarEvent, IconPlus } from "@tabler/icons-react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
@@ -38,6 +40,13 @@ const CARDS: Record<string, { sub: string; amount: string; person: string; date:
     order: "target_close_date,-updated_at" },
 };
 const DEFAULT_CARD = { sub: "", amount: "", person: "", date: "", order: "-updated_at" };
+
+/** A dropped card lands on a spring instead of the library's fixed curve (it still waits for the
+ * same transition to end before finishing the drop). */
+function landing(style: DraggingStyle | NotDraggingStyle | undefined, snap: DraggableStateSnapshot) {
+  if (!snap.isDropAnimating || !snap.dropAnimation) return style;
+  return { ...style, transition: `transform ${Math.max(snap.dropAnimation.duration, 0.4)}s var(--df-spring-snappy), opacity .2s ease` };
+}
 
 export default function BoardView({ module, params }: { module: ModuleSchema; params: URLSearchParams }) {
   const p = module.pipeline!;
@@ -197,9 +206,9 @@ function BoardColumn({
                           const box = e.currentTarget.getBoundingClientRect();
                           onGrab({ id: String(r.id), x: e.clientX - box.left, width: box.width });
                         }}
-                        style={slim ? { width: HIT, marginLeft: offset, ...drag.draggableProps.style } : drag.draggableProps.style}>
+                        style={{ ...(slim ? { width: HIT, marginLeft: offset } : {}), ...landing(drag.draggableProps.style, dragSnap) }}>
                         <div style={slim ? { width: slim.width, marginLeft: -offset } : undefined}>
-                          <BoardCard record={r} module={module} dragging={dragSnap.isDragging} onOpen={() => onOpen(r)} />
+                          <BoardCard record={r} module={module} dragging={dragSnap.isDragging && !dragSnap.isDropAnimating} onOpen={() => onOpen(r)} />
                         </div>
                       </div>
                     );
@@ -247,8 +256,8 @@ function BoardCard({ record: r, module, dragging, onOpen }: { record: RecordData
 
   return (
     <Paper withBorder radius="md" p="sm" onClick={onOpen} className="df-board-card" data-dragging={dragging ? "" : undefined}
-      style={{ cursor: "pointer" }}>
-      <Text size="sm" fw={600} lineClamp={2}>{r._title}</Text>
+      data-hero-row={`${module.key}:${r.id}`} style={{ cursor: "pointer" }}>
+      <Text size="sm" fw={600} lineClamp={2} data-hero={`${module.key}:${r.id}`} style={{ width: "fit-content", maxWidth: "100%" }}>{r._title}</Text>
       {type && r[type.key] ? <Text size="xs" c="dimmed">{textValue(type, r[type.key], ctx)}</Text> : null}
       {size && r[size.key] && (r[size.key] as { amount: string | null }).amount ? (
         <Box mt={4}><FieldValue f={size} v={r[size.key]} compact /></Box>

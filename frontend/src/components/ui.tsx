@@ -57,14 +57,17 @@ export function fieldIcon(f: FieldSchema): Icon {
 
 /** Big page heading: icon tile, title, a grey line under it, and actions on the right. */
 export function PageHeader({
-  icon: I, title, sub, actions, children,
-}: { icon?: Icon; title: ReactNode; sub?: ReactNode; actions?: ReactNode; children?: ReactNode }) {
+  icon: I, title, sub, actions, children, hero,
+}: { icon?: Icon; title: ReactNode; sub?: ReactNode; actions?: ReactNode; children?: ReactNode; hero?: string }) {
   return (
     <Stack gap={10}>
       {I && <div className="df-page-icon" aria-hidden><I size={28} stroke={1.6} /></div>}
       <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
         <Box style={{ minWidth: 0, flex: "1 1 320px" }}>
-          <h1 className="df-page-title">{title}</h1>
+          <h1 className="df-page-title">
+            {/* hero ("deals:5"): the title a list row or board card grows into (navigation.ts). */}
+            {hero ? <span className="df-hero-title" data-hero={hero}>{title}</span> : title}
+          </h1>
           {sub && <div className="df-page-sub" style={{ marginTop: 4 }}>{sub}</div>}
         </Box>
         {actions && <Group gap={6} wrap="wrap">{actions}</Group>}
@@ -120,6 +123,12 @@ export function Reveal({ open, children }: { open: boolean; children: ReactNode 
   );
 }
 
+/** A critically damped spring over 0..1 (same feel as --df-spring-smooth). */
+function springOut(k: number) {
+  const w = 9; // settles by k = 1
+  return 1 - (1 + w * k) * Math.exp(-w * k);
+}
+
 /** A number that counts up to its value when it first appears (and to new values after). */
 export function CountUp({ value, duration = 600 }: { value: number; duration?: number }) {
   const [shown, setShown] = useState(0);
@@ -132,7 +141,7 @@ export function CountUp({ value, duration = 600 }: { value: number; duration?: n
     let raf = 0;
     const tick = (t: number) => {
       const k = Math.min(1, (t - start) / duration);
-      const eased = 1 - Math.pow(1 - k, 3);
+      const eased = k >= 1 ? 1 : springOut(k);
       setShown(Math.round(a + (value - a) * eased));
       if (k < 1) raf = requestAnimationFrame(tick);
       else from.current = value;

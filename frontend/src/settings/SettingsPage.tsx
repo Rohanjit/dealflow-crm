@@ -54,7 +54,7 @@ export default function SettingsPage() {
             );
           })}
         </Stack>
-        <div style={{ flex: 1, minWidth: 0 }} key={loc.pathname} className="df-page df-settings">
+        <div style={{ flex: 1, minWidth: 0 }} key={loc.pathname} className="df-settings">
           <Routes>
             {tabs.map((t) => <Route key={t.path} path={t.path} element={t.el} />)}
             <Route path="*" element={<Navigate to={`/settings/${tabs[0].path}`} replace />} />

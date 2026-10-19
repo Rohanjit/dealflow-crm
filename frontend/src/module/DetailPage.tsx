@@ -2,7 +2,7 @@ import { Anchor, Badge, Breadcrumbs, Button, Grid, Group, Stack, Text } from "@m
 import { modals } from "@mantine/modals";
 import { IconArrowUpRight, IconCheck, IconChevronRight, IconLock, IconPencil, IconRotate, IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
 import { api, ApiError } from "../api";
@@ -24,6 +24,19 @@ import RelatedSection from "./RelatedSection";
 import { AccessPanel, RestrictedPage, type Placeholder } from "../deals/Restricted";
 import Timeline from "./Timeline";
 
+/** The record as a list already loaded it (lists send whole records), if any list has it. */
+function fromLists(qc: QueryClient, key?: string, id?: string): RecordData | undefined {
+  const n = Number(id);
+  if (!key || !n) return undefined;
+  for (const [, data] of qc.getQueriesData<unknown>({ queryKey: ["records", key] })) {
+    const rows = Array.isArray(data) ? data : (data as { results?: unknown } | undefined)?.results;
+    if (!Array.isArray(rows)) continue;
+    const hit = rows.find((r) => (r as RecordData)?.id === n && typeof r === "object" && "_stamps" in (r as object));
+    if (hit) return hit as RecordData;
+  }
+  return undefined;
+}
+
 // Record types that live inside another record (a deal's investor tracker): the page leads back there.
 const PARENT_LINK: Record<string, string> = { deal_investors: "deal" };
 
@@ -43,6 +56,9 @@ function DetailInner() {
     queryKey: ["record", key, id],
     queryFn: () => api<RecordData>(`m/${key}/${id}/`),
     enabled: !!module,
+    // Show the row we already have from a list straight away (so the page opens without a wait and
+    // the title can grow out of the row), then refresh it from the server.
+    placeholderData: () => fromLists(qc, key, id),
   });
 
   if (isLoading || rec.isLoading) return <PageSkeleton />;
@@ -132,7 +148,7 @@ function DetailInner() {
         <Text size="sm" c="dimmed" truncate maw={320}>{r._title}</Text>
       </Breadcrumbs>
 
-      <PageHeader icon={ModIcon} title={r._title} actions={actions}
+      <PageHeader icon={ModIcon} title={r._title} actions={actions} hero={`${module.key}:${r.id}`}
         sub={parentLink && me.perms[parentLink.module]?.view ? (
           <Anchor component={Link} to={`/m/${parentLink.module}/${parentLink.id}`} size="sm" c="dimmed">
             <Group gap={2} component="span" wrap="nowrap">{parentName} page <IconArrowUpRight size={14} /></Group>

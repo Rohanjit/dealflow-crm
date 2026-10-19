@@ -1,8 +1,9 @@
 // Dealflow's look: a calm, document-like workspace. Warm neutrals, quiet borders, one blue for
-// actions, small radii, soft layered shadows, and short ease-out motion on everything that opens.
+// actions, small radii, soft layered shadows. Things that open arrive on springs (the curves are CSS
+// variables from motion.css) and leave quickly.
 
 import {
-  ActionIcon, Badge, Button, Checkbox, createTheme, Drawer, Input, Menu, Modal, NavLink, Paper, Popover, SegmentedControl,
+  ActionIcon, Badge, Button, Checkbox, Combobox, createTheme, Drawer, Input, Menu, Modal, NavLink, Paper, Popover, SegmentedControl,
   Select, Switch, Tabs, Tooltip, type CSSVariablesResolver, type MantineColorsTuple,
 } from "@mantine/core";
 
@@ -15,7 +16,25 @@ const navy: MantineColorsTuple = [
   "#eef5fd", "#dcebfb", "#b6d4f6", "#8cbbf1", "#64a3ec", "#4a93e9", "#2f80e0", "#1f6fd0", "#1a62b8", "#123f75",
 ];
 
-const pop = { transition: "pop", duration: 140, timingFunction: "cubic-bezier(.2,.8,.2,1)" } as const;
+// Dialogs rise a little and settle; they leave faster than they came.
+const sheet = {
+  transition: {
+    in: { opacity: 1, transform: "none" },
+    out: { opacity: 0, transform: "translateY(12px) scale(.97)" },
+    transitionProperty: "opacity, transform",
+  },
+  duration: 460, exitDuration: 170, timingFunction: "var(--df-spring-smooth)",
+};
+// Menus and dropdowns grow out of the control that opened them.
+const pop = {
+  transition: {
+    in: { opacity: 1, transform: "none" },
+    out: { opacity: 0, transform: "scale(.96) translateY(-4px)" },
+    common: { transformOrigin: "top center" },
+    transitionProperty: "opacity, transform",
+  },
+  duration: 340, exitDuration: 120, timingFunction: "var(--df-spring-snappy)",
+};
 
 export const theme = createTheme({
   primaryColor: "navy",
@@ -54,24 +73,28 @@ export const theme = createTheme({
     Paper: Paper.extend({ defaultProps: { radius: "md" } }),
     Modal: Modal.extend({
       defaultProps: {
-        radius: "lg", shadow: "xl", transitionProps: pop,
+        radius: "lg", shadow: "xl", transitionProps: sheet,
         overlayProps: { backgroundOpacity: 0.32, color: "#0f0f0f" },
       },
     }),
     Drawer: Drawer.extend({
-      defaultProps: { shadow: "xl", transitionProps: { duration: 200, timingFunction: "cubic-bezier(.2,.8,.2,1)" },
+      defaultProps: { shadow: "xl", transitionProps: { duration: 480, exitDuration: 220, timingFunction: "var(--df-spring-smooth)" },
         overlayProps: { backgroundOpacity: 0.18, color: "#0f0f0f" } },
     }),
     Menu: Menu.extend({ defaultProps: { shadow: "md", radius: "md", transitionProps: pop, offset: 6 } }),
     Popover: Popover.extend({ defaultProps: { shadow: "md", radius: "md", transitionProps: pop, offset: 6 } }),
     Tooltip: Tooltip.extend({
-      defaultProps: { openDelay: 350, radius: "sm", fz: "xs", color: "dark", withArrow: false, transitionProps: { transition: "fade", duration: 100 } },
+      defaultProps: { openDelay: 350, radius: "sm", fz: "xs", color: "dark", withArrow: false, transitionProps: { transition: "fade", duration: 140 } },
     }),
+    // Every dropdown input (multi-selects, tags, dates) opens the same way.
+    Combobox: Combobox.extend({ defaultProps: { shadow: "md", transitionProps: pop } }),
     Select: Select.extend({ defaultProps: { comboboxProps: { shadow: "md", transitionProps: pop } } }),
     Input: Input.extend({ defaultProps: { radius: "sm" } }),
     Checkbox: Checkbox.extend({ defaultProps: { radius: "xs" } }),
     Switch: Switch.extend({ defaultProps: { size: "sm" } }),
-    SegmentedControl: SegmentedControl.extend({ defaultProps: { radius: "sm", size: "sm", transitionDuration: 160 } }),
+    SegmentedControl: SegmentedControl.extend({
+      defaultProps: { radius: "sm", size: "sm", transitionDuration: 400, transitionTimingFunction: "var(--df-spring-snappy)" },
+    }),
     Tabs: Tabs.extend({ defaultProps: { color: "dark" } }),
     NavLink: NavLink.extend({ defaultProps: { variant: "subtle" } }),
   },
@@ -79,6 +102,7 @@ export const theme = createTheme({
 
 export const cssVariables: CSSVariablesResolver = () => ({
   variables: {
+    // Colour and shadow changes on hover (movement uses the springs in motion.css).
     "--df-ease": "cubic-bezier(.2,.8,.2,1)",
     "--df-fast": "120ms",
     "--df-medium": "180ms",

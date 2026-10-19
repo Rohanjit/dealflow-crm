@@ -48,7 +48,7 @@ function DuplicatesDrawer({ module, onClose }: { module: ModuleSchema; onClose: 
         {!isLoading && groups.length === 0 && (
           <Paper withBorder p="lg"><Text fw={600}>No duplicates found</Text><Text size="sm" c="dimmed">Nothing here looks like the same {module.singular.toLowerCase()} twice.</Text></Paper>
         )}
-        <Stack gap="sm" className="df-stagger">
+        <Stack gap="sm">
           {groups.map((g, i) => (
             <Paper key={i} withBorder p="md">
               <Group gap={6} mb={8}>

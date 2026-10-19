@@ -43,7 +43,7 @@ export default function Home() {
 
       <div>
         <Text fw={600} size="sm" c="dimmed" mb="xs">Your workspace</Text>
-        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm" className="df-stagger">
+        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
           {modules.map((m) => {
             const card = CARDS[m.key];
             const perms = me.perms[m.key];

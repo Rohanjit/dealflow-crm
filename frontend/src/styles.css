@@ -1,6 +1,6 @@
 /* Dealflow — a calm, document-like workspace.
-   Tokens live in theme.ts (--df-*). Motion is short and ease-out, and switches off for people who
-   ask their system for reduced motion. */
+   Tokens live in theme.ts (--df-*). How things move lives in motion.css (springs, page transitions,
+   press feedback, Reduce Motion); this file keeps the looks. */
 
 html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 body { background: #fff; color: var(--mantine-color-text); }
@@ -8,16 +8,6 @@ body { background: #fff; color: var(--mantine-color-text); }
 :focus-visible { outline: 2px solid rgba(47, 128, 224, .55); outline-offset: 1px; }
 
 /* ------------------------------------------------------------------ micro-interactions */
-
-/* Everything you can press gives a little: a quick tint on hover and a soft squeeze on press. */
-.mantine-Button-root, .mantine-ActionIcon-root, .mantine-UnstyledButton-root, .mantine-NavLink-root,
-.mantine-CloseButton-root, .mantine-Chip-label, .mantine-SegmentedControl-label {
-  transition: background-color var(--df-fast) var(--df-ease), color var(--df-fast) var(--df-ease),
-    border-color var(--df-fast) var(--df-ease), box-shadow var(--df-fast) var(--df-ease),
-    transform 90ms var(--df-ease);
-}
-.mantine-Button-root:active:not(:disabled):not([data-disabled]),
-.mantine-ActionIcon-root:active:not(:disabled):not([data-disabled]) { transform: scale(.97); }
 
 /* Quiet buttons: the "default" variant looks like a soft chip rather than a boxed control. */
 .mantine-Button-root[data-variant="default"], .mantine-ActionIcon-root[data-variant="default"] {
@@ -39,10 +29,6 @@ body { background: #fff; color: var(--mantine-color-text); }
 }
 .mantine-InputWrapper-label { font-weight: 500; color: var(--mantine-color-gray-8); margin-bottom: 4px; font-size: 13px; }
 
-/* Ticks pop in. */
-.mantine-Checkbox-icon { transition: transform 160ms var(--df-ease), opacity 120ms; }
-.mantine-Checkbox-input:checked + .mantine-Checkbox-icon { animation: df-tick 220ms var(--df-ease); }
-@keyframes df-tick { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.15); } 100% { transform: scale(1); opacity: 1; } }
 
 /* Notices slide in from the corner with a soft card look. */
 .mantine-Notification-root { border-radius: 8px; box-shadow: var(--mantine-shadow-lg); padding: 10px 14px; }
@@ -104,26 +90,11 @@ body { background: #fff; color: var(--mantine-color-text); }
 
 /* Cards (Paper with a border) lift a touch when they're links. */
 .mantine-Paper-root[data-with-border] { border-color: var(--df-line); }
-a.mantine-Paper-root, .df-card-link { transition: box-shadow var(--df-medium) var(--df-ease), transform var(--df-medium) var(--df-ease), background-color var(--df-fast); }
-a.mantine-Paper-root:hover, .df-card-link:hover { box-shadow: var(--mantine-shadow-sm); transform: translateY(-1px); }
+a.mantine-Paper-root:hover, .df-card-link:hover { box-shadow: var(--mantine-shadow-sm); }
 
-.df-card-arrow { margin-left: auto; color: var(--mantine-color-gray-5); opacity: .6; transform: translateX(-2px);
-  transition: opacity var(--df-fast), transform var(--df-medium) var(--df-ease); }
-.df-card-link:hover .df-card-arrow { opacity: 1; transform: none; }
+.df-card-arrow { margin-left: auto; color: var(--mantine-color-gray-5); opacity: .6; }
+.df-card-link:hover .df-card-arrow { opacity: 1; }
 
-/* Page changes fade up into place. */
-.df-page { animation: df-enter 220ms var(--df-ease) both; }
-@keyframes df-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-.df-fade { animation: df-fade 180ms var(--df-ease) both; }
-@keyframes df-fade { from { opacity: 0; } to { opacity: 1; } }
-/* Lists build up one row after another. */
-.df-stagger > * { animation: df-enter 260ms var(--df-ease) both; }
-.df-stagger > *:nth-child(2) { animation-delay: 25ms; }
-.df-stagger > *:nth-child(3) { animation-delay: 50ms; }
-.df-stagger > *:nth-child(4) { animation-delay: 75ms; }
-.df-stagger > *:nth-child(5) { animation-delay: 100ms; }
-.df-stagger > *:nth-child(6) { animation-delay: 125ms; }
-.df-stagger > *:nth-child(n+7) { animation-delay: 150ms; }
 
 /* Loading placeholders shimmer instead of spinning. */
 .df-skeleton {
@@ -145,18 +116,15 @@ a.mantine-Paper-root:hover, .df-card-link:hover { box-shadow: var(--mantine-shad
   display: flex; align-items: center; gap: 8px; width: 100%;
   min-height: 30px; padding: 4px 8px; border-radius: 6px;
   color: var(--mantine-color-gray-8); font-size: 14px; font-weight: 500; text-decoration: none;
-  position: relative; cursor: pointer; user-select: none;
-  transition: background-color var(--df-fast) var(--df-ease), color var(--df-fast);
+  position: relative; cursor: pointer; user-select: none; isolation: isolate;
 }
 .df-nav-item:hover { background: var(--df-hover); color: var(--mantine-color-text); }
-.df-nav-item:active { background: var(--df-press); }
-.df-nav-item[data-active] { background: var(--df-press); color: var(--mantine-color-text); font-weight: 600; }
+.df-nav-item[data-active] { color: var(--mantine-color-text); font-weight: 600; }
 .df-nav-link { color: inherit; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; outline: none; }
 .df-nav-link::after { content: ""; position: absolute; inset: 0; border-radius: 6px; }
 .df-nav-link:focus-visible::after { outline: 2px solid rgba(47, 128, 224, .55); outline-offset: -2px; }
 .df-nav-item .df-nav-extra { position: relative; z-index: 1; }
-.df-nav-item .df-nav-icon { color: var(--mantine-color-gray-7); flex-shrink: 0; transition: transform var(--df-medium) var(--df-ease); }
-.df-nav-item:hover .df-nav-icon { transform: scale(1.08); }
+.df-nav-item .df-nav-icon { color: var(--mantine-color-gray-7); flex-shrink: 0; }
 .df-nav-item .df-nav-extra { margin-left: auto; display: flex; align-items: center; gap: 2px; }
 .df-nav-item .df-nav-hover { opacity: 0; transition: opacity var(--df-fast); }
 .df-nav-item:hover .df-nav-hover, .df-nav-item:focus-within .df-nav-hover { opacity: 1; }
@@ -173,7 +141,6 @@ a.mantine-Paper-root:hover, .df-card-link:hover { box-shadow: var(--mantine-shad
   border-radius: 4px;
 }
 .df-nav-section:hover { color: var(--mantine-color-text); }
-.df-chevron { transition: transform var(--df-medium) var(--df-ease); }
 .df-chevron[data-open] { transform: rotate(90deg); }
 .df-nav-search { display: flex; align-items: center; gap: 8px; width: 100%; margin: 4px 0 6px; padding: 6px 10px;
   border: 1px solid var(--df-line); border-radius: 8px; background: #fff; color: var(--mantine-color-dimmed); font-size: 14px;
@@ -241,7 +208,7 @@ a.mantine-Paper-root:hover, .df-card-link:hover { box-shadow: var(--mantine-shad
   font-size: 11px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase;
   color: var(--mantine-color-gray-7); background: #fff; border: 1px solid var(--df-line);
   border-radius: 4px; padding: 1px 6px; box-shadow: var(--mantine-shadow-xs);
-  opacity: 0; transform: translateX(-4px); transition: opacity var(--df-fast), transform var(--df-medium) var(--df-ease);
+  opacity: 0; transform: translateX(-4px);
 }
 tr:hover .df-open-chip { opacity: 1; transform: none; }
 
@@ -299,7 +266,7 @@ tr:hover .df-open-chip { opacity: 1; transform: none; }
 .df-divider { height: 1px; background: var(--df-line); margin: 8px 0; border: 0; }
 
 /* Smooth open/close for toggled sections. */
-.df-collapse { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 220ms var(--df-ease), opacity 180ms; }
+.df-collapse { display: grid; grid-template-rows: 1fr; }
 .df-collapse[data-closed] { grid-template-rows: 0fr; opacity: 0; }
 .df-collapse > div { overflow: hidden; }
 
@@ -321,17 +288,12 @@ tr:hover .df-open-chip { opacity: 1; transform: none; }
 /* ------------------------------------------------------------------ boards */
 
 .df-board-card {
-  transition: box-shadow var(--df-medium) var(--df-ease), transform var(--df-medium) var(--df-ease), background-color var(--df-fast);
   box-shadow: 0 0 0 1px rgba(15, 15, 15, .06), 0 1px 2px rgba(15, 15, 15, .06);
   border: none !important;
 }
 .df-board-card:hover { background: var(--mantine-color-gray-0); box-shadow: 0 0 0 1px rgba(15, 15, 15, .08), 0 3px 8px rgba(15, 15, 15, .08); }
-.df-board-card[data-dragging] {
-  transform: rotate(2deg) scale(1.02);
-  box-shadow: 0 0 0 1px rgba(15, 15, 15, .06), 0 12px 32px rgba(15, 15, 15, .2);
-  background: #fff;
-}
-.df-board-col { transition: background-color var(--df-medium) var(--df-ease), box-shadow var(--df-medium); border-radius: 8px; }
+.df-board-card[data-dragging] { background: #fff; }
+.df-board-col { border-radius: 8px; }
 .df-board-col[data-over] { background: rgba(47, 128, 224, .07) !important; box-shadow: inset 0 0 0 1.5px rgba(47, 128, 224, .35); }
 
 /* ------------------------------------------------------------------ sign-in pages */
@@ -340,7 +302,6 @@ tr:hover .df-open-chip { opacity: 1; transform: none; }
   min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px;
   background: radial-gradient(1200px 600px at 50% -10%, var(--mantine-color-gray-1), #fff 60%);
 }
-.df-auth-card { animation: df-enter 320ms var(--df-ease) both; }
 
 .df-choice { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px; text-align: left;
   border: 1px solid var(--df-line); border-radius: 10px;
@@ -360,17 +321,15 @@ tr:hover .df-open-chip { opacity: 1; transform: none; }
 
 .df-tile {
   display: block; padding: 12px 14px; border: 1px solid var(--df-line); border-radius: 8px;
-  transition: background-color var(--df-fast), box-shadow var(--df-medium) var(--df-ease), transform var(--df-medium) var(--df-ease);
 }
-.df-tile:hover, .df-tile:focus-visible { background: var(--mantine-color-gray-0); box-shadow: var(--mantine-shadow-sm); transform: translateY(-1px); }
+.df-tile:hover, .df-tile:focus-visible { background: var(--mantine-color-gray-0); box-shadow: var(--mantine-shadow-sm); }
 .df-bar-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 3px 6px; border-radius: 4px; transition: background-color 80ms; }
 .df-bar-row:hover, .df-bar-row:focus-visible { background: var(--df-hover); }
 .df-bar-track { flex: 1; height: 14px; border-left: 1px solid var(--mantine-color-gray-4); display: flex; align-items: center; }
 .df-bar {
   height: 12px; min-width: 3px; border-radius: 0 4px 4px 0; /* square at the baseline, rounded at the data end */
-  transform-origin: left center; animation: df-grow 520ms var(--df-ease) both;
+  transform-origin: left center;
 }
-@keyframes df-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 .df-count { font-variant-numeric: tabular-nums; }
 
 /* Task lists */
@@ -389,13 +348,10 @@ tr:hover .df-open-chip { opacity: 1; transform: none; }
 
 .df-boot { animation: df-breathe 1.4s ease-in-out infinite; }
 @keyframes df-breathe { 0%, 100% { opacity: .55; transform: scale(.96); } 50% { opacity: 1; transform: scale(1); } }
-.df-ring { transform-origin: 50% 2px; animation: df-ring 700ms var(--df-ease); }
+.df-ring { transform-origin: 50% 2px; }
 @keyframes df-ring { 0% { transform: rotate(0); } 15% { transform: rotate(14deg); } 30% { transform: rotate(-12deg); }
   45% { transform: rotate(8deg); } 60% { transform: rotate(-5deg); } 75% { transform: rotate(2deg); } 100% { transform: rotate(0); } }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 1ms !important; animation-delay: 0ms !important; transition-duration: 1ms !important; }
-}
 
 .df-count-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px;
   margin-left: 6px; border-radius: 10px; font-size: 12px; font-weight: 600; color: #fff; background: var(--mantine-color-orange-6); }
@@ -409,11 +365,9 @@ tr:hover .df-open-chip { opacity: 1; transform: none; }
   position: fixed; left: 0; right: 0; bottom: 20px; margin: 0 auto; width: fit-content; z-index: 150;
   display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 32px); padding: 8px 10px 8px 16px;
   background: #fff; border-radius: 12px; box-shadow: var(--mantine-shadow-lg);
-  animation: df-rise 220ms var(--df-ease) both;
 }
 .df-bulkbar-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .df-bulkbar > * { flex-shrink: 0; }
-@keyframes df-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 @media (max-width: 700px) { .df-bulkbar { flex-wrap: wrap; bottom: 10px; } }
 .df-merge th[data-keep], .df-merge td[data-keep] { background: rgba(47, 128, 224, .05); }
 .df-merge td[data-picked] { box-shadow: inset 0 0 0 1.5px rgba(47, 128, 224, .45); }

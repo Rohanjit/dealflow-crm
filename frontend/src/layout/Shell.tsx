@@ -40,9 +40,8 @@ export default function Shell() {
   }
 
   const active = (path: string) => loc.pathname === path || loc.pathname.startsWith(path + "/");
-  // Each new page starts at the top (React Router keeps the old scroll position otherwise).
+  // Scrolling between pages is handled with the page transition (navigation.ts).
   useEffect(() => {
-    window.scrollTo(0, 0);
     mobile.close();
   }, [loc.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -50,7 +49,7 @@ export default function Shell() {
 
   return (
     <AppShell navbar={{ width: 248, breakpoint: "sm", collapsed: { mobile: !mobileOpen, desktop: collapsed } }}
-      transitionDuration={220} transitionTimingFunction="cubic-bezier(.2,.8,.2,1)">
+      transitionDuration={480} transitionTimingFunction="var(--df-spring-smooth)">
       <AppShell.Navbar className="df-sidebar">
         <AppShell.Section>
           <Group gap={2} wrap="nowrap">
@@ -75,7 +74,7 @@ export default function Shell() {
         <AppShell.Section grow component={ScrollArea} type="scroll" mt={4}>
           <div className="df-nav-section">Your work</div>
           <div>
-            <div className="df-stagger">
+            <div>
               {modules.map((m) => (
                 <NavItem key={m.key} to={`/m/${m.key}`} icon={m.key} label={m.label}
                   active={active(`/m/${m.key}`) || (NAV_CHILDREN[m.key] ?? []).some((c) => active(`/m/${c}`))}
@@ -143,7 +142,7 @@ export default function Shell() {
           <TaskBell />
         </div>
         <div className="df-main-inner">
-          <div key={loc.pathname} className="df-page">
+          <div key={loc.pathname}>
             <Outlet />
           </div>
         </div>
@@ -159,6 +158,9 @@ function NavItem({ to, icon, label, active, extra }: { to: string; icon: string;
   // a link of its own without nesting links).
   return (
     <div className="df-nav-item" data-active={active ? "" : undefined}>
+      {/* The highlight behind the current page. It has a name of its own in page transitions, so it
+          glides from the item you left to the one you picked. */}
+      {active && <span className="df-nav-pill" aria-hidden />}
       <I size={18} stroke={1.7} className="df-nav-icon" />
       <Link to={to} className="df-nav-link" aria-current={active ? "page" : undefined}>{label}</Link>
       {extra && <span className="df-nav-extra">{extra}</span>}

@@ -257,6 +257,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
               <Table.Tbody>
                 {data.results.map((r) => (
                   <Table.Tr key={r.id} className="df-row-link" data-selected={selected.includes(r.id) ? "" : undefined}
+                    data-hero-row={`${module.key}:${r.id}`}
                     onClick={() => nav(`/m/${module.key}/${r.id}`)}>
                     <Table.Td className="df-check-cell" onClick={(e) => e.stopPropagation()}>
                       <Checkbox size="xs" aria-label={`Select ${r._title}`} checked={selected.includes(r.id)}
@@ -270,7 +271,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
                         miw={f.key === module.title_field ? 220 : f.multi || f.type === "tags" ? 200 : undefined}>
                         {f.key === module.title_field ? (
                           <div className="df-title-cell">
-                            <Text size="sm" className="df-title-text">{r._title}</Text>
+                            <Text size="sm" className="df-title-text" data-hero={`${module.key}:${r.id}`}>{r._title}</Text>
                             <span className="df-open-chip"><IconArrowUpRight size={11} />Open</span>
                           </div>
                         ) : (
