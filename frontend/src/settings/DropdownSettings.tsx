@@ -1,4 +1,4 @@
-import { ActionIcon, Badge, Button, Group, NavLink, Paper, Stack, Text, TextInput, Title, Tooltip } from "@mantine/core";
+import { ActionIcon, Badge, Button, Flex, Group, NavLink, Paper, Stack, Text, TextInput, Title, Tooltip } from "@mantine/core";
 import { IconArrowDown, IconArrowUp, IconCheck, IconPencil, IconX } from "@tabler/icons-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -54,8 +54,8 @@ export default function DropdownSettings() {
 
   if (!list) return null;
   return (
-    <Group align="flex-start" gap="lg" wrap="nowrap">
-      <Paper withBorder p={6} w={220} style={{ flexShrink: 0 }}>
+    <Flex align={{ base: "stretch", sm: "flex-start" }} gap="lg" direction={{ base: "column", sm: "row" }}>
+      <Paper withBorder p={6} w={{ base: "100%", sm: 220 }} style={{ flexShrink: 0 }}>
         {lists.map((l) => (
           <NavLink key={l.key} label={l.label} description={`${l.options.filter((o) => o.is_active).length} options`}
             active={l.key === list.key} onClick={() => { setKey(l.key); setNewLabel(""); setAddError(""); }} />
@@ -75,12 +75,12 @@ export default function DropdownSettings() {
           </Stack>
           <Group align="flex-start" gap="xs">
             <TextInput placeholder="New option" value={newLabel} onChange={(e) => setNewLabel(e.currentTarget.value)} error={addError}
-              onKeyDown={(e) => { if (e.key === "Enter") add(); }} w={320} />
+              onKeyDown={(e) => { if (e.key === "Enter") add(); }} w={{ base: "100%", xs: 320 }} style={{ flex: "0 1 auto" }} />
             <Button onClick={add} disabled={!newLabel.trim()}>Add</Button>
           </Group>
         </Stack>
       </Paper>
-    </Group>
+    </Flex>
   );
 }
 
@@ -109,7 +109,7 @@ function OptionRow({
   }
 
   return (
-    <Group justify="space-between" wrap="nowrap" px="xs" py={4} style={{ borderRadius: 6, background: o.is_active ? undefined : "var(--mantine-color-gray-0)" }}>
+    <Group justify="space-between" wrap="wrap" gap={4} px="xs" py={4} style={{ borderRadius: 6, background: o.is_active ? undefined : "var(--mantine-color-gray-0)" }}>
       {editing ? (
         <Group gap={4} style={{ flex: 1 }} wrap="nowrap" align="flex-start">
           <TextInput size="xs" value={label} onChange={(e) => setLabel(e.currentTarget.value)} error={error} autoFocus style={{ flex: 1, maxWidth: 320 }}

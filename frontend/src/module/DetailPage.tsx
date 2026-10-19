@@ -140,7 +140,7 @@ function DetailInner() {
       {p && <PipelineBar module={module} record={r} />}
       {module.key === "vault" && <FileCard doc={r} />}
 
-      <Grid gutter={48} align="flex-start">
+      <Grid gutter={{ base: "md", lg: 48 }} align="flex-start">
         <Grid.Col span={{ base: 12, lg: module.timeline ? 7 : 12 }}>
           <Stack gap="xl">
             <Properties module={module} record={r} fields={fields} />

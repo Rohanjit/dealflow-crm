@@ -1,7 +1,7 @@
 import re
 from urllib.parse import urlparse
 
-from core.registry import Exit, FieldDef, ModuleDef, PipelineDef, proxy, register
+from core.registry import Exit, FieldDef, ModuleDef, PipelineDef, proxy, register, this_year
 
 from .models import STAGES, STATUSES, Company, Outreach
 
@@ -23,12 +23,12 @@ COMPANY_FIELDS = [
     FieldDef("city", "City", "text", CB, list_default=True, searchable=True, filterable=True,
              aliases=["location", "hq", "hq city", "headquarters", "based in"]),
     FieldDef("website", "Website", "url", CB, searchable=True, aliases=["url", "web", "site"]),
-    FieldDef("year_founded", "Year founded", "integer", CB,
+    FieldDef("year_founded", "Year founded", "integer", CB, min_value=1800, max_value=this_year(),
              aliases=["founded", "founded in", "year of incorporation", "incorporated", "inception", "founding year"]),
     FieldDef("description", "Description", "longtext", CB, searchable=True,
              aliases=["about", "business description", "what they do", "overview", "business"]),
 
-    FieldDef("financials_fy", "Financials for FY", "text", FS, help="The year the figures below are for, e.g. FY25.",
+    FieldDef("financials_fy", "Financials for FY", "text", FS, max_length=20, help="The year the figures below are for, e.g. FY25.",
              aliases=["fy", "financial year", "fiscal year", "year of financials"]),
     FieldDef("revenue", "Latest revenue", "money", FS, list_default=True,
              aliases=["revenue", "sales", "turnover", "topline", "revenues"]),

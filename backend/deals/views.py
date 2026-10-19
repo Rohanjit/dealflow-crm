@@ -98,7 +98,7 @@ class TrackerAddView(APIView):
     tracker are skipped and reported."""
 
     def post(self, request, pk):
-        from core.records import apply_values, clean_values
+        from core.records import apply_values, clean_values, to_id
         from core.registry import enabled_map
 
         user = request.user
@@ -110,9 +110,8 @@ class TrackerAddView(APIView):
         raw = request.data.get("investor_ids")
         if not isinstance(raw, list) or not raw:
             raise ValidationError({"detail": "Select at least one investor."})
-        try:
-            ids = list(dict.fromkeys(int(x) for x in raw))[:500]
-        except (TypeError, ValueError):
+        ids = list(dict.fromkeys(to_id(x) for x in raw))[:500]
+        if None in ids:
             raise ValidationError({"detail": "Those investors couldn't be read."})
         mod = get_module("deal_investors")
         enabled = enabled_map("deal_investors")

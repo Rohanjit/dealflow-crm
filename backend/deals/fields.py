@@ -123,11 +123,13 @@ def deal_filters(qs, params, user=None):
     elif view == "ended":
         qs = qs.filter(status__in=["withdrawn", "dropped"])
     if team := params.get("team"):
-        user_id = getattr(user, "pk", None) if team == "me" else team
-        if str(user_id).isdigit():
+        from core.records import to_id
+
+        user_id = getattr(user, "pk", None) if team == "me" else to_id(team)
+        if user_id is not None:
             cond = Q()
             for key in TEAM_FIELDS:
-                cond |= Q(**{key: int(user_id)})
+                cond |= Q(**{key: user_id})
             qs = qs.filter(pk__in=Deal.objects.filter(cond).values("pk"))
     return qs
 

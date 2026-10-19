@@ -21,6 +21,33 @@ User = get_user_model()
 
 EMPTY = (None, "", [])
 
+MAX_ID = 2**63 - 1  # the largest id the database can hold
+MAX_INT = 2**31 - 1  # whole-number fields are 32-bit columns on Postgres
+MONEY_MAX = Decimal(10) ** 15  # SQLite keeps 15 significant digits; amounts above that come back unreadable
+LONGTEXT_MAX = 100_000
+
+
+def to_id(raw) -> int | None:
+    """A record id from user input ("5", 5), or None if it can't be one. Never raises."""
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        n = raw
+    elif isinstance(raw, str) and raw.strip().isascii() and raw.strip().isdigit():
+        n = int(raw.strip())
+    else:
+        return None
+    return n if 0 < n <= MAX_ID else None
+
+
+def text_in(v) -> str:
+    """Text from user input: stripped, without NUL characters (Postgres can't store them)."""
+    if v is None:
+        return ""
+    if isinstance(v, (list, dict)):
+        raise FieldError("Enter text.")
+    return str(v).replace("\x00", "").strip()
+
 
 # ---------------------------------------------------------------- reading
 
@@ -218,9 +245,8 @@ def _to_bool(v) -> bool:
 
 
 def _option(f: FieldDef, raw, current_ids: set[int]) -> ChoiceOption:
-    try:
-        pk = int(raw)
-    except (TypeError, ValueError):
+    pk = to_id(raw)
+    if pk is None:
         raise FieldError("Pick an option from the list.")
     opt = ChoiceOption.objects.filter(pk=pk, choice_list__key=f.choice_list).first()
     if not opt:
@@ -233,26 +259,33 @@ def _option(f: FieldDef, raw, current_ids: set[int]) -> ChoiceOption:
 def clean_one(f: FieldDef, v, instance=None):
     t = f.type
     if t in ("text", "phone"):
-        s = "" if v is None else str(v).strip()
+        s = text_in(v)
         if len(s) > f.max_length:
             raise FieldError(f"Keep this under {f.max_length} characters.")
         return s
     if t == "longtext":
-        return "" if v is None else str(v).strip()
+        s = text_in(v)
+        if len(s) > LONGTEXT_MAX:
+            raise FieldError(f"Keep this under {LONGTEXT_MAX:,} characters.")
+        return s
     if t == "url":
-        s = "" if v is None else str(v).strip()
+        s = text_in(v)
         if not s:
             return ""
         if "://" not in s:
             s = "https://" + s
+        if len(s) > f.max_length:
+            raise FieldError(f"Keep this under {f.max_length} characters.")
         try:
             URLValidator(schemes=["http", "https"])(s)
         except ValidationError:
             raise FieldError("Enter a valid web address.")
-        return s[: f.max_length]
+        return s
     if t == "email":
-        s = "" if v is None else str(v).strip()
+        s = text_in(v)
         if s:
+            if len(s) > f.max_length:
+                raise FieldError(f"Keep this under {f.max_length} characters.")
             try:
                 EmailValidator()(s)
             except ValidationError:
@@ -264,11 +297,19 @@ def clean_one(f: FieldDef, v, instance=None):
             return None
         if d != d.to_integral_value():
             raise FieldError("Enter a whole number.")
+        lo = f.min_value if f.min_value is not None else -MAX_INT
+        hi = f.max_value if f.max_value is not None else MAX_INT
+        if callable(hi):
+            hi = hi()
+        if not lo <= d <= hi:
+            raise FieldError(f"Enter a number between {lo} and {hi}.")
         return int(d)
     if t in ("decimal", "percent"):
         d = _to_decimal(v)
         if d is not None and t == "percent" and not (0 <= d <= 100):
             raise FieldError("Enter a percentage between 0 and 100.")
+        if d is not None and d < 0 and not f.allow_negative:
+            raise FieldError("Enter a number that isn't negative.")
         return d
     if t == "date":
         return _to_date(v)
@@ -321,12 +362,16 @@ def clean_one(f: FieldDef, v, instance=None):
         if not isinstance(v, dict):
             raise FieldError("Enter an amount, currency and unit.")
         amount = _to_decimal(v.get("amount"))
-        currency = (v.get("currency") or "").strip().upper()
-        unit = (v.get("unit") or "").strip()
+        currency, unit = v.get("currency") or "", v.get("unit") or ""
+        if not isinstance(currency, str) or not isinstance(unit, str):
+            raise FieldError("Pick a currency and unit from the list.")
+        currency, unit = currency.strip().upper(), unit.strip()
         if amount is None:
             return {"amount": None, "currency": "", "unit": ""}
         if amount < 0 and not f.allow_negative:
             raise FieldError("Amount can't be negative.")
+        if abs(amount) >= MONEY_MAX:
+            raise FieldError("That amount is too large. Use a bigger unit (Cr, Mn, Bn).")
         if not currency:
             raise FieldError("Pick a currency.")
         if currency not in CURRENCY_CODES:
@@ -340,9 +385,13 @@ def clean_one(f: FieldDef, v, instance=None):
             return []
         if isinstance(v, str):
             v = [p for p in v.split(",")]
+        if not isinstance(v, (list, tuple)):
+            raise FieldError("Enter tags as a list.")
         seen, out = set(), []
         for raw in v:
-            name = str(raw).strip()[:60]
+            if not isinstance(raw, (str, int, float)) or isinstance(raw, bool):
+                raise FieldError("Enter each tag as text.")
+            name = text_in(raw)[:60]
             if name and name.lower() not in seen:
                 seen.add(name.lower())
                 out.append(name)
@@ -357,9 +406,8 @@ def clean_one(f: FieldDef, v, instance=None):
 
 
 def _user(raw, current: set):
-    try:
-        pk = int(raw)
-    except (TypeError, ValueError):
+    pk = to_id(raw)
+    if pk is None:
         raise FieldError("Pick a user.")
     user = User.objects.filter(pk=pk).first()
     if not user:
@@ -411,12 +459,11 @@ def _link_target(f: FieldDef, v, current: set):
     else:
         raise FieldError("Pick a record from the list.")
     targets = dict(active_targets(f))
-    if mkey not in targets:
+    if not isinstance(mkey, str) or mkey not in targets:
         raise FieldError("Pick a record from the list.")
     tmod = get_module(mkey)
-    try:
-        pk = int(raw_pk)
-    except (TypeError, ValueError):
+    pk = to_id(raw_pk)
+    if pk is None:
         raise FieldError("Pick a record from the list.")
     target = tmod.model.objects.filter(pk=pk).first()
     if not target:
@@ -638,13 +685,7 @@ def _csv(v: str) -> list[str]:
 
 
 def _ints(v: str) -> list[int]:
-    out = []
-    for p in _csv(v):
-        try:
-            out.append(int(p))
-        except ValueError:
-            pass
-    return out
+    return [n for p in _csv(v) if (n := to_id(p)) is not None]
 
 
 def _search_condition(mod: ModuleDef, q: str, enabled: dict) -> Q:
@@ -675,8 +716,8 @@ def _link_filter(qs: QuerySet, mod: ModuleDef, f: FieldDef, params) -> QuerySet:
         cond = Q()
         for token in _csv(raw):
             mkey, _, pk = token.partition(":")
-            if mkey in targets and pk.isdigit():
-                cond |= Q(**{f"{targets[mkey]}__pk": int(pk)})
+            if mkey in targets and (n := to_id(pk)) is not None:
+                cond |= Q(**{f"{targets[mkey]}__pk": n})
         qs = qs.filter(wrap(cond)) if cond else qs.none()
     typ = params.get(f"{f.key}_type")
     if typ == "none":

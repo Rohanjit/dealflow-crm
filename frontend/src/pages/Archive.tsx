@@ -64,11 +64,12 @@ export default function ArchivePage() {
       <PageHeader icon={moduleIcon("archive")} title="Deleted items"
         sub={<>Anything deleted lands here. Use <b>Restore</b> to bring it back{me.role.is_admin ? <>, or <b>Delete permanently</b> to remove it forever</> : ""}.</>} />
       <Group>
-        <TextInput placeholder="Search by name" leftSection={<IconSearch size={16} />} value={q} onChange={(e) => setQ(e.currentTarget.value)} w={300} />
-        <Select placeholder="All modules" clearable data={modules.map((m) => ({ value: m.key, label: m.label }))} value={module} onChange={setModule} w={200} />
+        <TextInput placeholder="Search by name" leftSection={<IconSearch size={16} />} value={q} onChange={(e) => setQ(e.currentTarget.value)} w={{ base: "100%", xs: 300 }} />
+        <Select placeholder="All modules" clearable data={modules.map((m) => ({ value: m.key, label: m.label }))} value={module} onChange={setModule} w={{ base: "100%", xs: 200 }} />
       </Group>
       <Paper withBorder radius="md" className="df-fade">
         {isLoading ? <TableSkeleton cols={4} rows={5} /> : (
+          <Table.ScrollContainer minWidth={560} type="native">
           <Table className="df-table" verticalSpacing="sm" horizontalSpacing="md">
             <Table.Thead>
               <Table.Tr><Table.Th>Name</Table.Th><Table.Th>Module</Table.Th><Table.Th>Deleted by</Table.Th><Table.Th>Deleted on</Table.Th><Table.Th /></Table.Tr>
@@ -96,6 +97,7 @@ export default function ArchivePage() {
               )}
             </Table.Tbody>
           </Table>
+          </Table.ScrollContainer>
         )}
       </Paper>
     </Stack>

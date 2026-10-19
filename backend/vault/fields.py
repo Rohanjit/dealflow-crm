@@ -34,10 +34,12 @@ def vault_filters(qs, params, user=None):
     from deals.models import Deal
     from outreach.models import Outreach
 
+    from core.records import to_id
+
     module, _, raw = about.partition(":")
-    if not raw.isdigit():
+    pk = to_id(raw)
+    if pk is None:
         return qs.none()
-    pk = int(raw)
     if module == "investors":
         cond = Q(investors=pk)
     elif module == "companies":

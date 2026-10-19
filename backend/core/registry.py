@@ -104,6 +104,9 @@ class FieldDef:
     readonly: bool = False  # set by the app (e.g. "Created by"), never by forms or imports
     default_me: bool = False  # user fields: a new record starts with whoever adds it (a task's assignee)
     default: str | None = None  # choice fields: the value used when none is given (e.g. a task's priority)
+    # integer: allowed range (max may be a function, e.g. "this year"); otherwise any 32-bit number
+    min_value: int | None = None
+    max_value: object = None
 
     def __post_init__(self):
         assert self.type in FIELD_TYPES, f"Unknown field type {self.type}"
@@ -155,6 +158,8 @@ class FieldDef:
             "readonly": self.readonly,
             "default_me": self.default_me,
             "default": self.default,
+            "min": self.min_value,
+            "max": self.max_value() if callable(self.max_value) else self.max_value,
         }
 
 
@@ -359,3 +364,10 @@ def money_value(amount, unit) -> Decimal | None:
     if amount is None:
         return None
     return Decimal(amount) * UNIT_MULTIPLIER.get(unit or "", Decimal(1))
+
+
+def this_year(ahead: int = 0):
+    """For year fields: the latest year allowed, worked out when the value is checked."""
+    import datetime as _dt
+
+    return lambda: _dt.date.today().year + ahead

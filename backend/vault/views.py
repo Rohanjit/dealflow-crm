@@ -14,7 +14,7 @@ from accounts.models import User
 from accounts.permissions import flag_required
 from core.guest import NotInSample, is_guest
 from core.sample import GUEST_PIN
-from core.records import apply_values, clean_values, serialize, with_related
+from core.records import apply_values, clean_values, serialize, text_in, with_related
 from core.registry import enabled_map, get_module
 
 from . import pin as vp
@@ -129,10 +129,11 @@ class VaultUploadView(APIView):
             raise ValidationError({"files": "Upload up to 50 files at a time."})
         try:
             meta = json.loads(request.data.get("data") or "{}")
-            assert isinstance(meta, dict)
-        except (ValueError, AssertionError):
+        except ValueError:
+            meta = None
+        titles = meta.pop("titles", None) or [] if isinstance(meta, dict) else None
+        if not isinstance(meta, dict) or not isinstance(titles, list):
             raise ValidationError({"detail": "The upload form was incomplete. Try again."})
-        titles = meta.pop("titles", None) or []
         for k in ("file_name", "file_type", "file_size", "created_by", "created_at"):
             meta.pop(k, None)
 
@@ -149,7 +150,7 @@ class VaultUploadView(APIView):
         prepared = []
         for i, (f, (ext, kind, sha)) in enumerate(zip(files, checked)):
             name = clean_name(f.name)
-            given = str(titles[i]).strip() if i < len(titles) and titles[i] else ""
+            given = text_in(titles[i]) if i < len(titles) and isinstance(titles[i], str) else ""
             title = given or (name.rpartition(".")[0] if "." in name else name)
             values, errors = clean_values(mod, {**meta, "title": title[:255]}, enabled=enabled)
             if errors:

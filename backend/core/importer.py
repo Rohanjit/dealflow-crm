@@ -17,6 +17,7 @@ import time
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
 
 from .models import ChoiceList, ChoiceOption
 from .records import FieldError, apply_values, clean_values
@@ -67,11 +68,15 @@ def read_rows(filename: str, data: bytes) -> list[list[str]]:
                 break
             except UnicodeDecodeError:
                 continue
+        text = text.replace("\x00", "")
         try:
             dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;\t")
         except csv.Error:
             dialect = csv.excel
-        rows = [[c.strip() for c in r] for r in csv.reader(io.StringIO(text), dialect)]
+        try:
+            rows = [[c.strip() for c in r] for r in csv.reader(io.StringIO(text), dialect)]
+        except csv.Error:
+            raise ImportError_("This file couldn't be read as a spreadsheet. Check it's a .csv, or save it as .xlsx.")
     elif name.endswith(".xls"):
         raise ImportError_("Old .xls files aren't supported. Save the sheet as .xlsx or .csv and try again.")
     else:
@@ -94,7 +99,7 @@ def read_rows(filename: str, data: bytes) -> list[list[str]]:
 
 
 def _path(token):
-    if not re.fullmatch(r"[A-Za-z0-9_-]{20,64}", token or ""):
+    if not isinstance(token, str) or not re.fullmatch(r"[A-Za-z0-9_-]{20,64}", token):
         raise ImportError_("This import has expired. Upload the file again.")
     return settings.IMPORT_DIR / f"{token}.json"
 
@@ -656,7 +661,12 @@ def commit_rows(mod: ModuleDef, rows, mapping, user, enabled, include_rows: set[
         if errors:
             failed.append({"row": n, "errors": errors})
             continue
-        apply_values(mod.model(), mod, values, user, importing=True)
+        try:
+            with transaction.atomic():
+                apply_values(mod.model(), mod, values, user, importing=True)
+        except (IntegrityError, ValueError) as e:
+            failed.append({"row": n, "errors": {"detail": f"Couldn't be saved ({e})."}})
+            continue
         created += 1
     return {
         "created": created,
@@ -671,7 +681,12 @@ def validate_mapping(mod: ModuleDef, mapping, width: int, enabled: dict) -> list
         raise ImportError_("Column matching doesn't fit this file. Upload it again.")
     clean, used = [], set()
     for m in mapping:
+        if m is not None and not isinstance(m, dict):
+            raise ImportError_("Column matching doesn't fit this file. Upload it again.")
         key = (m or {}).get("field") or None
+        cur, unit = (m or {}).get("currency") or "", (m or {}).get("unit") or ""
+        if not isinstance(key, (str, type(None))) or not isinstance(cur, str) or not isinstance(unit, str):
+            raise ImportError_("Column matching doesn't fit this file. Upload it again.")
         if key:
             base = key[: -len(CU_SUFFIX)] if key.endswith(CU_SUFFIX) else key
             if base not in mod.field_map or mod.field_map[base].readonly or not enabled.get(base, True):
@@ -681,7 +696,7 @@ def validate_mapping(mod: ModuleDef, mapping, width: int, enabled: dict) -> list
             if key in used and mod.field_map[base].type not in ("text", "longtext"):
                 raise ImportError_(f"Two columns are matched to {mod.field_map[base].label}. Pick one.")
             used.add(key)
-        clean.append({"field": key, "currency": (m or {}).get("currency", ""), "unit": (m or {}).get("unit", "")})
+        clean.append({"field": key, "currency": cur, "unit": unit})
     if mod.title_field not in used:
         raise ImportError_(f"Match a column to {mod.field_map[mod.title_field].label}; it's required.")
     return clean

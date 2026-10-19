@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 
 from django.db.models import Q
 
-from core.registry import UNIT_MULTIPLIER, FieldDef, ModuleDef, register
+from core.registry import UNIT_MULTIPLIER, FieldDef, ModuleDef, register, this_year
 
 from .models import INSTRUMENT_CHOICES, STRENGTH_CHOICES, Investor
 
@@ -41,7 +41,7 @@ FIELDS = [
 
     FieldDef("fund_size", "Fund size / AUM", "money", F,
              aliases=["aum", "fund size", "corpus"]),
-    FieldDef("fund_vintage", "Current fund vintage (year)", "integer", F,
+    FieldDef("fund_vintage", "Current fund vintage (year)", "integer", F, min_value=1900, max_value=this_year(3),
              aliases=["vintage", "fund vintage"]),
     FieldDef("actively_deploying", "Actively deploying", "tristate", F, filterable=True,
              aliases=["active", "deploying"]),

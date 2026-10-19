@@ -103,6 +103,7 @@ export default function UsersSettings() {
             <Button leftSection={<IconPlus size={16} />} onClick={() => setEditing("new")}>Add user</Button>
           </Group>
         </Group>
+        <Table.ScrollContainer minWidth={480} type="native">
         <Table className="df-table" verticalSpacing="sm">
           <Table.Thead>
             <Table.Tr><Table.Th>Name</Table.Th><Table.Th>Role</Table.Th><Table.Th>Status</Table.Th><Table.Th>Last sign-in</Table.Th><Table.Th w={40} /></Table.Tr>
@@ -140,11 +141,13 @@ export default function UsersSettings() {
             })}
           </Table.Tbody>
         </Table>
+        </Table.ScrollContainer>
       </Paper>
 
       {openInvites.length > 0 && (
         <Paper withBorder p="lg">
           <Title order={5} mb="sm">Open invite links</Title>
+          <Table.ScrollContainer minWidth={420} type="native">
           <Table className="df-table" verticalSpacing="xs">
             <Table.Thead><Table.Tr><Table.Th>For</Table.Th><Table.Th>Role</Table.Th><Table.Th>Expires</Table.Th><Table.Th /></Table.Tr></Table.Thead>
             <Table.Tbody>
@@ -163,6 +166,7 @@ export default function UsersSettings() {
               ))}
             </Table.Tbody>
           </Table>
+          </Table.ScrollContainer>
         </Paper>
       )}
 

@@ -1,4 +1,4 @@
-import { Badge, Group, Paper, SegmentedControl, SimpleGrid, Stack, Switch, Text, Title, Tooltip } from "@mantine/core";
+import { Badge, Group, Paper, ScrollArea, SegmentedControl, SimpleGrid, Stack, Switch, Text, Title, Tooltip } from "@mantine/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -36,7 +36,11 @@ export default function FieldSettings() {
           <Title order={4}>Fields</Title>
           <Text size="sm" c="dimmed">Switch off fields your firm doesn't use. They disappear from forms, lists, filters, imports and exports for everyone. Data already saved in a switched-off field is kept and comes back if you switch it on again.</Text>
         </div>
-        {mods.length > 1 && <SegmentedControl w="fit-content" data={mods.map((m) => ({ value: m.module, label: m.label }))} value={current.module} onChange={setModule} />}
+        {mods.length > 1 && (
+          <ScrollArea type="auto" offsetScrollbars scrollbarSize={6}>
+            <SegmentedControl w="fit-content" data={mods.map((m) => ({ value: m.module, label: m.label }))} value={current.module} onChange={setModule} />
+          </ScrollArea>
+        )}
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
           {current.groups.map((g) => (
             <div key={g}>

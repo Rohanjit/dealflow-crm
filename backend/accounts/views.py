@@ -17,12 +17,43 @@ from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
 from core.models import FirmSettings
+from core.records import to_id
 from core.modules import ACTIONS, BUILT_MODULES, MODULES
 
 from .models import DATE_FORMATS, NUMBER_GROUPINGS, Invite, Role, RoleModulePermission, User
 from core.guest import NotInSample
 
 from .permissions import IsActiveUser, flag_required
+
+
+def _text(v) -> str:
+    """Text from a request: anything that isn't plain text counts as empty; NUL characters removed."""
+    if isinstance(v, bool) or not isinstance(v, (str, int, float)):
+        return ""
+    return str(v).replace("\x00", "").strip()
+
+
+def _secret(v) -> str:
+    """A password or PIN exactly as typed (not stripped); anything that isn't text counts as empty."""
+    return v.replace("\x00", "") if isinstance(v, str) else ""
+
+
+def _flag(v, key: str) -> bool:
+    """A yes/no switch from a request: true/false only."""
+    if isinstance(v, bool):
+        return v
+    if v in ("true", "false"):
+        return v == "true"
+    raise ValidationError({key: "Send true or false."})
+
+
+
+
+def _validate_email(email: str):
+    """Django's check, plus the length the email column holds."""
+    validate_email(email)
+    if len(email) > 254:
+        raise DjangoValidationError("Too long")
 
 
 class LoginThrottle(AnonRateThrottle):
@@ -105,16 +136,18 @@ class SetupView(APIView):
         d = request.data
         errors = {}
         kind = "individual" if d.get("workspace_kind") == "individual" else "firm"
-        firm = str(d.get("firm_name") or "").strip()[:150]
-        name = str(d.get("full_name") or "").strip()
-        email = str(d.get("email") or "").strip().lower()
-        password = d.get("password") or ""
+        firm = _text(d.get("firm_name"))[:150]
+        name = _text(d.get("full_name"))
+        email = _text(d.get("email")).lower()
+        password = _secret(d.get("password"))
         if not firm and kind == "firm":
             errors["firm_name"] = "Enter your firm's name."
         if not name:
             errors["full_name"] = "Enter your name."
+        elif len(name) > 150:
+            errors["full_name"] = "Keep the name under 150 characters."
         try:
-            validate_email(email)
+            _validate_email(email)
         except DjangoValidationError:
             errors["email"] = "Enter a valid email address."
         if msg := _password_errors(password):
@@ -144,8 +177,8 @@ class LoginView(APIView):
     throttle_classes = [LoginThrottle]
 
     def post(self, request):
-        email = str(request.data.get("email") or "").strip().lower()
-        password = request.data.get("password") or ""
+        email = _text(request.data.get("email")).lower()
+        password = _secret(request.data.get("password"))
         user = authenticate(request, username=email, password=password)
         if not user or not user.is_active:
             raise ValidationError({"detail": "That email and password don't match."})
@@ -172,18 +205,20 @@ class MeView(APIView):
         u = request.user
         d = request.data
         if "date_format" in d:
-            if d["date_format"] not in dict(DATE_FORMATS):
+            if _text(d["date_format"]) not in dict(DATE_FORMATS):
                 raise ValidationError({"date_format": "Pick a date format."})
             u.date_format = d["date_format"]
         if "number_grouping" in d:
-            if d["number_grouping"] not in dict(NUMBER_GROUPINGS):
+            if _text(d["number_grouping"]) not in dict(NUMBER_GROUPINGS):
                 raise ValidationError({"number_grouping": "Pick a number format."})
             u.number_grouping = d["number_grouping"]
         if "full_name" in d:
-            name = str(d["full_name"] or "").strip()
+            name = _text(d["full_name"])
             if not name:
                 raise ValidationError({"full_name": "Enter your name."})
-            u.full_name = name[:150]
+            if len(name) > 150:
+                raise ValidationError({"full_name": "Keep your name under 150 characters."})
+            u.full_name = name
         u.save()
         return Response(me_payload(u))
 
@@ -193,9 +228,9 @@ class ChangePasswordView(APIView):
 
     def post(self, request):
         u = request.user
-        if not u.check_password(request.data.get("current_password") or ""):
+        if not u.check_password(_secret(request.data.get("current_password"))):
             raise ValidationError({"current_password": "Your current password is wrong."})
-        new = request.data.get("new_password") or ""
+        new = _secret(request.data.get("new_password"))
         if msg := _password_errors(new, u):
             raise ValidationError({"new_password": msg})
         if new == request.data.get("current_password"):
@@ -254,20 +289,22 @@ class UserListView(APIView):
     def post(self, request):
         d = request.data
         errors = {}
-        name = str(d.get("full_name") or "").strip()
-        email = str(d.get("email") or "").strip().lower()
+        name = _text(d.get("full_name"))
+        email = _text(d.get("email")).lower()
         if not name:
             errors["full_name"] = "Enter their name."
+        elif len(name) > 150:
+            errors["full_name"] = "Keep the name under 150 characters."
         try:
-            validate_email(email)
+            _validate_email(email)
             if User.objects.filter(email__iexact=email).exists():
                 errors["email"] = "Someone already uses this email."
         except DjangoValidationError:
             errors["email"] = "Enter a valid email address."
-        role = Role.objects.filter(pk=d.get("role")).first()
+        role = Role.objects.filter(pk=to_id(d.get("role"))).first()
         if not role:
             errors["role"] = "Pick a role."
-        temp = (d.get("temp_password") or "").strip() or _temp_password()
+        temp = _text(d.get("temp_password")) or _temp_password()
         if msg := _password_errors(temp):
             errors["temp_password"] = msg
         if errors:
@@ -284,8 +321,10 @@ class UserDetailView(APIView):
         u = get_object_or_404(User.objects.select_related("role"), pk=pk)
         d = request.data
         new_role = None
+        if "is_active" in d:
+            d = {**d, "is_active": _flag(d["is_active"], "is_active")}
         if "role" in d:
-            new_role = Role.objects.filter(pk=d["role"]).first()
+            new_role = Role.objects.filter(pk=to_id(d["role"])).first()
             if not new_role:
                 raise ValidationError({"role": "Pick a role."})
         _guard_admin_changes(request.user, u, new_role)
@@ -297,14 +336,16 @@ class UserDetailView(APIView):
         if "is_active" in d and not d["is_active"] and u.pk == request.user.pk:
             raise ValidationError({"detail": "You can't deactivate your own account."})
         if "full_name" in d:
-            name = str(d["full_name"] or "").strip()
+            name = _text(d["full_name"])
             if not name:
                 raise ValidationError({"full_name": "Enter their name."})
-            u.full_name = name[:150]
+            if len(name) > 150:
+                raise ValidationError({"full_name": "Keep the name under 150 characters."})
+            u.full_name = name
         if "email" in d:
-            email = str(d["email"] or "").strip().lower()
+            email = _text(d["email"]).lower()
             try:
-                validate_email(email)
+                _validate_email(email)
             except DjangoValidationError:
                 raise ValidationError({"email": "Enter a valid email address."})
             if User.objects.filter(email__iexact=email).exclude(pk=u.pk).exists():
@@ -313,7 +354,7 @@ class UserDetailView(APIView):
         if new_role:
             u.role = new_role
         if "is_active" in d:
-            u.is_active = bool(d["is_active"])
+            u.is_active = d["is_active"]
         u.save()
         if not u.is_active:
             _end_sessions(u)
@@ -329,7 +370,7 @@ class UserResetPasswordView(APIView):
     def post(self, request, pk):
         u = get_object_or_404(User, pk=pk)
         _guard_admin_changes(request.user, u, None)
-        temp = (request.data.get("temp_password") or "").strip() or _temp_password()
+        temp = _text(request.data.get("temp_password")) or _temp_password()
         if msg := _password_errors(temp, u):
             raise ValidationError({"temp_password": msg})
         u.set_password(temp)
@@ -370,18 +411,20 @@ class AdminRequired(IsActiveUser):
 
 def _save_role(role: Role, d: dict):
     if "name" in d:
-        name = " ".join(str(d["name"] or "").split())[:80]
+        name = " ".join(_text(d["name"]).split())[:80]
         if not name:
             raise ValidationError({"name": "Enter a role name."})
         if Role.objects.filter(name__iexact=name).exclude(pk=role.pk).exists():
             raise ValidationError({"name": "A role with this name already exists."})
         role.name = name
     flags = d.get("flags") or {}
+    perms = d.get("perms") or {}
+    if not isinstance(flags, dict) or not isinstance(perms, dict) or not all(isinstance(p, (dict, type(None))) for p in perms.values()):
+        raise ValidationError({"detail": "The permissions couldn't be read."})
     for flag in ("manage_users", "manage_settings", "restore_archive"):
         if flag in flags:
-            setattr(role, flag, bool(flags[flag]))
+            setattr(role, flag, _flag(flags[flag], flag))
     role.save()
-    perms = d.get("perms") or {}
     for module, _ in MODULES:
         if module not in perms:
             continue
@@ -404,7 +447,7 @@ class RoleListView(APIView):
 
     @transaction.atomic
     def post(self, request):
-        if not str(request.data.get("name") or "").strip():
+        if not _text(request.data.get("name")):
             raise ValidationError({"name": "Enter a role name."})
         role = Role(name="__new__")
         role.name = f"__new__{secrets.token_hex(4)}"
@@ -461,12 +504,12 @@ class InviteListView(APIView):
         return Response([invite_payload(i) for i in qs])
 
     def post(self, request):
-        role = Role.objects.filter(pk=request.data.get("role")).first()
+        role = Role.objects.filter(pk=to_id(request.data.get("role"))).first()
         if not role:
             raise ValidationError({"role": "Pick a role."})
         _guard_admin_changes(request.user, None, role)
         i = Invite.objects.create(
-            role=role, note=str(request.data.get("note") or "").strip()[:150], created_by=request.user
+            role=role, note=_text(request.data.get("note"))[:150], created_by=request.user
         )
         return Response(invite_payload(i), status=status.HTTP_201_CREATED)
 
@@ -498,13 +541,15 @@ class InviteAcceptView(APIView):
     def post(self, request, token):
         d = request.data
         errors = {}
-        name = str(d.get("full_name") or "").strip()
-        email = str(d.get("email") or "").strip().lower()
-        password = d.get("password") or ""
+        name = _text(d.get("full_name"))
+        email = _text(d.get("email")).lower()
+        password = _secret(d.get("password"))
         if not name:
             errors["full_name"] = "Enter your name."
+        elif len(name) > 150:
+            errors["full_name"] = "Keep the name under 150 characters."
         try:
-            validate_email(email)
+            _validate_email(email)
             if User.objects.filter(email__iexact=email).exists():
                 errors["email"] = "An account with this email already exists. Sign in instead."
         except DjangoValidationError:

@@ -173,7 +173,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
               onChange={(v) => setParam({ [module.segments!.param]: v === module.segments!.default ? null : v || null })} />
           )}
         </Group>
-        <Group gap={4} wrap="nowrap">
+        <Group gap={4} wrap="wrap">
           {isFetching && <Loader size="xs" mr={4} />}
           <TextInput size="xs" w={240} placeholder={`Search ${NOUNS[module.key]?.[1] ?? module.label.toLowerCase()}…`}
             aria-label={`Search ${module.label}`} leftSection={<IconSearch size={14} />} value={search}

@@ -1,6 +1,6 @@
 import { Alert, Anchor, Breadcrumbs, Button, Group, Loader, Paper, SimpleGrid, Stack, Text } from "@mantine/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { api } from "../api";
@@ -75,6 +75,7 @@ function FormInner() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const sending = useRef(false); // a second click before the button greys out must not save twice
   const [loadingLinked, setLoadingLinked] = useState(false);
 
   // Company-level fields (via a link, e.g. an outreach attempt's company) load from that record.
@@ -139,6 +140,8 @@ function FormInner() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (sending.current) return;
+    sending.current = true;
     setBusy(true);
     setError("");
     setErrors({});
@@ -164,6 +167,7 @@ function FormInner() {
       setError(Object.keys(fe).length ? "Please fix the highlighted fields." : errorMessage(err));
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
+      sending.current = false;
       setBusy(false);
     }
   }

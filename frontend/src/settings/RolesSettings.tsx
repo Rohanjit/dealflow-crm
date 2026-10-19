@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Checkbox, Group, NavLink, Paper, Stack, Switch, Table, Text, TextInput, Title } from "@mantine/core";
+import { Alert, Badge, Button, Checkbox, Flex, Group, NavLink, Paper, Stack, Switch, Table, Text, TextInput, Title } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { IconPlus } from "@tabler/icons-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -94,8 +94,8 @@ export default function RolesSettings() {
   }
 
   return (
-    <Group align="flex-start" gap="lg" wrap="nowrap">
-      <Paper withBorder p={6} w={220} style={{ flexShrink: 0 }}>
+    <Flex align={{ base: "stretch", sm: "flex-start" }} gap="lg" direction={{ base: "column", sm: "row" }}>
+      <Paper withBorder p={6} w={{ base: "100%", sm: 220 }} style={{ flexShrink: 0 }}>
         {roles.data?.map((r) => (
           <NavLink key={r.id} label={r.name} description={`${r.user_count} ${r.user_count === 1 ? "person" : "people"}`}
             active={selected === r.id} onClick={() => setSelected(r.id)}
@@ -117,6 +117,7 @@ export default function RolesSettings() {
 
             <div>
               <Text fw={600} size="sm" mb={4}>What this role can do in each module</Text>
+              <Table.ScrollContainer minWidth={340} type="native">
               <Table className="df-table" verticalSpacing={6} maw={620}>
                 <Table.Thead>
                   <Table.Tr><Table.Th>Module</Table.Th>{ACTIONS.map((a) => <Table.Th key={a.key} ta="center">{a.label}</Table.Th>)}</Table.Tr>
@@ -140,6 +141,7 @@ export default function RolesSettings() {
                   ))}
                 </Table.Tbody>
               </Table>
+              </Table.ScrollContainer>
               <Text size="xs" c="dimmed" mt={4}>Delete moves records to Deleted items, where they can be brought back. Create, Edit and Delete include View.</Text>
             </div>
 
@@ -156,6 +158,6 @@ export default function RolesSettings() {
           </Stack>
         </Paper>
       )}
-    </Group>
+    </Flex>
   );
 }

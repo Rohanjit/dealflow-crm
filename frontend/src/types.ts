@@ -56,6 +56,8 @@ export type FieldSchema = {
   readonly: boolean; // set by the app, never typed in (e.g. "From outreach")
   default_me: boolean; // user fields: a new record starts with whoever adds it
   default: string | null; // choice fields: the starting value for a new record
+  min: number | null; // integer: lowest allowed (years)
+  max: number | null; // integer: highest allowed
 };
 
 export type Section = {

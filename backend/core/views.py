@@ -21,7 +21,7 @@ from .exporter import export_workbook
 from .models import ChoiceList, ChoiceOption, FieldSwitch, FirmSettings, Note
 from .modules import BUILT_MODULES
 from .pagination import StandardPagination
-from .records import apply_values, clean_values, filter_queryset, serialize, with_related
+from .records import apply_values, clean_values, filter_queryset, serialize, text_in, to_id, with_related
 from .registry import CURRENCIES, UNITS, active_targets, all_modules, enabled_map, get_module
 
 
@@ -118,7 +118,7 @@ class LookupView(APIView):
         if not _can_lookup(request.user, module):
             raise PermissionDenied(f"Your role can't see {mod.label}.")
         _open(request, mod)
-        ids = [int(p) for p in (request.query_params.get("ids") or "").split(",") if p.strip().isdigit()]
+        ids = [n for p in (request.query_params.get("ids") or "").split(",") if (n := to_id(p)) is not None]
         if ids:
             qs = mod.model.objects.filter(pk__in=ids[:100])
         else:
@@ -262,9 +262,8 @@ def _selected(mod, raw):
     """The chosen records, in the order given; all must exist and not be deleted."""
     if not isinstance(raw, list) or not raw:
         raise ValidationError({"detail": "Select at least one record."})
-    try:
-        ids = list(dict.fromkeys(int(x) for x in raw))
-    except (TypeError, ValueError):
+    ids = list(dict.fromkeys(to_id(x) for x in raw))
+    if None in ids:
         raise ValidationError({"detail": "Those records couldn't be read."})
     if len(ids) > BULK_LIMIT:
         raise ValidationError({"detail": f"Work on up to {BULK_LIMIT} records at a time."})
@@ -292,6 +291,11 @@ class BulkView(APIView):
             return Response({"deleted": n})
         values = request.data.get("values")
         modes = request.data.get("modes") or {}
+        if isinstance(values, dict):
+            # Only fields people can actually change here: shown in Settings and not filled in by the app.
+            enabled = enabled_map(module)
+            values = {k: v for k, v in values.items()
+                      if k in mod.field_map and not mod.field_map[k].readonly and enabled.get(k, True)}
         if not isinstance(values, dict) or not values:
             raise ValidationError({"detail": "Choose a field and a value."})
         if not isinstance(modes, dict) or any(m not in bulk.MULTI_MODES for m in modes.values()):
@@ -310,11 +314,13 @@ class MergeView(APIView):
         _require(request.user, module, "edit")
         _require(request.user, module, "delete")
         _open(request, mod)
-        try:
-            keep = int(request.data.get("keep"))
-        except (TypeError, ValueError):
+        keep = to_id(request.data.get("keep"))
+        if keep is None:
             raise ValidationError({"keep": "Choose the record to keep."})
-        others = [x for x in (request.data.get("merge") or []) if str(x) != str(keep)]
+        given = request.data.get("merge") or []
+        if not isinstance(given, list):
+            raise ValidationError({"detail": "Select at least two records to merge."})
+        others = [x for x in given if to_id(x) != keep]
         if not others:
             raise ValidationError({"detail": "Select at least two records to merge."})
         if len(others) > 9:
@@ -384,7 +390,7 @@ def _clean_note(data: dict, partial=False) -> dict:
     out, errors = {}, {}
     if "kind" in data or not partial:
         kind = data.get("kind") or "note"
-        if kind not in NOTE_KINDS:
+        if not isinstance(kind, str) or kind not in NOTE_KINDS:
             errors["kind"] = "Pick note, call, meeting or email."
         out["kind"] = kind
     if "date" in data or not partial:
@@ -394,7 +400,8 @@ def _clean_note(data: dict, partial=False) -> dict:
         except ValueError:
             errors["date"] = "Enter a date as YYYY-MM-DD."
     if "text" in data or not partial:
-        text = str(data.get("text") or "").strip()
+        raw = data.get("text")
+        text = text_in(raw) if isinstance(raw, str) else ""
         if not text:
             errors["text"] = "Write what happened."
         out["text"] = text[:20000]
@@ -527,7 +534,7 @@ class ImportCommitView(_ImportStep):
         include = request.data.get("include_rows")
         if not isinstance(include, list):
             raise ValidationError({"include_rows": "Pick the rows to import."})
-        include = {int(n) for n in include if str(n).isdigit()}
+        include = {n for x in include if (n := to_id(x)) is not None}
         with transaction.atomic():
             result = importer.commit_rows(mod, rows, mapping, request.user, enabled, include, add_missing, create_links)
         importer.discard_upload(request.data.get("token"))
@@ -673,7 +680,8 @@ class FirmSettingsView(APIView):
             else:
                 fs.workspace_kind = request.data["workspace_kind"]
         if "firm_name" in request.data:
-            name = str(request.data["firm_name"] or "").strip()
+            raw = request.data["firm_name"]
+            name = text_in(raw) if isinstance(raw, str) else ""
             if not name and fs.workspace_kind == "firm":
                 errors["firm_name"] = "Enter the firm name."
             fs.firm_name = name[:150]
@@ -697,7 +705,10 @@ class FirmSettingsView(APIView):
             except (TypeError, ValueError):
                 errors["backup_hour"] = "Pick an hour between 0 and 23."
         if "backups_enabled" in request.data:
-            fs.backups_enabled = bool(request.data["backups_enabled"])
+            if not isinstance(request.data["backups_enabled"], bool):
+                errors["backups_enabled"] = "Send true or false."
+            else:
+                fs.backups_enabled = request.data["backups_enabled"]
         if "dashboard_days" in request.data:
             try:
                 fs.dashboard_days = int(request.data["dashboard_days"])
@@ -740,6 +751,8 @@ class FieldSwitchView(APIView):
     def patch(self, request):
         module = request.data.get("module")
         key = request.data.get("field_key")
+        if not isinstance(module, str) or not isinstance(key, str):
+            raise ValidationError({"field_key": "Unknown field."})
         mod = _module(module)
         try:
             f = mod.field(key)
@@ -748,7 +761,9 @@ class FieldSwitchView(APIView):
         if f.via:
             owner = get_module(f.via_module)
             raise ValidationError({"field_key": f"{f.label} belongs to {owner.label}; switch it there."})
-        enabled = bool(request.data.get("enabled"))
+        enabled = request.data.get("enabled")
+        if not isinstance(enabled, bool):
+            raise ValidationError({"enabled": "Send true or false."})
         if not enabled and not f.can_disable:
             why = "is required" if f.required else "is used by other screens"
             raise ValidationError({"field_key": f"{f.label} {why} and can't be switched off."})
@@ -767,7 +782,7 @@ class ChoiceListsView(APIView):
 
 
 def _label(value, choice_list, exclude_pk=None):
-    label = " ".join(str(value or "").split())[:120]
+    label = " ".join(text_in(value).split())[:120] if isinstance(value, str) else ""
     if not label:
         raise ValidationError({"label": "Enter a name for the option."})
     clash = choice_list.options.filter(label__iexact=label)
@@ -796,9 +811,10 @@ class ChoiceListReorderView(APIView):
 
     def post(self, request, key):
         cl = get_object_or_404(ChoiceList, key=key)
-        ids = request.data.get("ids") or []
+        raw = request.data.get("ids") or []
+        ids = [to_id(x) for x in raw] if isinstance(raw, list) else [None]
         opts = {o.pk: o for o in cl.options.all()}
-        if sorted(ids) != sorted(opts):
+        if None in ids or sorted(ids) != sorted(opts):
             raise ValidationError({"ids": "Send every option in the list."})
         for i, pk in enumerate(ids):
             ChoiceOption.objects.filter(pk=pk).update(order=i)
@@ -813,7 +829,9 @@ class ChoiceOptionView(APIView):
         if "label" in request.data:
             o.label = _label(request.data["label"], o.choice_list, exclude_pk=o.pk)
         if "is_active" in request.data:
-            o.is_active = bool(request.data["is_active"])
+            if not isinstance(request.data["is_active"], bool):
+                raise ValidationError({"is_active": "Send true or false."})
+            o.is_active = request.data["is_active"]
         o.save()
         return Response({"id": o.pk, "label": o.label, "is_active": o.is_active, "order": o.order})
 
