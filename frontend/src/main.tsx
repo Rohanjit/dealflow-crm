@@ -33,7 +33,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         {/* Inside the router, so notices and dialogs can hold links. */}
         <BrowserRouter>
           <ModalsProvider>
-            <Notifications position="bottom-right" limit={4} transitionDuration={220} />
+            {/* Below dialogs (z 200), so a notice never covers a dialog's buttons. */}
+            <Notifications position="bottom-right" limit={3} zIndex={190} transitionDuration={220} />
             <App />
           </ModalsProvider>
         </BrowserRouter>

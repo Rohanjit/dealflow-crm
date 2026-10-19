@@ -14,7 +14,7 @@ from rest_framework.views import APIView
 
 from accounts.permissions import IsActiveUser, flag_required
 
-from . import backups, importer
+from . import backups, bulk, importer
 from . import guest
 from .guest import NotInSample, NotOnDemo
 from .exporter import export_workbook
@@ -173,6 +173,8 @@ class SchemaView(APIView):
                     "pipeline": mod.pipeline.schema() if mod.pipeline else None,
                     "timeline": mod.timeline,
                     "importable": mod.importable,
+                    "mergeable": mod.key not in NOT_MERGEABLE,
+                    "finds_duplicates": bool(mod.duplicate_keys) and mod.key not in NOT_MERGEABLE,
                     "perms": perms[mod.key],
                 }
             )
@@ -249,6 +251,97 @@ class RecordDetailView(APIView):
         obj.archived_by = request.user
         obj.save(update_fields=["archived_at", "archived_by"])
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# Tracker entries belong to one deal and one investor each; merging two makes no sense.
+NOT_MERGEABLE = {"deal_investors"}
+BULK_LIMIT = 500
+
+
+def _selected(mod, raw):
+    """The chosen records, in the order given; all must exist and not be deleted."""
+    if not isinstance(raw, list) or not raw:
+        raise ValidationError({"detail": "Select at least one record."})
+    try:
+        ids = list(dict.fromkeys(int(x) for x in raw))
+    except (TypeError, ValueError):
+        raise ValidationError({"detail": "Those records couldn't be read."})
+    if len(ids) > BULK_LIMIT:
+        raise ValidationError({"detail": f"Work on up to {BULK_LIMIT} records at a time."})
+    objs = list(with_related(mod.model.objects.filter(pk__in=ids, archived_at__isnull=True), mod))
+    if len(objs) != len(ids):
+        raise ValidationError({"detail": "Some of the selected records no longer exist. Reload and try again."})
+    order = {pk: i for i, pk in enumerate(ids)}
+    return sorted(objs, key=lambda o: order[o.pk])
+
+
+class BulkView(APIView):
+    """Act on several records at once: edit fields (`action: "edit"`, with `values` and optional
+    `modes` add/remove/replace for multi-value fields) or delete them (`action: "delete"`)."""
+
+    def post(self, request, module):
+        mod = _module(module)
+        action = request.data.get("action")
+        if action not in ("edit", "delete"):
+            raise ValidationError({"detail": "Pick what to do with the selected records."})
+        _require(request.user, module, "edit" if action == "edit" else "delete")
+        _open(request, mod)
+        objs = _selected(mod, request.data.get("ids"))
+        if action == "delete":
+            n = bulk.bulk_archive(objs, request.user)
+            return Response({"deleted": n})
+        values = request.data.get("values")
+        modes = request.data.get("modes") or {}
+        if not isinstance(values, dict) or not values:
+            raise ValidationError({"detail": "Choose a field and a value."})
+        if not isinstance(modes, dict) or any(m not in bulk.MULTI_MODES for m in modes.values()):
+            raise ValidationError({"detail": "Choose add, remove or replace."})
+        return Response(bulk.bulk_edit(mod, objs, values, modes, request.user))
+
+
+class MergeView(APIView):
+    """Merge duplicates: keep one record, take the chosen values, move everything linked to the
+    others onto it, and send the others to Deleted items. Needs edit and delete."""
+
+    def post(self, request, module):
+        mod = _module(module)
+        if module in NOT_MERGEABLE:
+            raise ValidationError({"detail": "These records can't be merged."})
+        _require(request.user, module, "edit")
+        _require(request.user, module, "delete")
+        _open(request, mod)
+        try:
+            keep = int(request.data.get("keep"))
+        except (TypeError, ValueError):
+            raise ValidationError({"keep": "Choose the record to keep."})
+        others = [x for x in (request.data.get("merge") or []) if str(x) != str(keep)]
+        if not others:
+            raise ValidationError({"detail": "Select at least two records to merge."})
+        if len(others) > 9:
+            raise ValidationError({"detail": "Merge up to 10 records at a time."})
+        records = _selected(mod, [keep, *others])
+        keeper, losers = records[0], records[1:]
+        values = request.data.get("values") or {}
+        if not isinstance(values, dict):
+            raise ValidationError({"detail": "The chosen values couldn't be read."})
+        try:
+            moved = bulk.merge(mod, keeper, losers, values, request.user)
+        except bulk.MergeError as e:
+            raise ValidationError(e.errors)
+        keeper = with_related(mod.model.objects.filter(pk=keeper.pk), mod).first()
+        return Response({"record": serialize(keeper, mod), "merged": len(losers), "moved": moved})
+
+
+class DuplicatesView(APIView):
+    """Groups of records that look like the same thing (same rules as the import's warnings)."""
+
+    def get(self, request, module):
+        mod = _module(module)
+        _require(request.user, module, "view")
+        _open(request, mod)
+        if module in NOT_MERGEABLE or not mod.duplicate_keys:
+            return Response({"groups": []})
+        return Response({"groups": bulk.duplicate_groups(mod)})
 
 
 class RecordExportView(APIView):

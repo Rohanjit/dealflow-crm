@@ -128,6 +128,8 @@ export type ModuleSchema = {
   pipeline: Pipeline | null;
   timeline: boolean;
   importable: boolean;
+  mergeable: boolean;
+  finds_duplicates: boolean;
   perms: ModulePerms;
 };
 

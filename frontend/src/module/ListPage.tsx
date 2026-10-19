@@ -23,6 +23,8 @@ import MyTasks from "../tasks/MyTasks";
 import { afterVaultChange } from "../vault/api";
 import VaultGate from "../vault/VaultGate";
 import BoardView from "./BoardView";
+import BulkBar from "./BulkBar";
+import { DuplicatesButton } from "./Duplicates";
 import { FieldValue } from "./fields";
 import { useModuleLabels } from "./LinkInput";
 
@@ -72,6 +74,8 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
   const [columns, setColumns] = useState<string[]>(() => loadColumns(module));
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [search, setSearch] = useState(params.get("q") ?? "");
+  // Ticked rows (on the page shown). Cleared whenever the list itself changes.
+  const [selected, setSelected] = useState<number[]>([]);
 
   const fieldMap = useMemo(() => Object.fromEntries(module.fields.map((f) => [f.key, f])), [module]);
   const shown = columns.map((k) => fieldMap[k]).filter((f): f is FieldSchema => !!f && f.enabled);
@@ -93,6 +97,11 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
   apiParams.set("page_size", String(PAGE_SIZE));
   const queryString = apiParams.toString();
 
+  const [selectionFor, setSelectionFor] = useState(queryString);
+  if (selectionFor !== queryString) {
+    setSelectionFor(queryString);
+    setSelected([]);
+  }
   const { data, isFetching, error } = useQuery({
     queryKey: ["records", module.key, queryString],
     queryFn: () => api<Page<RecordData>>(`m/${module.key}/?${queryString}`),
@@ -139,6 +148,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
               Export
             </Button>
             {module.key === "vault" && <LockButton />}
+            <DuplicatesButton module={module} />
             {module.perms.create && (
               <Button leftSection={<IconPlus size={16} />} component={Link} to={`/m/${module.key}/new`}>
                 {module.key === "vault" ? "Upload" : `New ${module.singular.toLowerCase()}`}
@@ -190,7 +200,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
         <Text size="xs" c="dimmed" mt={-6}>
           {board
             ? "Drag a card to another column to move it to that stage. Click a card to open it."
-            : "Click a row to open it. Click a column title to sort by it."}
+            : "Click a row to open it. Click a column title to sort by it. Tick rows to change, export, merge or delete several at once."}
         </Text>
       )}
 
@@ -207,6 +217,12 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
             <Table className="df-table" verticalSpacing={8} horizontalSpacing="sm" miw={900}>
               <Table.Thead>
                 <Table.Tr>
+                  <Table.Th w={40} className="df-check-cell">
+                    <Checkbox size="xs" aria-label="Select all on this page"
+                      checked={data.results.length > 0 && data.results.every((r) => selected.includes(r.id))}
+                      indeterminate={selected.length > 0 && !data.results.every((r) => selected.includes(r.id))}
+                      onChange={(e) => setSelected(e.currentTarget.checked ? data.results.map((r) => r.id) : [])} />
+                  </Table.Th>
                   {shown.map((f) => {
                     const I = fieldIcon(f);
                     return (
@@ -224,7 +240,15 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
               </Table.Thead>
               <Table.Tbody>
                 {data.results.map((r) => (
-                  <Table.Tr key={r.id} className="df-row-link" onClick={() => nav(`/m/${module.key}/${r.id}`)}>
+                  <Table.Tr key={r.id} className="df-row-link" data-selected={selected.includes(r.id) ? "" : undefined}
+                    onClick={() => nav(`/m/${module.key}/${r.id}`)}>
+                    <Table.Td className="df-check-cell" onClick={(e) => e.stopPropagation()}>
+                      <Checkbox size="xs" aria-label={`Select ${r._title}`} checked={selected.includes(r.id)}
+                        onChange={(e) => {
+                          const on = e.currentTarget.checked;
+                          setSelected((sel) => (on ? [...sel, r.id] : sel.filter((x) => x !== r.id)));
+                        }} />
+                    </Table.Td>
                     {shown.map((f) => (
                       <Table.Td key={f.key} maw={f.type === "longtext" ? 320 : undefined}
                         miw={f.key === module.title_field ? 220 : f.multi || f.type === "tags" ? 200 : undefined}>
@@ -242,7 +266,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
                 ))}
                 {data.results.length === 0 && (
                   <Table.Tr>
-                    <Table.Td colSpan={shown.length}>
+                    <Table.Td colSpan={shown.length + 1}>
                       <EmptyState module={module} filtered={activeFilters.length > 0 || !!params.get("q") || !!(segParam && params.get(segParam))} />
                     </Table.Td>
                   </Table.Tr>
@@ -266,6 +290,10 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
           </Text>
           <Pagination total={Math.ceil(total / PAGE_SIZE)} value={page} onChange={(p) => setParam({ page: String(p) }, false)} />
         </Group>
+      )}
+
+      {!board && !mine && selected.length > 0 && (
+        <BulkBar module={module} ids={selected} onClear={() => setSelected([])} exportColumns={shown.map((f) => f.key).join(",")} />
       )}
 
       <FilterDrawer

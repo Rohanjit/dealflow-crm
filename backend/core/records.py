@@ -734,6 +734,9 @@ def _order_terms(mod: ModuleDef, key: str, desc: bool) -> list:
 
 
 def filter_queryset(qs: QuerySet, mod: ModuleDef, params, user, enabled: dict) -> QuerySet:
+    if raw_ids := params.get("ids"):
+        # Just these records (e.g. exporting a selection).
+        qs = qs.filter(pk__in=_ints(raw_ids))
     q = (params.get("q") or "").strip()
     if q:
         cond = _search_condition(mod, q, enabled)

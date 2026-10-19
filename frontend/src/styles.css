@@ -395,3 +395,20 @@ tr:hover .df-open-chip { opacity: 1; transform: none; }
 .df-count-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px;
   margin-left: 6px; border-radius: 10px; font-size: 12px; font-weight: 600; color: #fff; background: var(--mantine-color-orange-6); }
 .df-count-pill[data-tone="red"] { background: var(--mantine-color-red-6); }
+
+/* Selecting rows in a list, and what to do with them */
+.df-check-cell { width: 40px; padding-right: 0 !important; }
+.df-table tbody tr[data-selected] { background: rgba(47, 128, 224, .07); }
+.df-table tbody tr[data-selected]:hover { background: rgba(47, 128, 224, .1); }
+.df-bulkbar {
+  position: fixed; left: 0; right: 0; bottom: 20px; margin: 0 auto; width: fit-content; z-index: 150;
+  display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 32px); padding: 8px 10px 8px 16px;
+  background: #fff; border-radius: 12px; box-shadow: var(--mantine-shadow-lg);
+  animation: df-rise 220ms var(--df-ease) both;
+}
+.df-bulkbar-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.df-bulkbar > * { flex-shrink: 0; }
+@keyframes df-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@media (max-width: 700px) { .df-bulkbar { flex-wrap: wrap; bottom: 10px; } }
+.df-merge th[data-keep], .df-merge td[data-keep] { background: rgba(47, 128, 224, .05); }
+.df-merge td[data-picked] { box-shadow: inset 0 0 0 1.5px rgba(47, 128, 224, .45); }
