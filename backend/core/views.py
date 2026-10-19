@@ -15,6 +15,8 @@ from rest_framework.views import APIView
 from accounts.permissions import IsActiveUser, flag_required
 
 from . import backups, importer
+from . import guest
+from .guest import NotInSample, NotOnDemo
 from .exporter import export_workbook
 from .models import ChoiceList, ChoiceOption, FieldSwitch, FirmSettings, Note
 from .modules import BUILT_MODULES
@@ -558,12 +560,13 @@ def firm_payload(fs: FirmSettings):
         "last_backup_at": fs.last_backup_at.isoformat() if fs.last_backup_at else None,
         "last_backup_error": fs.last_backup_error,
         "dashboard_days": fs.dashboard_days,
+        "workspace_kind": fs.workspace_kind,
     }
 
 
 class FirmSettingsView(APIView):
     def get_permissions(self):
-        return [IsActiveUser()] if self.request.method == "GET" else [flag_required("manage_settings")()]
+        return [IsActiveUser()] if self.request.method == "GET" else [flag_required("manage_settings")(), NotOnDemo()]
 
     def get(self, request):
         return Response(firm_payload(FirmSettings.load()))
@@ -571,14 +574,21 @@ class FirmSettingsView(APIView):
     def patch(self, request):
         fs = FirmSettings.load()
         errors = {}
+        if "workspace_kind" in request.data:
+            if request.data["workspace_kind"] not in ("firm", "individual"):
+                errors["workspace_kind"] = "Pick firm or just me."
+            else:
+                fs.workspace_kind = request.data["workspace_kind"]
         if "firm_name" in request.data:
             name = str(request.data["firm_name"] or "").strip()
-            if not name:
+            if not name and fs.workspace_kind == "firm":
                 errors["firm_name"] = "Enter the firm name."
             fs.firm_name = name[:150]
         if "backup_keep" in request.data or "backup_hour" in request.data or "backups_enabled" in request.data:
             if not request.user.is_admin:
                 raise PermissionDenied("Only admins can change backup settings.")
+            if fs.sample_loaded_at:
+                raise PermissionDenied(guest.NOT_IN_SAMPLE)
         if "backup_keep" in request.data:
             try:
                 fs.backup_keep = int(request.data["backup_keep"])
@@ -726,7 +736,7 @@ class AdminOnly(IsActiveUser):
 
 
 class BackupListView(APIView):
-    permission_classes = [AdminOnly]
+    permission_classes = [AdminOnly, NotInSample]
 
     def get(self, request):
         from django.conf import settings as dj
@@ -755,7 +765,7 @@ class BackupDownloadView(APIView):
 
 
 class BackupRestoreView(APIView):
-    permission_classes = [AdminOnly]
+    permission_classes = [AdminOnly, NotInSample]
     parser_classes = [MultiPartParser]
 
     def post(self, request):

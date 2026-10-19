@@ -326,6 +326,20 @@ tr:hover .df-open-chip { opacity: 1; transform: none; }
 }
 .df-auth-card { animation: df-enter 320ms var(--df-ease) both; }
 
+.df-choice { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px; text-align: left;
+  border: 1px solid var(--df-line); border-radius: 10px;
+  transition: background-color var(--df-fast), box-shadow var(--df-medium) var(--df-ease), transform var(--df-medium) var(--df-ease), border-color var(--df-fast); }
+.df-choice:hover:not(:disabled) { background: var(--mantine-color-gray-0); box-shadow: var(--mantine-shadow-sm); transform: translateY(-1px); border-color: var(--mantine-color-gray-4); }
+.df-choice:active:not(:disabled) { transform: scale(.99); }
+.df-choice-icon { width: 40px; height: 40px; border-radius: 9px; display: flex; align-items: center; justify-content: center;
+  background: var(--mantine-color-gray-1); color: var(--mantine-color-gray-8); flex-shrink: 0; }
+.df-choice-arrow { color: var(--mantine-color-gray-5); transition: transform var(--df-medium) var(--df-ease), color var(--df-fast); }
+.df-choice:hover .df-choice-arrow { transform: translateX(3px); color: var(--mantine-color-text); }
+
+/* Guest banner across the top of the app */
+.df-guest-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 7px 14px; font-size: 13px;
+  background: #fbf3db; color: #5c4508; border-bottom: 1px solid #f1e3b6; animation: df-fade 240ms var(--df-ease) both; }
+
 /* ------------------------------------------------------------------ home dashboard */
 
 .df-tile {

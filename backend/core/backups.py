@@ -166,27 +166,39 @@ def restore_backup(fileobj) -> dict:
                         shutil.copyfileobj(src, out)
 
         safety = create_backup("pre-restore")
-        with _Lock():
-            with transaction.atomic():
-                if connection.vendor == "postgresql":
-                    # Postgres refuses TRUNCATE while deferred FK checks are pending in the transaction.
-                    with connection.cursor() as c:
-                        c.execute("SET CONSTRAINTS ALL IMMEDIATE")
-                call_command("flush", interactive=False, verbosity=0)
-                if connection.vendor == "postgresql":
-                    # Records can point at ones loaded later (a contact at a company from Outreach),
-                    # so foreign keys are checked at commit rather than row by row.
-                    with connection.cursor() as c:
-                        c.execute("SET CONSTRAINTS ALL DEFERRED")
-                call_command("loaddata", str(data_file), verbosity=0)
-            media = Path(settings.MEDIA_ROOT)
-            if media.exists():
-                shutil.rmtree(media)
-            if files_dir.exists():
-                shutil.copytree(files_dir, media)
-            else:
-                media.mkdir(parents=True, exist_ok=True)
+        replace_all_data(data_file, files_dir if files_dir.exists() else None)
     return {"restored_from": manifest.get("created_at"), "safety_backup": safety.name}
+
+
+def replace_all_data(data_file: Path, files_dir: Path | None):
+    """Swap every table for the contents of a dumpdata file, and uploaded files for `files_dir`
+    (or nothing). Used by restore and by leaving the guest sample (core/guest.py)."""
+    with _Lock():
+        with transaction.atomic():
+            if connection.vendor == "postgresql":
+                # Postgres refuses TRUNCATE while deferred FK checks are pending in the transaction.
+                with connection.cursor() as c:
+                    c.execute("SET CONSTRAINTS ALL IMMEDIATE")
+            call_command("flush", interactive=False, verbosity=0)
+            if connection.vendor == "postgresql":
+                # Records can point at ones loaded later (a contact at a company from Outreach),
+                # so foreign keys are checked at commit rather than row by row.
+                with connection.cursor() as c:
+                    c.execute("SET CONSTRAINTS ALL DEFERRED")
+            call_command("loaddata", str(data_file), verbosity=0)
+        media = Path(settings.MEDIA_ROOT)
+        if media.exists():
+            shutil.rmtree(media)
+        if files_dir is not None:
+            shutil.copytree(files_dir, media)
+        else:
+            media.mkdir(parents=True, exist_ok=True)
+
+
+def dump_data(target: Path):
+    """Everything backups carry, as a dumpdata file."""
+    with open(target, "w") as out:
+        call_command("dumpdata", exclude=EXCLUDE, natural_foreign=False, indent=None, stdout=out)
 
 
 def due_for_daily_backup(now=None) -> bool:

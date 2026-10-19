@@ -51,6 +51,7 @@ function LockedOut({ until }: { until: string }) {
 /** Enter the PIN to open the Vault. Also used inline on record pages. */
 export function UnlockForm({ compact = false }: { compact?: boolean }) {
   const qc = useQueryClient();
+  const samplePin = qc.getQueryData<VaultStatus>(["vault-status"])?.sample_pin;
   const [pin, setPin] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -73,6 +74,12 @@ export function UnlockForm({ compact = false }: { compact?: boolean }) {
     <form onSubmit={submit}>
       <Stack gap="sm">
         {!compact && <Text size="sm" c="dimmed">Enter your Vault PIN. The Vault stays open until you've not used it for 15 minutes.</Text>}
+        {samplePin && (
+          <Text size="sm" className="df-fade">
+            Sample PIN: <button type="button" className="df-kbd" style={{ cursor: "pointer", fontSize: 13 }} onClick={() => setPin(samplePin)}>{samplePin}</button>
+            <Text span size="xs" c="dimmed"> (click to fill)</Text>
+          </Text>
+        )}
         <Group gap="xs" align="flex-start" wrap="nowrap">
           <PasswordInput style={{ flex: 1 }} maw={compact ? 220 : undefined} placeholder="PIN" aria-label="Vault PIN" inputMode="numeric"
             autoComplete="off" autoFocus={!compact} value={pin} onChange={(e) => setPin(e.currentTarget.value.replace(/\D/g, "").slice(0, 8))}

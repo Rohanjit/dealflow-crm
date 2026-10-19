@@ -20,6 +20,8 @@ from core.models import FirmSettings
 from core.modules import ACTIONS, BUILT_MODULES, MODULES
 
 from .models import DATE_FORMATS, NUMBER_GROUPINGS, Invite, Role, RoleModulePermission, User
+from core.guest import NotInSample
+
 from .permissions import IsActiveUser, flag_required
 
 
@@ -66,11 +68,20 @@ class AppView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
+        from django.conf import settings as dj_settings
+
+        from core import guest
+
         fs = FirmSettings.load()
         user = request.user if request.user.is_authenticated and request.user.is_active else None
         return Response(
             {
-                "needs_setup": not User.objects.exists(),
+                "needs_setup": not dj_settings.DEMO and not User.objects.exists(),
+                "demo": dj_settings.DEMO,
+                "sample": fs.sample_loaded_at is not None,
+                "guest_available": guest.guest_available(),
+                "is_guest": guest.is_guest(user),
+                "workspace_kind": fs.workspace_kind,
                 "firm_name": fs.firm_name,
                 "user": me_payload(user) if user else None,
                 "built_modules": BUILT_MODULES,
@@ -87,13 +98,18 @@ class SetupView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        from django.conf import settings as dj_settings
+
+        if dj_settings.DEMO:
+            raise PermissionDenied("This is a demo site: it can't be set up. Continue as a guest instead.")
         d = request.data
         errors = {}
-        firm = str(d.get("firm_name") or "").strip()
+        kind = "individual" if d.get("workspace_kind") == "individual" else "firm"
+        firm = str(d.get("firm_name") or "").strip()[:150]
         name = str(d.get("full_name") or "").strip()
         email = str(d.get("email") or "").strip().lower()
         password = d.get("password") or ""
-        if not firm:
+        if not firm and kind == "firm":
             errors["firm_name"] = "Enter your firm's name."
         if not name:
             errors["full_name"] = "Enter your name."
@@ -113,6 +129,7 @@ class SetupView(APIView):
             user = User.objects.create_user(email=email, password=password, full_name=name, role=admin_role)
             fs = FirmSettings.load()
             fs.firm_name = firm
+            fs.workspace_kind = kind
             fs.setup_completed_at = timezone.now()
             fs.save()
         login(request, user)
@@ -229,7 +246,7 @@ class UserLookupView(APIView):
 
 
 class UserListView(APIView):
-    permission_classes = [flag_required("manage_users")]
+    permission_classes = [flag_required("manage_users"), NotInSample]
 
     def get(self, request):
         return Response([user_payload(u) for u in User.objects.select_related("role")])
@@ -261,7 +278,7 @@ class UserListView(APIView):
 
 
 class UserDetailView(APIView):
-    permission_classes = [flag_required("manage_users")]
+    permission_classes = [flag_required("manage_users"), NotInSample]
 
     def patch(self, request, pk):
         u = get_object_or_404(User.objects.select_related("role"), pk=pk)
@@ -307,7 +324,7 @@ class UserResetPasswordView(APIView):
     """Admins reset forgotten passwords (no email in V1): a temporary password the
     person must change at next sign-in."""
 
-    permission_classes = [flag_required("manage_users")]
+    permission_classes = [flag_required("manage_users"), NotInSample]
 
     def post(self, request, pk):
         u = get_object_or_404(User, pk=pk)
@@ -380,7 +397,7 @@ class RoleListView(APIView):
     def get_permissions(self):
         if self.request.method == "GET":
             return [flag_required("manage_users")()]
-        return [AdminRequired()]
+        return [AdminRequired(), NotInSample()]
 
     def get(self, request):
         return Response([role_payload(r) for r in Role.objects.prefetch_related("module_permissions")])
@@ -397,7 +414,7 @@ class RoleListView(APIView):
 
 
 class RoleDetailView(APIView):
-    permission_classes = [AdminRequired]
+    permission_classes = [AdminRequired, NotInSample]
 
     @transaction.atomic
     def patch(self, request, pk):
@@ -437,7 +454,7 @@ def invite_payload(i: Invite) -> dict:
 
 
 class InviteListView(APIView):
-    permission_classes = [flag_required("manage_users")]
+    permission_classes = [flag_required("manage_users"), NotInSample]
 
     def get(self, request):
         qs = Invite.objects.select_related("role", "created_by", "used_by")[:100]
@@ -455,7 +472,7 @@ class InviteListView(APIView):
 
 
 class InviteRevokeView(APIView):
-    permission_classes = [flag_required("manage_users")]
+    permission_classes = [flag_required("manage_users"), NotInSample]
 
     def delete(self, request, pk):
         i = get_object_or_404(Invite, pk=pk)

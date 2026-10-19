@@ -38,6 +38,9 @@ def _secret_key() -> str:
 
 
 SECRET_KEY = _secret_key()
+# A public demo site: sample data only, "Continue as guest" on the sign-in page, set-up refused,
+# data reset every day (core/guest.py).
+DEMO = os.environ.get("DEALFLOW_DEMO", "0") == "1"
 DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
 ALLOWED_HOSTS = [h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "*").split(",") if h.strip()]
 CSRF_TRUSTED_ORIGINS = [

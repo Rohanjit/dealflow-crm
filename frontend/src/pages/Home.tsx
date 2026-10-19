@@ -32,7 +32,7 @@ export default function Home() {
   return (
     <Stack gap={36} maw={1100}>
       <div>
-        <Text c="dimmed" size="sm" mb={4}>{today} · {info.firm_name}</Text>
+        <Text c="dimmed" size="sm" mb={4}>{[today, info.firm_name].filter(Boolean).join(" · ")}</Text>
         <h1 className="df-page-title">{greeting()}, {firstName}</h1>
       </div>
 
@@ -68,7 +68,7 @@ export default function Home() {
               </Paper>
             );
           })}
-          {(me.flags.manage_users || me.role.is_admin) && (
+          {(me.flags.manage_users || me.role.is_admin) && info.workspace_kind !== "individual" && !info.is_guest && (
             <Paper withBorder p="md" className="df-card-link">
               <UnstyledButton component={Link} to="/settings/users" w="100%">
                 <Group gap="sm" mb={6} wrap="nowrap">

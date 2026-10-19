@@ -16,6 +16,11 @@ export type Me = {
 
 export type AppInfo = {
   needs_setup: boolean;
+  demo: boolean;
+  sample: boolean;
+  guest_available: boolean;
+  is_guest: boolean;
+  workspace_kind: "firm" | "individual";
   firm_name: string;
   user: Me | null;
   built_modules: string[];

@@ -31,7 +31,7 @@ Open-source CRM for investment bankers. Discovery completed 27 Sep 2026.
 ## In V1
 
 ### First run
-- Setup wizard only: create the Admin account, enter the firm name, start with an empty CRM. No demo data.
+- Setup wizard: create the Admin account for a firm or for "Just me" (one person on their own computer; the name is then optional), and start with an empty CRM. Before setting up, "Look around first" opens a sample firm without signing in; "Set up for real" deletes it (Shobhit, 19 Oct 2026). One install is one firm or one person: no open sign-up with separate workspaces.
 
 ### Access control
 - Role-based access at module level (admin sets what each role can view/edit per module).
@@ -197,6 +197,5 @@ No separate Interactions module: interactions are captured as dated notes inside
 - Advanced investor matching (learning from past deal outcomes)
 - Mobile-optimised layout and installable phone app (PWA)
 - Firm logo and light/dark themes
-- Demo/sample data on first install
 - VC-specific workflow and pipeline
 - Desktop/offline app version

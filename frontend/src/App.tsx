@@ -35,10 +35,11 @@ export default function App() {
     );
   }
 
-  if (info.needs_setup) {
+  // A fresh install (or one holding the guest sample, signed out): look around or set up.
+  if (info.needs_setup || (info.sample && !info.user && !info.demo)) {
     return (
       <Routes>
-        <Route path="*" element={<Setup />} />
+        <Route path="*" element={<Setup info={info} />} />
       </Routes>
     );
   }
@@ -47,7 +48,7 @@ export default function App() {
     return (
       <Routes>
         <Route path="/invite/:token" element={<AcceptInvite />} />
-        <Route path="*" element={<Login firmName={info.firm_name} />} />
+        <Route path="*" element={<Login firmName={info.firm_name} guest={info.demo && info.guest_available} />} />
       </Routes>
     );
   }

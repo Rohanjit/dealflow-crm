@@ -16,6 +16,11 @@ class FirmSettings(models.Model):
     last_backup_error = models.TextField(blank=True)
     # Home page: how far ahead "near target close" and "mandate nearing expiry" look.
     dashboard_days = models.PositiveSmallIntegerField(default=30)
+    # "firm" or "individual" (one person on their own computer): only changes wording and hides
+    # team-only prompts; permissions work the same.
+    workspace_kind = models.CharField(max_length=12, default="firm", choices=[("firm", "Firm"), ("individual", "Just me")])
+    # Set while the install holds the guest sample data (core/guest.py) instead of real data.
+    sample_loaded_at = models.DateTimeField(null=True, blank=True)
 
     @classmethod
     def load(cls) -> "FirmSettings":

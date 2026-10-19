@@ -8,6 +8,7 @@ import time
 from django.core.management.base import BaseCommand
 from django.db import close_old_connections
 
+from core import guest
 from core.backups import BackupError, create_backup, due_for_daily_backup
 
 log = logging.getLogger("dealflow.scheduler")
@@ -24,6 +25,12 @@ class Command(BaseCommand):
         log.info("Scheduler started")
         while True:
             close_old_connections()
+            try:
+                if guest.demo_reload_due():
+                    guest.reload_demo()
+                    log.info("Demo sample data reloaded")
+            except Exception:
+                log.exception("Reloading the demo sample failed")
             try:
                 if due_for_daily_backup():
                     p = create_backup("daily")

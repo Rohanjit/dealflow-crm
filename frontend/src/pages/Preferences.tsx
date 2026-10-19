@@ -12,7 +12,7 @@ import { IconUserCircle } from "@tabler/icons-react";
 import { PageHeader } from "../components/ui";
 
 export default function Preferences() {
-  const { me, refresh } = useApp();
+  const { info, me, refresh } = useApp();
   const [v, setV] = useState({ full_name: me.full_name, date_format: me.date_format, number_grouping: me.number_grouping });
   const [busy, setBusy] = useState(false);
   const today = new Date().toISOString().slice(0, 10);
@@ -53,8 +53,8 @@ export default function Preferences() {
           <Group><Button onClick={save} loading={busy}>Save preferences</Button></Group>
         </Stack>
       </Paper>
-      <ChangePassword />
-      {me.perms.vault?.view && <VaultPin />}
+      {!info.is_guest && <ChangePassword />}
+      {me.perms.vault?.view && !info.is_guest && <VaultPin />}
     </Stack>
   );
 }

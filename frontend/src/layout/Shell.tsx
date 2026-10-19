@@ -1,10 +1,11 @@
 // The app frame: a quiet sidebar (firm menu, search, home, modules, archive, settings) and a slim
 // sticky top bar with the reminders bell. The sidebar folds away on desktop and slides in on phones.
 
-import { ActionIcon, AppShell, Avatar, Group, Menu, ScrollArea, Text, Tooltip, UnstyledButton } from "@mantine/core";
+import { ActionIcon, AppShell, Avatar, Button, Group, Menu, ScrollArea, Text, Tooltip, UnstyledButton } from "@mantine/core";
+import { modals } from "@mantine/modals";
 import { useDisclosure, useWindowScroll } from "@mantine/hooks";
 import {
-  IconChevronRight, IconChevronsLeft, IconLayoutSidebarLeftExpand, IconLogout, IconMenu2, IconPlus, IconSearch,
+  IconChevronRight, IconChevronsLeft, IconCompass, IconLayoutSidebarLeftExpand, IconLogout, IconMenu2, IconPlus, IconSearch,
   IconSelector, IconUserCircle,
 } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -12,6 +13,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { api } from "../api";
+import { notifyError } from "../components/errors";
+import { leaveSample } from "../components/guest";
 import Logo from "../components/Logo";
 import { moduleIcon } from "../components/ui";
 import { resetSession, useApp } from "../context";
@@ -57,7 +60,7 @@ export default function Shell() {
               <Menu.Target>
                 <UnstyledButton className="df-nav-item" style={{ flex: 1, minWidth: 0, minHeight: 40 }}>
                   <Logo size={22} />
-                  <Text size="sm" fw={600} truncate style={{ flex: 1 }}>{info.firm_name || "Dealflow"}</Text>
+                  <Text size="sm" fw={600} truncate style={{ flex: 1 }}>{info.firm_name || (info.workspace_kind === "individual" ? me.full_name : "Dealflow")}</Text>
                   <IconSelector size={14} className="df-nav-icon" />
                 </UnstyledButton>
               </Menu.Target>
@@ -120,6 +123,7 @@ export default function Shell() {
       </AppShell.Navbar>
 
       <AppShell.Main>
+        {info.is_guest && <GuestBanner demo={info.demo} />}
         <div className="df-topbar" data-scrolled={scroll.y > 4 ? "" : undefined}>
           <ActionIcon variant="subtle" color="gray" hiddenFrom="sm" onClick={mobile.toggle} aria-label="Menu">
             <IconMenu2 size={18} />
@@ -159,6 +163,41 @@ function NavItem({ to, icon, label, active, extra }: { to: string; icon: string;
       <I size={18} stroke={1.7} className="df-nav-icon" />
       <Link to={to} className="df-nav-link" aria-current={active ? "page" : undefined}>{label}</Link>
       {extra && <span className="df-nav-extra">{extra}</span>}
+    </div>
+  );
+}
+
+/** Shown while someone looks around with the sample firm. */
+function GuestBanner({ demo }: { demo: boolean }) {
+  const qc = useQueryClient();
+  function setUp() {
+    modals.openConfirmModal({
+      title: "Set up Dealflow for real?",
+      children: (
+        <Text size="sm">
+          The sample firm and anything you changed in it are deleted, and you'll create your own admin account
+          with an empty workspace. This can't be undone.
+        </Text>
+      ),
+      labels: { confirm: "Delete sample and set up", cancel: "Keep looking around" },
+      onConfirm: async () => {
+        try {
+          await leaveSample(qc);
+        } catch (e) {
+          notifyError(e, "Couldn't remove the sample");
+        }
+      },
+    });
+  }
+  return (
+    <div className="df-guest-banner" role="status">
+      <IconCompass size={16} />
+      <span style={{ flex: 1, minWidth: 200 }}>
+        {demo
+          ? "You're in the demo with a sample firm. Try anything: it all resets every day."
+          : "You're looking around with a sample firm. Nothing here is real."}
+      </span>
+      {!demo && <Button size="compact-xs" color="dark" onClick={setUp}>Set up for real</Button>}
     </div>
   );
 }

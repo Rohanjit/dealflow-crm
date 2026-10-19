@@ -4,6 +4,7 @@ from django.urls import include, path, re_path
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from accounts import views as a
+from core import guest as g
 from core import views as c
 from deals import views as d
 from tasks import views as t
@@ -12,6 +13,8 @@ from vault import views as v
 api = [
     path("app/", a.AppView.as_view()),
     path("setup/", a.SetupView.as_view()),
+    path("guest/start/", g.GuestStartView.as_view()),
+    path("guest/leave/", g.GuestLeaveView.as_view()),
     path("auth/login/", a.LoginView.as_view()),
     path("auth/logout/", a.LogoutView.as_view()),
     path("auth/me/", a.MeView.as_view()),

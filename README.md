@@ -41,7 +41,9 @@ cd dealflow-crm
 docker compose up -d
 ```
 
-Open <http://localhost:8000>. The setup wizard asks for your firm's name and creates the first Admin account. Then add your team under **Settings → Users** (create accounts directly, or share a one-time invite link).
+Open <http://localhost:8000>. You can **look around first** with a sample firm (no sign-in), then choose **Set up for real**, which deletes the sample. The setup wizard works for a firm or for **just you**, and creates the first Admin account. A firm then adds its team under **Settings → Users** (create accounts directly, or share a one-time invite link).
+
+**Public demo site:** set `DEALFLOW_DEMO=1` in `.env` on a server of its own. Visitors get **Continue as guest** with sample data that resets every day. Never set it on an install that holds real data.
 
 All data lives in the `dealflow-data` Docker volume: the database, uploaded files and daily backups (in `/data/backups` inside the volume). Backups can also be downloaded and restored from **Settings → Backups**.
 

@@ -12,6 +12,8 @@ from rest_framework.views import APIView
 
 from accounts.models import User
 from accounts.permissions import flag_required
+from core.guest import NotInSample, is_guest
+from core.sample import GUEST_PIN
 from core.records import apply_values, clean_values, serialize, with_related
 from core.registry import enabled_map, get_module
 
@@ -41,6 +43,8 @@ def status_payload(request) -> dict:
         "idle_minutes": vp.IDLE_MINUTES,
         "accepted": ACCEPTED,
         "max_file_mb": max_bytes() // (1024 * 1024),
+        # Guests can't set a PIN (they have no password), so the sample comes with one.
+        "sample_pin": GUEST_PIN if is_guest(user) else None,
     }
 
 
@@ -57,6 +61,9 @@ class VaultPinView(APIView):
     def post(self, request):
         user = request.user
         _require(user, "view")
+        if is_guest(user):
+            # Guests share the sample's PIN (on a demo site, with each other).
+            raise PermissionDenied("The sample's Vault PIN can't be changed.")
         if until := vp.locked_out(user):
             raise PermissionDenied({"detail": vp.lockout_message(until), "code": "vault_locked_out"})
         new = str(request.data.get("pin") or "")
@@ -89,6 +96,9 @@ class VaultUnlockView(APIView):
         if until := vp.locked_out(user):
             raise PermissionDenied({"detail": vp.lockout_message(until), "code": "vault_locked_out"})
         if not vp.pin_matches(user, request.data.get("pin")):
+            if is_guest(user):
+                # The PIN is shown on screen; a shared guest mustn't be able to lock everyone out.
+                raise ValidationError({"pin": f"Wrong PIN. The sample's PIN is {GUEST_PIN}."})
             left = vp.record_failure(user)
             raise ValidationError({"pin": "Wrong PIN." + _tries(left)})
         vp.record_success(user)
@@ -182,7 +192,7 @@ class VaultDownloadView(APIView):
 class UserVaultPinResetView(APIView):
     """Clear someone's forgotten PIN; they set a new one (with their password) next time."""
 
-    permission_classes = [flag_required("manage_users")]
+    permission_classes = [flag_required("manage_users"), NotInSample]
 
     def post(self, request, pk):
         from accounts.views import _guard_admin_changes
