@@ -1,6 +1,7 @@
 import re
 from urllib.parse import urlparse
 
+from core import stale
 from core.registry import FieldDef, ModuleDef, default_name_key, register
 
 from .models import CHANNEL_CHOICES, STRENGTH_CHOICES, Contact
@@ -113,6 +114,8 @@ MODULE = register(
         subtitle=subtitle,
         duplicate_keys=duplicate_keys,
         segment_field="firm",
+        extra_filters=stale.make_filter("contacts"),
+        quick_filters=[stale.QUICK_FILTER],
         sections=[
             {"key": "tasks", "label": "Tasks", "module": "tasks", "link_field": "related", "panel": "tasks",
              "order": "status,due"},

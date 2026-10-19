@@ -14,7 +14,7 @@ from rest_framework.views import APIView
 
 from accounts.permissions import IsActiveUser, flag_required
 
-from . import backups, bulk, importer
+from . import backups, bulk, importer, stale
 from . import guest
 from .guest import NotInSample, NotOnDemo
 from .exporter import export_workbook
@@ -170,6 +170,7 @@ class SchemaView(APIView):
                     "fields": fields,
                     "sections": [_section(s, perms) for s in mod.sections],
                     "segments": _segments(mod),
+                    "quick_filters": mod.quick_filters,
                     "pipeline": mod.pipeline.schema() if mod.pipeline else None,
                     "timeline": mod.timeline,
                     "importable": mod.importable,
@@ -661,6 +662,8 @@ def firm_payload(fs: FirmSettings):
         "last_backup_error": fs.last_backup_error,
         "dashboard_days": fs.dashboard_days,
         "workspace_kind": fs.workspace_kind,
+        "stale_investor_days": fs.stale_investor_days,
+        "stale_contact_days": fs.stale_contact_days,
     }
 
 
@@ -709,6 +712,13 @@ class FirmSettingsView(APIView):
                 errors["backups_enabled"] = "Send true or false."
             else:
                 fs.backups_enabled = request.data["backups_enabled"]
+        for key in ("stale_investor_days", "stale_contact_days"):
+            if key in request.data:
+                n = to_id(request.data[key]) if request.data[key] not in (0, "0") else 0
+                if n is None or n > 730:
+                    errors[key] = "Pick between 0 (no alerts) and 730 days."
+                else:
+                    setattr(fs, key, n)
         if "dashboard_days" in request.data:
             try:
                 fs.dashboard_days = int(request.data["dashboard_days"])
@@ -898,3 +908,41 @@ class HealthView(APIView):
 
     def get(self, request):
         return Response({"ok": True})
+
+
+# ---------------------------------------------------------------- relationships going cold
+
+
+class StaleView(APIView):
+    """Investors and contacts going cold that this person should hear about (core/stale.py)."""
+
+    def get(self, request):
+        return Response(stale.for_user(request.user))
+
+
+class StaleActionView(APIView):
+    """`action: "contacted"` sets Last contacted to today; `action: "snooze"` hides the alert for 30 days."""
+
+    def post(self, request, module, pk):
+        if module not in stale.SETTINGS:
+            raise NotFound("Unknown module.")
+        mod = _module(module)
+        _require(request.user, module, "edit")
+        obj = with_related(mod.model.objects.filter(pk=pk, archived_at__isnull=True), mod).first()
+        if not obj:
+            raise NotFound(f"This {mod.singular.lower()} doesn't exist or has been deleted.")
+        action = request.data.get("action")
+        today = timezone.localdate()
+        if action == "contacted":
+            values, errors = clean_values(mod, {"last_contacted": today.isoformat()}, enabled=enabled_map(module),
+                                          instance=obj, partial=True)
+            if errors:
+                raise ValidationError(errors)
+            obj.stale_snoozed_until = None
+            apply_values(obj, mod, values, request.user)
+        elif action == "snooze":
+            obj.stale_snoozed_until = today + dt.timedelta(days=stale.SNOOZE_DAYS)
+            obj.save(update_fields=["stale_snoozed_until"])
+        else:
+            raise ValidationError({"action": "Pick contacted or snooze."})
+        return Response(stale.for_user(request.user))

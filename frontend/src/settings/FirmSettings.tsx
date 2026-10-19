@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { fieldErrors, notifyError, notifyOk } from "../components/errors";
 
-type Firm = { firm_name: string; dashboard_days: number; workspace_kind: "firm" | "individual" };
+type Firm = { firm_name: string; dashboard_days: number; workspace_kind: "firm" | "individual"; stale_investor_days: number; stale_contact_days: number };
 
 export default function FirmSettings() {
   const qc = useQueryClient();
@@ -13,6 +13,8 @@ export default function FirmSettings() {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<"firm" | "individual">("firm");
   const [days, setDays] = useState<number | string>(30);
+  const [coldInv, setColdInv] = useState<number | string>(90);
+  const [coldCon, setColdCon] = useState<number | string>(60);
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -20,6 +22,8 @@ export default function FirmSettings() {
       setName(data.firm_name);
       setKind(data.workspace_kind);
       setDays(data.dashboard_days);
+      setColdInv(data.stale_investor_days);
+      setColdCon(data.stale_contact_days);
     }
   }, [data]);
 
@@ -27,7 +31,11 @@ export default function FirmSettings() {
     setBusy(true);
     setErrs({});
     try {
-      await api("settings/firm/", { method: "PATCH", body: { workspace_kind: kind, firm_name: name, dashboard_days: days === "" ? null : days } });
+      await api("settings/firm/", { method: "PATCH", body: {
+        workspace_kind: kind, firm_name: name, dashboard_days: days === "" ? null : days,
+        stale_investor_days: coldInv === "" ? null : coldInv, stale_contact_days: coldCon === "" ? null : coldCon,
+      } });
+      await qc.invalidateQueries({ queryKey: ["stale"] });
       await qc.invalidateQueries({ queryKey: ["firm"] });
       await qc.invalidateQueries({ queryKey: ["app"] });
       await qc.invalidateQueries({ queryKey: ["dashboard"] });
@@ -59,6 +67,19 @@ export default function FirmSettings() {
         <NumberInput label="Home page look-ahead (days)" min={1} max={365} allowDecimal={false} w={220}
           description="Deals whose target close date, or mandates whose validity, ends within this many days show on the home page."
           value={days} onChange={setDays} error={errs.dashboard_days} />
+        <div>
+          <Text size="sm" fw={500}>Relationships going cold</Text>
+          <Text size="xs" c="dimmed" mb={6}>
+            After this many days without contact (by “Last contacted”, or since added if never contacted), the
+            relationship owner gets a reminder. Ones with no owner go to admins. Enter 0 to turn the reminders off.
+          </Text>
+          <Group grow align="flex-start">
+            <NumberInput label="Investors (days)" min={0} max={730} allowDecimal={false} allowNegative={false} clampBehavior="none"
+              value={coldInv} onChange={setColdInv} error={errs.stale_investor_days} />
+            <NumberInput label="Contacts (days)" min={0} max={730} allowDecimal={false} allowNegative={false} clampBehavior="none"
+              value={coldCon} onChange={setColdCon} error={errs.stale_contact_days} />
+          </Group>
+        </div>
         <Group><Button onClick={save} loading={busy} disabled={!data}>Save</Button></Group>
       </Stack>
     </Paper>

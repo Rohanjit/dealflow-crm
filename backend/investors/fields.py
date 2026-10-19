@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 
 from django.db.models import Q
 
+from core import stale
 from core.registry import UNIT_MULTIPLIER, FieldDef, ModuleDef, register, this_year
 
 from .models import INSTRUMENT_CHOICES, STRENGTH_CHOICES, Investor
@@ -130,7 +131,8 @@ MODULE = register(
         title_field="firm_name",
         subtitle=subtitle,
         duplicate_keys=duplicate_keys,
-        extra_filters=ticket_filter,
+        extra_filters=stale.make_filter("investors", ticket_filter),
+        quick_filters=[stale.QUICK_FILTER],
         name_key=_norm_name,
         sections=[
             {

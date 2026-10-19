@@ -269,6 +269,8 @@ class ModuleDef:
     segment_param: str | None = None
     segment_options: list[dict] | None = None
     segment_default: str = ""  # option the list starts on (sent explicitly by the app)
+    # On/off buttons above the list, e.g. "Going cold": {param, value, label, help}; handled by extra_filters.
+    quick_filters: list[dict] = field(default_factory=list)
     # When the title isn't a plain column (an outreach attempt is named after its company).
     title_path: str | None = None  # database path, e.g. "company__name"
     title_fn: Callable | None = None  # record -> title

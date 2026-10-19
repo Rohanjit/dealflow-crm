@@ -54,6 +54,8 @@ class Investor(Record):
     )
     relationship_strength = models.CharField(max_length=10, choices=STRENGTH_CHOICES, blank=True)
     last_contacted = models.DateField(null=True, blank=True)
+    # "Snooze 30 days" on a going-cold alert: no alert until this day passes (core/stale.py).
+    stale_snoozed_until = models.DateField(null=True, blank=True, editable=False)
 
     # Other
     tags = models.ManyToManyField(Tag, blank=True, related_name="+")

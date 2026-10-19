@@ -127,6 +127,7 @@ export type ModuleSchema = {
   fields: FieldSchema[];
   sections: Section[];
   segments: Segments;
+  quick_filters: { param: string; value: string; label: string; help: string }[]; // on/off buttons above the list
   pipeline: Pipeline | null;
   timeline: boolean;
   importable: boolean;

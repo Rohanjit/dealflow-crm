@@ -112,7 +112,7 @@ def load():
         ("Lighthouse Pharma Fund", "AIF", "Hyderabad", ["Pharma & life sciences", "Healthcare"], ["Growth", "Late stage"], ["India", "Global"], "equity", "yes", 30, 250, anu, "warm"),
     ]
     investors = {}
-    for name, typ, city, sectors, stages, geos, inst, deploying, lo, hi, owner, strength in INV:
+    for n, (name, typ, city, sectors, stages, geos, inst, deploying, lo, hi, owner, strength) in enumerate(INV):
         d = {
             "firm_name": name, "investor_type": opt("investor_types", typ), "hq_city": city,
             "sectors": opts("sectors", sectors), "stages": opts("investment_stages", stages),
@@ -124,7 +124,8 @@ def load():
             d["relationship_owner"] = owner.pk
         if strength:
             d["relationship_strength"] = strength
-            d["last_contacted"] = day(-(7 + len(name) % 20))
+            # Every third one hasn't been contacted in months, so Reminders shows some going cold.
+            d["last_contacted"] = day(-(100 + len(name) * 3)) if n % 3 == 1 else day(-(7 + len(name) % 20))
         investors[name] = make("investors", d)
 
     # ------------------------------------------------------------------ companies
@@ -168,7 +169,8 @@ def load():
         d = {"full_name": name, "designation": title, "decision_level": opt("decision_maker_levels", level),
              "primary_contact": primary, "work_email": email, "mobile": mobile,
              "relationship_strength": ["warm", "strong", "cold"][i % 3], "relationship_owner": [guest, asha, vikram][i % 3].pk,
-             "birthday": f"{(i % 12) + 1:02d}-{(i * 3) % 27 + 1:02d}"}
+             "birthday": f"{(i % 12) + 1:02d}-{(i * 3) % 27 + 1:02d}",
+             "last_contacted": day(-(70 + i * 9)) if i % 4 == 0 else day(-(3 + i * 2))}
         if firm:
             d["firm"] = firm
         if name.startswith("Rohit"):

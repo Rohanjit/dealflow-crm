@@ -22,6 +22,37 @@ export type Reminder = {
 };
 export type Reminders = { now: string; overdue: Reminder[]; today: Reminder[]; count: number };
 
+/** An investor or contact nobody has been in touch with for a while (backend core/stale.py). */
+export type ColdItem = {
+  module: "investors" | "contacts"; id: number; title: string; subtitle: string;
+  last_contacted: string | null; days: number; unowned: boolean;
+};
+export type Cold = { items: ColdItem[]; count: number; more: Partial<Record<"investors" | "contacts", number>>; days: Record<string, number> };
+
+export function useCold() {
+  return useQuery({
+    queryKey: ["stale"],
+    queryFn: () => api<Cold>("stale/"),
+    refetchInterval: 5 * 60_000,
+  });
+}
+
+/** "Contacted today" or "Snooze 30 days" on a going-cold reminder. */
+export function useColdAction() {
+  const qc = useQueryClient();
+  return async (item: ColdItem, action: "contacted" | "snooze") => {
+    try {
+      const fresh = await api<Cold>(`stale/${item.module}/${item.id}/`, { body: { action } });
+      qc.setQueryData(["stale"], fresh);
+      await qc.invalidateQueries({ queryKey: ["records", item.module] });
+      await qc.invalidateQueries({ queryKey: ["record", item.module, String(item.id)] });
+      notifications.show({ color: "teal", message: action === "contacted" ? `${item.title}: last contacted set to today.` : `${item.title}: snoozed for 30 days.` });
+    } catch (e) {
+      notifyError(e, "Couldn't update");
+    }
+  };
+}
+
 export function useReminders() {
   const { info, me } = useApp();
   return useQuery({

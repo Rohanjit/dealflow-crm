@@ -57,6 +57,8 @@ api = [
     path("deals/<int:pk>/matches/", d.MatchesView.as_view()),
     path("deals/<int:pk>/tracker/add/", d.TrackerAddView.as_view()),
     path("tasks/alerts/", t.TaskAlertsView.as_view()),
+    path("stale/", c.StaleView.as_view()),
+    path("stale/<str:module>/<int:pk>/", c.StaleActionView.as_view()),
     path("vault/status/", v.VaultStatusView.as_view()),
     path("vault/pin/", v.VaultPinView.as_view()),
     path("vault/unlock/", v.VaultUnlockView.as_view()),
