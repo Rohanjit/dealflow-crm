@@ -1,12 +1,11 @@
 // The app frame: a quiet sidebar (firm menu, search, home, modules, archive, settings) and a slim
 // sticky top bar with the reminders bell. The sidebar folds away on desktop and slides in on phones.
 
-import { ActionIcon, AppShell, Avatar, Button, Group, Menu, ScrollArea, Text, Tooltip, UnstyledButton } from "@mantine/core";
+import { ActionIcon, AppShell, Avatar, Button, Group, ScrollArea, Text, Tooltip, UnstyledButton } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { useDisclosure, useWindowScroll } from "@mantine/hooks";
 import {
-  IconChevronRight, IconChevronsLeft, IconCompass, IconLayoutSidebarLeftExpand, IconLogout, IconMenu2, IconPlus, IconSearch,
-  IconSelector, IconUserCircle,
+  IconChevronsLeft, IconCompass, IconLayoutSidebarLeftExpand, IconLogout, IconMenu2, IconPlus, IconSearch,
 } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
@@ -29,7 +28,6 @@ export default function Shell() {
   const { info, me } = useApp();
   const [mobileOpen, mobile] = useDisclosure();
   const [collapsed, setCollapsed] = useState(false);
-  const [modulesOpen, setModulesOpen] = useState(true);
   const search = useSearchPalette();
   const loc = useLocation();
   const qc = useQueryClient();
@@ -56,56 +54,34 @@ export default function Shell() {
       <AppShell.Navbar className="df-sidebar">
         <AppShell.Section>
           <Group gap={2} wrap="nowrap">
-            <Menu position="bottom-start" width={260}>
-              <Menu.Target>
-                <UnstyledButton className="df-nav-item" style={{ flex: 1, minWidth: 0, minHeight: 40 }}>
-                  <Logo size={22} />
-                  <Text size="sm" fw={600} truncate style={{ flex: 1 }}>{info.firm_name || (info.workspace_kind === "individual" ? me.full_name : "Dealflow")}</Text>
-                  <IconSelector size={14} className="df-nav-icon" />
-                </UnstyledButton>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Group gap="sm" px={8} py={6} wrap="nowrap">
-                  <Avatar size={32} radius="sm" color="navy">{initials(me.full_name)}</Avatar>
-                  <div style={{ minWidth: 0 }}>
-                    <Text size="sm" fw={600} truncate>{me.full_name}</Text>
-                    <Text size="xs" c="dimmed" truncate>{me.email} · {me.role.name}</Text>
-                  </div>
-                </Group>
-                <Menu.Divider />
-                <Menu.Item component={Link} to="/preferences" leftSection={<IconUserCircle size={16} />}>My preferences</Menu.Item>
-                <Menu.Item onClick={signOut} leftSection={<IconLogout size={16} />}>Sign out</Menu.Item>
-              </Menu.Dropdown>
-            </Menu>
-            <Tooltip label="Close sidebar">
-              <ActionIcon variant="subtle" color="gray" className="df-collapse-toggle" visibleFrom="sm"
-                onClick={() => setCollapsed(true)} aria-label="Close sidebar">
+            <Group gap={8} wrap="nowrap" px={8} style={{ flex: 1, minWidth: 0, minHeight: 40 }}>
+              <Logo size={22} />
+              <Text size="sm" fw={600} truncate style={{ flex: 1 }}>{info.firm_name || (info.workspace_kind === "individual" ? me.full_name : "Dealflow")}</Text>
+            </Group>
+            <Tooltip label="Hide the sidebar (bring it back with the button at the top left)">
+              <ActionIcon variant="subtle" color="gray" visibleFrom="sm" onClick={() => setCollapsed(true)} aria-label="Hide sidebar">
                 <IconChevronsLeft size={18} />
               </ActionIcon>
             </Tooltip>
           </Group>
-          <UnstyledButton className="df-nav-item" onClick={search.open}>
-            <IconSearch size={18} className="df-nav-icon" />
-            Search
-            <span className="df-nav-extra"><kbd className="df-kbd">{isMac() ? "⌘K" : "Ctrl K"}</kbd></span>
+          <UnstyledButton className="df-nav-search" onClick={search.open}>
+            <IconSearch size={16} />
+            <span style={{ flex: 1 }}>Search everything…</span>
+            <kbd className="df-kbd">{isMac() ? "⌘K" : "Ctrl K"}</kbd>
           </UnstyledButton>
           <NavItem to="/" icon="home" label="Home" active={loc.pathname === "/"} />
         </AppShell.Section>
 
         <AppShell.Section grow component={ScrollArea} type="scroll" mt={4}>
-          <div className="df-nav-section" role="button" tabIndex={0} aria-expanded={modulesOpen}
-            onClick={() => setModulesOpen((o) => !o)} onKeyDown={(e) => e.key === "Enter" && setModulesOpen((o) => !o)}>
-            Workspace
-            <IconChevronRight size={12} className="df-chevron" data-open={modulesOpen ? "" : undefined} />
-          </div>
-          <div className="df-collapse" data-closed={modulesOpen ? undefined : ""}>
+          <div className="df-nav-section">Your work</div>
+          <div>
             <div className="df-stagger">
               {modules.map((m) => (
                 <NavItem key={m.key} to={`/m/${m.key}`} icon={m.key} label={m.label}
                   active={active(`/m/${m.key}`) || (NAV_CHILDREN[m.key] ?? []).some((c) => active(`/m/${c}`))}
                   extra={me.perms[m.key]?.create ? (
-                    <Tooltip label={NEW_LABEL[m.key] ?? `New in ${m.label}`} position="right">
-                      <Link to={`/m/${m.key}/new`} className="df-nav-mini df-nav-hover" aria-label={`New in ${m.label}`}
+                    <Tooltip label={NEW_LABEL[m.key] ?? `Add new to ${m.label}`} position="right">
+                      <Link to={`/m/${m.key}/new`} className="df-nav-mini" aria-label={`Add new to ${m.label}`}
                         onClick={(e) => e.stopPropagation()}>
                         <IconPlus size={14} />
                       </Link>
@@ -117,23 +93,37 @@ export default function Shell() {
         </AppShell.Section>
 
         <AppShell.Section>
-          {me.flags.restore_archive && <NavItem to="/archive" icon="archive" label="Archive" active={active("/archive")} />}
+          {me.flags.restore_archive && <NavItem to="/archive" icon="archive" label="Deleted items" active={active("/archive")} />}
           {canSettings && <NavItem to="/settings" icon="settings" label="Settings" active={active("/settings")} />}
+          <div className="df-nav-user">
+            <Group gap={8} wrap="nowrap" px={8} py={6}>
+              <Avatar size={28} radius="xl" color="navy">{initials(me.full_name)}</Avatar>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <Text size="sm" fw={600} truncate>{me.full_name}</Text>
+                <Text size="xs" c="dimmed" truncate>{me.role.name}</Text>
+              </div>
+            </Group>
+            <NavItem to="/preferences" icon="preferences" label="My preferences" active={active("/preferences")} />
+            {!info.is_guest && (
+              <UnstyledButton className="df-nav-item" onClick={signOut} style={{ width: "100%" }}>
+                <IconLogout size={18} stroke={1.7} className="df-nav-icon" />Sign out
+              </UnstyledButton>
+            )}
+          </div>
         </AppShell.Section>
       </AppShell.Navbar>
 
       <AppShell.Main>
         {info.is_guest && <GuestBanner demo={info.demo} />}
         <div className="df-topbar" data-scrolled={scroll.y > 4 ? "" : undefined}>
-          <ActionIcon variant="subtle" color="gray" hiddenFrom="sm" onClick={mobile.toggle} aria-label="Menu">
-            <IconMenu2 size={18} />
-          </ActionIcon>
+          <Button variant="default" size="compact-sm" hiddenFrom="sm" onClick={mobile.toggle} leftSection={<IconMenu2 size={16} />}>
+            Menu
+          </Button>
           {collapsed && (
-            <Tooltip label="Open sidebar">
-              <ActionIcon variant="subtle" color="gray" visibleFrom="sm" onClick={() => setCollapsed(false)} aria-label="Open sidebar">
-                <IconLayoutSidebarLeftExpand size={18} />
-              </ActionIcon>
-            </Tooltip>
+            <Button variant="default" size="compact-sm" visibleFrom="sm" onClick={() => setCollapsed(false)}
+              leftSection={<IconLayoutSidebarLeftExpand size={16} />}>
+              Show menu
+            </Button>
           )}
           <div style={{ flex: 1 }} />
           <Tooltip label="Search">

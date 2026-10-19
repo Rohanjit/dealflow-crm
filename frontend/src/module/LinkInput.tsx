@@ -133,7 +133,7 @@ export default function LinkInput({
   const note = denied
     ? `Your role can't see ${noun}.`
     : current?.archived
-      ? `${current.title} is in the Archive.`
+      ? `${current.title} is in Deleted items.`
       : f.help || undefined;
   return (
     <Select
@@ -196,7 +196,7 @@ export function MultiLinkInput({
     <MultiSelect
       label={f.label}
       required={f.required}
-      description={archived.length ? `${archived.join(", ")} ${archived.length === 1 ? "is" : "are"} in the Archive.` : f.help || undefined}
+      description={archived.length ? `${archived.join(", ")} ${archived.length === 1 ? "is" : "are"} in Deleted items.` : f.help || undefined}
       error={error}
       searchable
       clearable

@@ -6,7 +6,7 @@ import {
   IconAlignLeft, IconArchive, IconArrowUpRight, IconAt, IconBriefcase, IconBuildingBank, IconBuildingSkyscraper,
   IconCake, IconCalendar, IconCash, IconChecklist, IconCircleDot, IconClock, IconFile, IconHash, IconHome, IconLink,
   IconList, IconLock, IconPercentage, IconPhone, IconSelector, IconSettings, IconSquareCheck, IconTag, IconTargetArrow,
-  IconUser, IconUsers, IconUsersGroup, type Icon,
+  IconUser, IconUserCircle, IconUsers, IconUsersGroup, type Icon,
 } from "@tabler/icons-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
@@ -24,6 +24,7 @@ export const MODULE_ICONS: Record<string, Icon> = {
   home: IconHome,
   archive: IconArchive,
   settings: IconSettings,
+  preferences: IconUserCircle,
 };
 
 export function moduleIcon(key: string | undefined): Icon {

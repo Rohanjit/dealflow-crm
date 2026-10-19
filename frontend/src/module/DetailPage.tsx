@@ -1,6 +1,6 @@
-import { ActionIcon, Anchor, Badge, Breadcrumbs, Button, Grid, Group, Menu, Stack, Text } from "@mantine/core";
+import { Anchor, Badge, Breadcrumbs, Button, Grid, Group, Stack, Text } from "@mantine/core";
 import { modals } from "@mantine/modals";
-import { IconArchive, IconArrowUpRight, IconCheck, IconChevronRight, IconDots, IconPencil, IconRotate } from "@tabler/icons-react";
+import { IconArrowUpRight, IconCheck, IconChevronRight, IconPencil, IconRotate, IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
@@ -79,7 +79,7 @@ function DetailInner() {
       title: `Delete ${r._title}?`,
       children: (
         <Text size="sm">
-          It moves to the Archive and disappears from lists and search. An admin can restore it from there.
+          It moves to Deleted items and disappears from lists and search. It can be brought back from there.
         </Text>
       ),
       labels: { confirm: "Delete", cancel: "Cancel" },
@@ -88,7 +88,7 @@ function DetailInner() {
         try {
           await api(`m/${module!.key}/${r.id}/`, { method: "DELETE" });
           await qc.invalidateQueries({ queryKey: ["records", module!.key] });
-          notifyOk(`${r._title} moved to the Archive.`);
+          notifyOk(`${r._title} deleted. You can bring it back from Deleted items.`);
           nav(owner ? `/m/${owner.module}/${owner.id}` : `/m/${module!.key}`);
         } catch (e) {
           notifyError(e, "Couldn't delete");
@@ -109,14 +109,7 @@ function DetailInner() {
         <Button variant="default" leftSection={<IconPencil size={16} />} component={Link} to={`/m/${module.key}/${r.id}/edit`}>Edit</Button>
       )}
       {module.perms.delete && (
-        <Menu position="bottom-end" width={200}>
-          <Menu.Target>
-            <ActionIcon variant="subtle" color="gray" size="lg" aria-label="More actions"><IconDots size={18} /></ActionIcon>
-          </Menu.Target>
-          <Menu.Dropdown>
-            <Menu.Item color="red" leftSection={<IconArchive size={16} />} onClick={archive}>Delete</Menu.Item>
-          </Menu.Dropdown>
-        </Menu>
+        <Button variant="subtle" color="red" leftSection={<IconTrash size={16} />} onClick={archive}>Delete</Button>
       )}
     </>
   );
@@ -229,7 +222,7 @@ function Properties({ module, record, fields }: { module: ModuleSchema; record: 
         <div className="df-ghost-link" role="button" tabIndex={0} style={{ marginTop: 8 }}
           onClick={() => setShowEmpty((v) => !v)} onKeyDown={(e) => e.key === "Enter" && setShowEmpty((v) => !v)}>
           <IconChevronRight size={14} className="df-chevron" data-open={showEmpty ? "" : undefined} />
-          {showEmpty ? `Hide ${emptyCount} empty ${emptyCount === 1 ? "property" : "properties"}` : `${emptyCount} empty ${emptyCount === 1 ? "property" : "properties"}`}
+          {showEmpty ? `Hide the ${emptyCount} empty ${emptyCount === 1 ? "field" : "fields"}` : `Show ${emptyCount} empty ${emptyCount === 1 ? "field" : "fields"} (to see everything you can fill in)`}
         </div>
       )}
     </div>

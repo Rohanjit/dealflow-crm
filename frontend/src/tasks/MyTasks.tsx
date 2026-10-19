@@ -74,8 +74,9 @@ export default function MyTasks({ module, params }: { module: ModuleSchema; para
               aria-label="New task" value={title} onChange={(e) => setTitle(e.currentTarget.value)} />
             <DateInput w={170} placeholder="Due date (optional)" aria-label="Due date" clearable valueFormat={me.date_format}
               dateParser={dateParser(me.date_format)} value={due} onChange={setDue} />
-            <Button type="submit" leftSection={<IconPlus size={16} />} loading={busy} disabled={!title.trim()}>Add</Button>
+            <Button type="submit" leftSection={<IconPlus size={16} />} loading={busy} disabled={!title.trim()}>Add task</Button>
           </Group>
+          <Text size="xs" c="dimmed" mt={6}>Tick the circle next to a task when it's done. Click a task's name to see or change its details.</Text>
         </form>
       )}
       {isLoading ? (

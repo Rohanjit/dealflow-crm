@@ -71,7 +71,7 @@ export const theme = createTheme({
     Input: Input.extend({ defaultProps: { radius: "sm" } }),
     Checkbox: Checkbox.extend({ defaultProps: { radius: "xs" } }),
     Switch: Switch.extend({ defaultProps: { size: "sm" } }),
-    SegmentedControl: SegmentedControl.extend({ defaultProps: { radius: "sm", size: "xs", transitionDuration: 160 } }),
+    SegmentedControl: SegmentedControl.extend({ defaultProps: { radius: "sm", size: "sm", transitionDuration: 160 } }),
     Tabs: Tabs.extend({ defaultProps: { color: "dark" } }),
     NavLink: NavLink.extend({ defaultProps: { variant: "subtle" } }),
   },

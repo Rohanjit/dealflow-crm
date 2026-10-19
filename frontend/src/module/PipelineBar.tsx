@@ -1,7 +1,7 @@
 // Stage bar on a pipeline record: where it is, how long it's been there, and the next move.
 
-import { Button, Group, Menu, Stack, Text, Tooltip, UnstyledButton } from "@mantine/core";
-import { IconChevronDown, IconPlayerPause, IconPlayerPlay, IconX } from "@tabler/icons-react";
+import { Button, Group, Stack, Text, Tooltip, UnstyledButton } from "@mantine/core";
+import { IconPlayerPause, IconPlayerPlay, IconX } from "@tabler/icons-react";
 
 import { useApp, useSchema, useUsers } from "../context";
 import { formatDate } from "../format";
@@ -91,7 +91,10 @@ export default function PipelineBar({ module, record }: { module: ModuleSchema; 
         ))}
       </Group>
       <Group justify="space-between" mt="sm" gap="xs">
-        <Text size="sm" c={`${tone}.8`} fw={500}>{summary}</Text>
+        <div>
+          <Text size="sm" c={`${tone}.8`} fw={500}>{summary}</Text>
+          {canEdit && <Text size="xs" c="dimmed">Click any stage above to move it there.</Text>}
+        </div>
         {canEdit && (
           <Group gap="xs">
             {isOpen && !isWon && next && (
@@ -102,22 +105,13 @@ export default function PipelineBar({ module, record }: { module: ModuleSchema; 
                 {resumeVerb(p, status)} at {stageLabel(p, stage)}
               </Button>
             )}
-            {!isWon && (
-              <Menu position="bottom-end">
-                <Menu.Target>
-                  <Button size="xs" variant="default" rightSection={<IconChevronDown size={14} />}>More</Button>
-                </Menu.Target>
-                <Menu.Dropdown>
-                  {p.exits.filter((e) => e.value !== status).map((e) => (
-                    <Menu.Item key={e.value} color={e.tone === "red" ? "red" : undefined}
-                      leftSection={e.paused ? <IconPlayerPause size={14} /> : <IconX size={14} />}
-                      onClick={() => move(record, { kind: "exit", exit: e.value })}>
-                      {e.action}
-                    </Menu.Item>
-                  ))}
-                </Menu.Dropdown>
-              </Menu>
-            )}
+            {!isWon && p.exits.filter((e) => e.value !== status).map((e) => (
+              <Button key={e.value} size="xs" variant="default" color={e.tone === "red" ? "red" : undefined}
+                leftSection={e.paused ? <IconPlayerPause size={14} /> : <IconX size={14} />}
+                onClick={() => move(record, { kind: "exit", exit: e.value })}>
+                {e.action}
+              </Button>
+            ))}
           </Group>
         )}
       </Group>

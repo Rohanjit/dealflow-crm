@@ -1,16 +1,16 @@
 import {
-  ActionIcon, Button, Checkbox, CloseButton, Drawer, Group, Loader, Menu, MultiSelect, NumberInput,
-  Pagination, Paper, ScrollArea, SegmentedControl, Select, Stack, Table, Tabs, TagsInput, Text, TextInput, Tooltip,
+  Button, Checkbox, CloseButton, Drawer, Group, Loader, Menu, MultiSelect, NumberInput,
+  Pagination, Paper, ScrollArea, SegmentedControl, Select, Stack, Table, Tabs, TagsInput, Text, TextInput,
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { useDebouncedCallback, useDebouncedValue } from "@mantine/hooks";
 import {
-  IconAdjustmentsHorizontal, IconArrowDown, IconArrowUp, IconArrowUpRight, IconColumns3, IconDownload, IconFileImport, IconLayoutKanban,
-  IconLock, IconPlus, IconSearch, IconTable,
+  IconAdjustmentsHorizontal, IconArrowDown, IconArrowsSort, IconArrowUp, IconArrowUpRight, IconColumns3, IconDownload, IconFileImport, IconLayoutKanban,
+  IconLock, IconPlus, IconSearch, IconTable, IconX,
 } from "@tabler/icons-react";
 import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { api, download, qs } from "../api";
@@ -165,27 +165,34 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
         </Group>
         <Group gap={4} wrap="nowrap">
           {isFetching && <Loader size="xs" mr={4} />}
-          <ExpandingSearch value={search} placeholder={`Search ${NOUNS[module.key]?.[1] ?? module.label.toLowerCase()}`}
-            onChange={(v) => { setSearch(v); pushSearch(v); }}
-            onClear={() => { setSearch(""); setParam({ q: null }); }} />
-          <Button variant={activeFilters.length ? "light" : "subtle"} color={activeFilters.length ? "navy" : "gray"} size="compact-sm"
-            leftSection={<IconAdjustmentsHorizontal size={16} />} onClick={() => setFiltersOpen(true)}>
-            Filter{activeFilters.length ? ` · ${countFilters(activeFilters)}` : ""}
+          <TextInput size="xs" w={240} placeholder={`Search ${NOUNS[module.key]?.[1] ?? module.label.toLowerCase()}…`}
+            aria-label={`Search ${module.label}`} leftSection={<IconSearch size={14} />} value={search}
+            rightSection={search ? <CloseButton size="xs" onClick={() => { setSearch(""); setParam({ q: null }); }} aria-label="Clear search" /> : null}
+            onChange={(e) => { setSearch(e.currentTarget.value); pushSearch(e.currentTarget.value); }} />
+          <Button variant={activeFilters.length ? "light" : "default"} color={activeFilters.length ? "navy" : "gray"} size="xs"
+            leftSection={<IconAdjustmentsHorizontal size={15} />} onClick={() => setFiltersOpen(true)}>
+            Filters{activeFilters.length ? ` (${countFilters(activeFilters)} on)` : ""}
           </Button>
           {activeFilters.length > 0 && (
-            <Tooltip label="Clear filters">
-              <CloseButton size="sm" onClick={() => {
-                const next = new URLSearchParams();
-                if (params.get("q")) next.set("q", params.get("q")!);
-                if (ordering) next.set("ordering", ordering);
-                if (segParam && params.get(segParam)) next.set(segParam, params.get(segParam)!);
-                setParams(next, { replace: true });
-              }} aria-label="Clear filters" />
-            </Tooltip>
+            <Button variant="subtle" color="gray" size="xs" leftSection={<IconX size={14} />} onClick={() => {
+              const next = new URLSearchParams();
+              if (params.get("q")) next.set("q", params.get("q")!);
+              if (ordering) next.set("ordering", ordering);
+              if (segParam && params.get(segParam)) next.set(segParam, params.get(segParam)!);
+              setParams(next, { replace: true });
+            }}>Clear filters</Button>
           )}
           {!board && !mine && <ColumnPicker module={module} columns={shown.map((f) => f.key)} onChange={(c) => { setColumns(c); saveColumns(module.key, c); }} />}
         </Group>
       </Group>
+
+      {!mine && (
+        <Text size="xs" c="dimmed" mt={-6}>
+          {board
+            ? "Drag a card to another column to move it to that stage. Click a card to open it."
+            : "Click a row to open it. Click a column title to sort by it."}
+        </Text>
+      )}
 
       {mine ? (
         <MyTasks module={module} params={params} />
@@ -207,8 +214,8 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
                         <span className="df-th">
                           <I size={14} stroke={1.7} />
                           {f.label}
-                          {ordering === f.key && <IconArrowUp size={12} />}
-                          {ordering === `-${f.key}` && <IconArrowDown size={12} />}
+                          {ordering === f.key ? <IconArrowUp size={12} /> : ordering === `-${f.key}` ? <IconArrowDown size={12} />
+                            : f.sortable ? <IconArrowsSort size={12} className="df-sort-hint" /> : null}
                         </span>
                       </Table.Th>
                     );
@@ -280,32 +287,6 @@ function ViewTab({ active, icon, label, onClick }: { active: boolean; icon: Reac
       aria-pressed={active}>
       {label}
     </Button>
-  );
-}
-
-/** A search icon that opens into a box (and stays open while it holds text). */
-function ExpandingSearch({ value, placeholder, onChange, onClear }: {
-  value: string; placeholder: string; onChange: (v: string) => void; onClear: () => void;
-}) {
-  const [open, setOpen] = useState(!!value);
-  const ref = useRef<HTMLInputElement>(null);
-  const shown = open || !!value;
-  if (!shown) {
-    return (
-      <Tooltip label="Search">
-        <ActionIcon variant="subtle" color="gray" aria-label="Search" onClick={() => { setOpen(true); setTimeout(() => ref.current?.focus(), 0); }}>
-          <IconSearch size={17} />
-        </ActionIcon>
-      </Tooltip>
-    );
-  }
-  return (
-    <TextInput ref={ref} autoFocus size="xs" w={240} className="df-expand-search df-fade" placeholder={placeholder}
-      leftSection={<IconSearch size={14} />} value={value}
-      rightSection={value ? <CloseButton size="xs" onClick={onClear} aria-label="Clear search" /> : null}
-      onChange={(e) => onChange(e.currentTarget.value)}
-      onBlur={() => { if (!value) setOpen(false); }}
-      onKeyDown={(e) => { if (e.key === "Escape") { onClear(); setOpen(false); } }} />
   );
 }
 
@@ -393,9 +374,7 @@ function ColumnPicker({ module, columns, onChange }: { module: ModuleSchema; col
   return (
     <Menu closeOnItemClick={false} position="bottom-start" width={260}>
       <Menu.Target>
-        <Tooltip label="Choose columns">
-          <ActionIcon variant="subtle" color="gray" aria-label="Choose columns"><IconColumns3 size={17} /></ActionIcon>
-        </Tooltip>
+        <Button variant="default" size="xs" leftSection={<IconColumns3 size={15} />}>Columns</Button>
       </Menu.Target>
       <Menu.Dropdown>
         <ScrollArea.Autosize mah={420}>

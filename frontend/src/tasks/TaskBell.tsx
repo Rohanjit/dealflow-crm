@@ -1,7 +1,7 @@
 // Reminders in the header: a bell with the number of tasks due today or overdue, a list on click,
 // and a notice when one falls due (or someone assigns you one) while Dealflow is open.
 
-import { ActionIcon, Anchor, Badge, Button, Divider, Group, Indicator, Popover, ScrollArea, Stack, Text, Tooltip } from "@mantine/core";
+import { Anchor, Badge, Button, Divider, Group, Popover, ScrollArea, Stack, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconBell } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
@@ -74,13 +74,12 @@ export default function TaskBell() {
   return (
     <Popover opened={opened} onChange={setOpened} position="bottom-end" width={340} shadow="md">
       <Popover.Target>
-        <Tooltip label="Reminders" disabled={opened}>
-          <Indicator label={data.count} size={16} disabled={!data.count} color={data.overdue.length ? "red" : "orange"} offset={4}>
-            <ActionIcon variant="subtle" color="gray" size="lg" aria-label={`Reminders: ${data.count}`} onClick={() => setOpened((o) => !o)}>
-              <IconBell size={20} key={ring} className={ring ? "df-ring" : undefined} />
-            </ActionIcon>
-          </Indicator>
-        </Tooltip>
+        <Button variant="subtle" color={data.overdue.length ? "red" : "gray"} size="compact-sm" onClick={() => setOpened((o) => !o)}
+          leftSection={<IconBell size={18} key={ring} className={ring ? "df-ring" : undefined} />}
+          aria-label={`Reminders: ${data.count}`}>
+          Reminders
+          {data.count > 0 && <span className="df-count-pill" data-tone={data.overdue.length ? "red" : "orange"}>{data.count}</span>}
+        </Button>
       </Popover.Target>
       <Popover.Dropdown p="sm">
         {data.count === 0 ? (

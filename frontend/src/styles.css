@@ -107,7 +107,7 @@ body { background: #fff; color: var(--mantine-color-text); }
 a.mantine-Paper-root, .df-card-link { transition: box-shadow var(--df-medium) var(--df-ease), transform var(--df-medium) var(--df-ease), background-color var(--df-fast); }
 a.mantine-Paper-root:hover, .df-card-link:hover { box-shadow: var(--mantine-shadow-sm); transform: translateY(-1px); }
 
-.df-card-arrow { margin-left: auto; color: var(--mantine-color-gray-5); opacity: 0; transform: translateX(-4px);
+.df-card-arrow { margin-left: auto; color: var(--mantine-color-gray-5); opacity: .6; transform: translateX(-2px);
   transition: opacity var(--df-fast), transform var(--df-medium) var(--df-ease); }
 .df-card-link:hover .df-card-arrow { opacity: 1; transform: none; }
 
@@ -162,8 +162,10 @@ a.mantine-Paper-root:hover, .df-card-link:hover { box-shadow: var(--mantine-shad
 .df-nav-item:hover .df-nav-hover, .df-nav-item:focus-within .df-nav-hover { opacity: 1; }
 .df-nav-mini {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 20px; height: 20px; border-radius: 4px; color: var(--mantine-color-gray-7);
+  width: 22px; height: 22px; border-radius: 5px; color: var(--mantine-color-gray-6);
+  border: 1px solid transparent;
 }
+.df-nav-item:hover .df-nav-mini { border-color: var(--df-line); background: #fff; color: var(--mantine-color-text); }
 .df-nav-mini:hover { background: var(--df-press); color: var(--mantine-color-text); }
 .df-nav-section {
   display: flex; align-items: center; gap: 4px; padding: 14px 8px 4px;
@@ -173,8 +175,11 @@ a.mantine-Paper-root:hover, .df-card-link:hover { box-shadow: var(--mantine-shad
 .df-nav-section:hover { color: var(--mantine-color-text); }
 .df-chevron { transition: transform var(--df-medium) var(--df-ease); }
 .df-chevron[data-open] { transform: rotate(90deg); }
-.df-collapse-toggle { opacity: 0; transition: opacity var(--df-fast); }
-.df-sidebar:hover .df-collapse-toggle, .df-collapse-toggle:focus-visible { opacity: 1; }
+.df-nav-search { display: flex; align-items: center; gap: 8px; width: 100%; margin: 4px 0 6px; padding: 6px 10px;
+  border: 1px solid var(--df-line); border-radius: 8px; background: #fff; color: var(--mantine-color-dimmed); font-size: 14px;
+  box-shadow: 0 1px 1px rgba(15, 15, 15, .03); transition: border-color var(--df-fast), box-shadow var(--df-fast), color var(--df-fast); }
+.df-nav-search:hover { border-color: var(--mantine-color-gray-4); color: var(--mantine-color-text); box-shadow: var(--mantine-shadow-xs); }
+.df-nav-user { border-top: 1px solid var(--df-line); margin-top: 6px; padding-top: 4px; }
 
 .df-topbar {
   position: sticky; top: 0; z-index: 50; height: 44px;
@@ -221,6 +226,8 @@ a.mantine-Paper-root:hover, .df-card-link:hover { box-shadow: var(--mantine-shad
 .df-sort:hover { background: var(--df-hover) !important; color: var(--mantine-color-text); }
 .df-th { display: inline-flex; align-items: center; gap: 6px; }
 .df-th svg { color: var(--mantine-color-gray-6); }
+.df-th .df-sort-hint { opacity: .45; }
+.df-sort:hover .df-sort-hint { opacity: 1; }
 
 /* The record's name cell shows an "Open" chip on hover. */
 .df-title-cell { display: flex; align-items: center; gap: 8px; }
@@ -380,3 +387,7 @@ tr:hover .df-open-chip { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-delay: 0ms !important; transition-duration: 1ms !important; }
 }
+
+.df-count-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px;
+  margin-left: 6px; border-radius: 10px; font-size: 12px; font-weight: 600; color: #fff; background: var(--mantine-color-orange-6); }
+.df-count-pill[data-tone="red"] { background: var(--mantine-color-red-6); }

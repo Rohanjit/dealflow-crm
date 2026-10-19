@@ -140,7 +140,7 @@ export default function RolesSettings() {
                   ))}
                 </Table.Tbody>
               </Table>
-              <Text size="xs" c="dimmed" mt={4}>Delete moves records to the Archive. Create, Edit and Delete include View.</Text>
+              <Text size="xs" c="dimmed" mt={4}>Delete moves records to Deleted items, where they can be brought back. Create, Edit and Delete include View.</Text>
             </div>
 
             <div>

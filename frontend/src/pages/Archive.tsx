@@ -61,8 +61,8 @@ export default function ArchivePage() {
   const modules = info.modules.filter((m) => info.built_modules.includes(m.key));
   return (
     <Stack maw={1100}>
-      <PageHeader icon={moduleIcon("archive")} title="Archive"
-        sub={<>Deleted records land here. Restore them, or {me.role.is_admin ? "delete them permanently" : "ask an admin to delete them permanently"}.</>} />
+      <PageHeader icon={moduleIcon("archive")} title="Deleted items"
+        sub={<>Anything deleted lands here. Use <b>Restore</b> to bring it back{me.role.is_admin ? <>, or <b>Delete permanently</b> to remove it forever</> : ""}.</>} />
       <Group>
         <TextInput placeholder="Search by name" leftSection={<IconSearch size={16} />} value={q} onChange={(e) => setQ(e.currentTarget.value)} w={300} />
         <Select placeholder="All modules" clearable data={modules.map((m) => ({ value: m.key, label: m.label }))} value={module} onChange={setModule} w={200} />

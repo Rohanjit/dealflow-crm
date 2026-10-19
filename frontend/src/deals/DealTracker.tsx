@@ -74,7 +74,7 @@ export default function DealTracker({ section, deal }: { section: Section; deal:
   function remove(r: RecordData) {
     modals.openConfirmModal({
       title: `Remove ${r._title} from this deal?`,
-      children: <Text size="sm">Its tracker entry and notes move to the Archive, where they can be restored.</Text>,
+      children: <Text size="sm">Its tracker entry and notes move to Deleted items, where they can be brought back.</Text>,
       labels: { confirm: "Remove", cancel: "Cancel" },
       confirmProps: { color: "red" },
       onConfirm: async () => {
