@@ -167,6 +167,9 @@ def merge(mod: ModuleDef, keeper, losers: list, values: dict, user) -> dict:
 
             if mod.timeline:
                 _move_notes(mod.key, loser.pk, keeper.pk)
+            from .custom import repoint_links
+
+            repoint_links(mod.key, loser.pk, keeper.pk)  # custom link fields pointing at it
             loser.archived_at = timezone.now()
             loser.archived_by = user
             loser.save(update_fields=["archived_at", "archived_by"])

@@ -6,6 +6,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from accounts import views as a
 from core import audit_views as av
 from core import guest as g
+from core import layout_views as lv
 from core import views as c
 from deals import views as d
 from tasks import views as t
@@ -47,6 +48,8 @@ api = [
     path("archive/<str:module>/<int:pk>/", c.ArchiveItemView.as_view()),
     path("settings/firm/", c.FirmSettingsView.as_view()),
     path("settings/fields/", c.FieldSwitchView.as_view()),
+    path("settings/layouts/", lv.LayoutListView.as_view()),
+    path("settings/layouts/<str:module>/", lv.LayoutDetailView.as_view()),
     path("choice-lists/", c.ChoiceListsView.as_view()),
     path("choice-lists/<slug:key>/options/", c.ChoiceOptionCreateView.as_view()),
     path("choice-lists/<slug:key>/reorder/", c.ChoiceListReorderView.as_view()),

@@ -107,6 +107,8 @@ class FieldDef:
     # integer: allowed range (max may be a function, e.g. "this year"); otherwise any 32-bit number
     min_value: int | None = None
     max_value: object = None
+    # Custom fields (core/custom.py): the key of the value in the record's `custom` JSON column.
+    custom_key: str | None = None
 
     def __post_init__(self):
         assert self.type in FIELD_TYPES, f"Unknown field type {self.type}"
@@ -133,6 +135,8 @@ class FieldDef:
     def path(self, name: str | None = None) -> str:
         """Database lookup path for this field's column (prefixed with the FK for proxies)."""
         name = name or self.key
+        if self.custom_key and name == self.key:
+            name = f"custom__{self.custom_key}"
         return f"{self.via}__{name}" if self.via else name
 
     def schema(self) -> dict:
@@ -160,6 +164,7 @@ class FieldDef:
             "default": self.default,
             "min": self.min_value,
             "max": self.max_value() if callable(self.max_value) else self.max_value,
+            "custom": bool(self.custom_key),
         }
 
 
@@ -316,10 +321,10 @@ _REGISTRY: dict[str, ModuleDef] = {}
 
 
 def register(module: ModuleDef) -> ModuleDef:
-    keys = [f.key for f in module.fields]
+    keys = [f.key for f in module.base_fields]
     assert len(keys) == len(set(keys)), f"Duplicate field keys in {module.key}"
-    for f in module.fields:
-        assert f.group in module.groups, f"{module.key}.{f.key}: unknown group {f.group}"
+    for f in module.base_fields:
+        assert f.group in module.base_groups, f"{module.key}.{f.key}: unknown group {f.group}"
     _REGISTRY[module.key] = module
     return module
 
@@ -354,19 +359,22 @@ def name_key(module: ModuleDef, title: str) -> str:
 
 
 def enabled_map(module_key: str) -> dict[str, bool]:
-    """{field_key: enabled} applying the firm's switches. Required fields are always on.
-    Company-level fields follow the switches of the module they belong to."""
-    from .models import FieldSwitch
+    """{field_key: enabled} applying the firm's layout (core/layout.py). Required fields, fields
+    other screens rely on and the primary field are always on. Company-level fields follow the
+    layout of Companies. Custom fields are only in the list while they're shown at all."""
+    from . import layout
 
     mod = get_module(module_key)
-    modules = {module_key} | {f.via_module for f in mod.fields if f.via_module}
-    switches = {
-        (m, k): on for m, k, on in FieldSwitch.objects.filter(module__in=modules).values_list("module", "field_key", "enabled")
-    }
     out = {}
+    hidden_by = {}
     for f in mod.fields:
+        if not f.can_disable or f.key == mod.title_field or f.custom_key:
+            out[f.key] = True
+            continue
         owner = f.via_module or module_key
-        out[f.key] = True if not f.can_disable else switches.get((owner, f.key), True)
+        if owner not in hidden_by:
+            hidden_by[owner] = layout.hidden(owner)
+        out[f.key] = f.key not in hidden_by[owner]
     return out
 
 
@@ -381,3 +389,31 @@ def this_year(ahead: int = 0):
     import datetime as _dt
 
     return lambda: _dt.date.today().year + ahead
+
+
+# ModuleDef.fields / .groups are live: the original lists (`base_fields`, `base_groups`) as laid out by
+# the firm (core/layout.py). Set at registration, read everywhere.
+def _get_fields(self):
+    from . import layout
+
+    return layout.effective(self)[0]
+
+
+def _set_fields(self, value):
+    self.__dict__["_base_fields"] = value
+
+
+def _get_groups(self):
+    from . import layout
+
+    return layout.effective(self)[1]
+
+
+def _set_groups(self, value):
+    self.__dict__["_base_groups"] = value
+
+
+ModuleDef.fields = property(_get_fields, _set_fields)
+ModuleDef.groups = property(_get_groups, _set_groups)
+ModuleDef.base_fields = property(lambda self: self.__dict__["_base_fields"])
+ModuleDef.base_groups = property(lambda self: self.__dict__["_base_groups"])

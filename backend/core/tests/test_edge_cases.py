@@ -224,10 +224,10 @@ class QueryAndColumnTests(APITestBase):
 
 class BulkFieldTests(APITestBase):
     def test_bulk_edit_of_fields_that_cant_change_is_refused(self):
-        from core.models import FieldSwitch
+        from core.views import set_field_hidden
 
         ids = [Investor.objects.create(firm_name=n, created_by=self.admin, updated_by=self.admin).pk for n in ("P Fund", "Q Fund")]
-        FieldSwitch.objects.create(module="investors", field_key="hq_city", enabled=False)
+        set_field_hidden("investors", "hq_city", True)
         for values in ({"hq_city": "Goa"}, {"nope": 1}, {"created_by": self.admin.pk}):
             r = self.client.post("/api/m/investors/bulk/", {"action": "edit", "ids": ids, "values": values}, format="json")
             self.assertEqual(r.status_code, 400, values)

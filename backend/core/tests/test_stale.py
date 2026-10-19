@@ -5,7 +5,8 @@ import datetime as dt
 from django.utils import timezone
 
 from contacts.models import Contact
-from core.models import FieldSwitch, FirmSettings
+from core.models import FirmSettings
+from core.views import set_field_hidden
 from investors.models import Investor
 
 from .base import APITestBase
@@ -101,7 +102,7 @@ class StaleTests(APITestBase):
 
     def test_switched_off_last_contacted_means_no_alerts(self):
         self.investor("Old", last=days_ago(200), owner=self.admin)
-        FieldSwitch.objects.create(module="investors", field_key="last_contacted", enabled=False)
+        set_field_hidden("investors", "last_contacted", True)
         self.assertEqual(self.titles(), [])
 
     def test_settings(self):

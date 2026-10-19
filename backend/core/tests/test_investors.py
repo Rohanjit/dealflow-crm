@@ -1,5 +1,5 @@
 from accounts.models import Role
-from core.models import FieldSwitch
+from core.models import ModuleLayout
 from investors.models import Investor
 
 from .base import APITestBase
@@ -154,7 +154,7 @@ class InvestorCrudTests(APITestBase):
 class FieldSwitchAndDropdownTests(APITestBase):
     def test_switched_off_field_is_ignored(self):
         self.client.patch("/api/settings/fields/", {"module": "investors", "field_key": "hq_city", "enabled": False}, format="json")
-        self.assertFalse(FieldSwitch.objects.get().enabled)
+        self.assertEqual(ModuleLayout.objects.get(module="investors").hidden, ["hq_city"])
         r = self.client.post(URL, {"firm_name": "A", "hq_city": "Delhi"}, format="json")
         self.assertEqual(Investor.objects.get().hq_city, "")
         schema = self.client.get("/api/schema/").json()["modules"][0]

@@ -569,7 +569,7 @@ def _existing_keys(mod: ModuleDef, user=None) -> dict[str, list[tuple[int, str]]
     index: dict[str, list[tuple[int, str]]] = {}
     if not mod.duplicate_keys:
         return index
-    own = [f for f in mod.fields if not f.via]
+    own = [f for f in mod.fields if not f.via and not f.custom_key]
     text_fields = [f.key for f in own if f.type in ("text", "url", "email", "phone", "choice")]
     links = [(f.key, mkey, f"{attr}_id") for f in own if f.type == "link" and not f.multi
              for mkey, attr in active_targets(f)]

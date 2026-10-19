@@ -19,7 +19,7 @@ from .errors import Restricted
 from . import guest
 from .guest import NotInSample, NotOnDemo
 from .exporter import export_workbook
-from .models import ChoiceList, ChoiceOption, FieldSwitch, FirmSettings, Note
+from .models import ChoiceList, ChoiceOption, FirmSettings, Note
 from .modules import BUILT_MODULES
 from .pagination import StandardPagination
 from .records import apply_values, can_see, clean_values, filter_queryset, serialize, text_in, to_id, visible, with_related
@@ -669,6 +669,9 @@ class ArchiveItemView(APIView):
         current.add_change({"record": f"{mod.key}:{obj.pk}", "title": mod.title_of(obj), "kind": "deleted permanently"})
         try:
             with transaction.atomic():
+                from .custom import repoint_links
+
+                repoint_links(mod.key, obj.pk, None)  # custom link fields pointing at it are emptied
                 obj.delete()  # its interaction log goes with it (core.signals)
         except ProtectedError as e:
             kinds = sorted({str(type(o)._meta.verbose_name_plural) for o in e.protected_objects})
@@ -805,8 +808,23 @@ class FieldSwitchView(APIView):
         if not enabled and not f.can_disable:
             why = "is required" if f.required else "is used by other screens"
             raise ValidationError({"field_key": f"{f.label} {why} and can't be switched off."})
-        FieldSwitch.objects.update_or_create(module=module, field_key=key, defaults={"enabled": enabled})
+        set_field_hidden(module, key, not enabled)
         return Response({"module": module, "field_key": key, "enabled": enabled})
+
+
+def set_field_hidden(module: str, key: str, hide: bool):
+    """Switch one built-in field off or on (in the module's layout; a customisable module becomes
+    customised so the switch applies)."""
+    from . import layout
+    from .models import ModuleLayout
+
+    lay, _ = ModuleLayout.objects.get_or_create(module=module)
+    hidden = [k for k in (lay.hidden or []) if k != key] + ([key] if hide else [])
+    lay.hidden = hidden
+    if hide and module in layout.CUSTOMISABLE:
+        lay.customised = True
+    lay.save()
+    layout.changed()
 
 
 # ---------------------------------------------------------------- settings: dropdown lists

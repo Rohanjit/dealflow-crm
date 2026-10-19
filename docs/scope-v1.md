@@ -183,7 +183,6 @@ No separate Interactions module: interactions are captured as dated notes inside
 
 ## Not in V1 (to discuss after V1)
 - Field-level permissions (hiding specific fields from specific roles)
-- Custom fields created by admins
 - Configurable pipeline stages (rename/add/reorder/remove)
 - Separate Interactions module
 - Email reminders and notifications (including emailed invites and password resets)

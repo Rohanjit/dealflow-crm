@@ -89,6 +89,10 @@ def read_value(obj, f: FieldDef):
 
 
 def _read(obj, f: FieldDef):
+    if f.custom_key:
+        from . import custom
+
+        return custom.read(obj, f)
     t = f.type
     if t == "money":
         return {
@@ -134,6 +138,10 @@ def link_value(obj, f: FieldDef):
     """{module, id, title, archived} for whichever target the record links to (a list of them
     for fields that link to several records)."""
     h = holder(obj, f)
+    if h is not None and f.custom_key:
+        from . import custom
+
+        return custom.read(h, f)
     return _link_value(h, f) if h is not None else empty_value(f)
 
 
@@ -205,6 +213,8 @@ def with_related(qs: QuerySet, mod: ModuleDef) -> QuerySet:
     for f in mod.fields:
         if f.via:
             select.append(f.via)
+        if f.custom_key:
+            continue  # values are in the record's JSON column
         if f.type == "link":
             for mkey, attr in active_targets(f):
                 # Records named through a link (a deal is named after its company) bring that along.
@@ -350,7 +360,7 @@ def clean_one(f: FieldDef, v, instance=None):
         raise FieldError("Pick one of the listed options.")
     if t == "dropdown":
         if f.multi:
-            current = set(getattr(instance, f.key).values_list("pk", flat=True)) if instance and instance.pk else set()
+            current = _current_ids(instance, f)
             if v in EMPTY:
                 return []
             if not isinstance(v, (list, tuple)):
@@ -364,13 +374,12 @@ def clean_one(f: FieldDef, v, instance=None):
             return out
         if v in EMPTY:
             return None
-        current = {getattr(instance, f"{f.key}_id")} if instance and instance.pk else set()
-        return _option(f, v, current)
+        return _option(f, v, _current_ids(instance, f))
     if t == "user":
         if f.multi:
             if v in EMPTY:
                 return []
-            current = set(getattr(instance, f.key).values_list("pk", flat=True)) if instance and instance.pk else set()
+            current = _current_ids(instance, f)
             seen, out = set(), []
             for raw in v if isinstance(v, (list, tuple)) else [v]:
                 user = _user(raw, current)
@@ -380,7 +389,7 @@ def clean_one(f: FieldDef, v, instance=None):
             return out
         if v in EMPTY:
             return None
-        return _user(v, {getattr(instance, f"{f.key}_id")} if instance and instance.pk else set())
+        return _user(v, _current_ids(instance, f))
     if t == "money":
         if v in EMPTY:
             return {"amount": None, "currency": "", "unit": ""}
@@ -430,6 +439,19 @@ def clean_one(f: FieldDef, v, instance=None):
     raise FieldError("Unsupported field")
 
 
+def _current_ids(instance, f: FieldDef) -> set:
+    """Dropdown options or people a saved record has now (kept even if since removed)."""
+    if not instance or not instance.pk:
+        return set()
+    if f.custom_key:
+        from . import custom
+
+        return custom.current_ids(instance, f)
+    if f.multi:
+        return set(getattr(instance, f.key).values_list("pk", flat=True))
+    return {getattr(instance, f"{f.key}_id")}
+
+
 def _user(raw, current: set):
     pk = to_id(raw)
     if pk is None:
@@ -446,6 +468,10 @@ def _current_links(instance, f: FieldDef) -> set[tuple[str, int]]:
     """(module, id) of the records a saved record links to through `f` today."""
     if not instance or not instance.pk:
         return set()
+    if f.custom_key:
+        from . import custom
+
+        return custom.current_ids(instance, f)
     out = set()
     for mkey, attr in active_targets(f):
         if f.multi:
@@ -663,6 +689,11 @@ def apply_values(obj, mod: ModuleDef, values: dict, user, importing=False, log_t
         if f.via:
             via.setdefault(f.via, (f.via_module, {}))[1][key] = v
             continue
+        if f.custom_key:
+            from . import custom
+
+            custom.apply(obj, f, v)
+            continue
         if f.type == "money":
             setattr(obj, f"{key}_amount", v["amount"])
             setattr(obj, f"{key}_currency", v["currency"])
@@ -744,6 +775,11 @@ def _search_condition(mod: ModuleDef, q: str, enabled: dict) -> Q:
     for f in mod.fields:
         if not f.searchable or not enabled.get(f.key, True):
             continue
+        if f.custom_key:
+            from . import custom
+
+            cond |= custom.search_q(f, q)
+            continue
         if f.type == "link":
             # Contacts are found by their firm's name, for example.
             for mkey, attr in active_targets(f):
@@ -799,6 +835,10 @@ def _order_terms(mod: ModuleDef, key: str, desc: bool) -> list:
     f = mod.field_map.get(key)
     if not f or not f.sortable:
         return []
+    if f.custom_key:
+        from . import custom
+
+        return custom.order_terms(f, desc)
     t, col = f.type, f.path()
     if t == "money":
         # Amounts only compare within a currency, so group by currency first.
@@ -837,6 +877,12 @@ def filter_queryset(qs: QuerySet, mod: ModuleDef, params, user, enabled: dict) -
     distinct = False
     for f in mod.fields:
         k, t, col = f.key, f.type, f.path()
+        if f.custom_key:
+            if f.filterable and enabled.get(f.key, True):
+                from . import custom
+
+                qs = custom.apply_filter(qs, f, params, user)
+            continue
         if t == "link":
             # Applied even when switched off: other screens (e.g. an investor's contacts) rely on it.
             qs = _link_filter(qs, mod, f, params)

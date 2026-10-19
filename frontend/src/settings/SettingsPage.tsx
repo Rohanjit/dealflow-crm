@@ -6,7 +6,7 @@ import { useMe } from "../context";
 import AuditSettings from "./AuditSettings";
 import BackupsSettings from "./BackupsSettings";
 import DropdownSettings from "./DropdownSettings";
-import FieldSettings from "./FieldSettings";
+import LayoutSettings from "./LayoutSettings";
 import FirmSettings from "./FirmSettings";
 import RolesSettings from "./RolesSettings";
 import UsersSettings from "./UsersSettings";
@@ -23,7 +23,7 @@ export default function SettingsPage() {
     { path: "firm", label: "Firm", icon: IconBuilding, show: me.flags.manage_settings, el: <FirmSettings /> },
     { path: "users", label: "Users", icon: IconUsers, show: me.flags.manage_users, el: <UsersSettings /> },
     { path: "roles", label: "Roles & permissions", icon: IconShieldLock, show: me.role.is_admin, el: <RolesSettings /> },
-    { path: "fields", label: "Fields", icon: IconToggleRight, show: me.flags.manage_settings, el: <FieldSettings /> },
+    { path: "fields", label: "Fields & layout", icon: IconToggleRight, show: me.flags.manage_settings, el: <LayoutSettings /> },
     { path: "dropdowns", label: "Dropdown lists", icon: IconList, show: me.flags.manage_settings, el: <DropdownSettings /> },
     { path: "backups", label: "Backups", icon: IconDatabase, show: me.role.is_admin, el: <BackupsSettings /> },
     { path: "audit", label: "Audit log", icon: IconShieldCheck, show: me.role.is_admin, el: <AuditSettings /> },

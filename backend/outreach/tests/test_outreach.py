@@ -6,7 +6,7 @@ from django.utils import timezone
 from openpyxl import Workbook, load_workbook
 
 from contacts.models import Contact
-from core.models import FieldSwitch, Note
+from core.models import ModuleLayout, Note
 from core.tests.base import APITestBase
 from outreach.models import Company, Outreach
 
@@ -89,7 +89,7 @@ class CompanyLevelTests(OutreachBase):
         fields = self.client.get("/api/settings/fields/").json()["modules"]
         outreach_keys = {f["key"] for m in fields if m["module"] == "outreach" for f in m["fields"]}
         self.assertNotIn("city", outreach_keys)
-        self.assertFalse(FieldSwitch.objects.filter(module="outreach").exists())
+        self.assertFalse(ModuleLayout.objects.filter(module="outreach").exists())
 
     def test_company_with_outreach_cant_be_purged(self):
         self.outreach()

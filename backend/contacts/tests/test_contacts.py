@@ -6,7 +6,7 @@ from openpyxl import Workbook, load_workbook
 from accounts.models import Role
 from contacts.models import Contact
 from core.importer import parse_birthday
-from core.models import FieldSwitch
+from core.models import ModuleLayout
 from core.tests.base import APITestBase
 from investors.models import Investor
 
@@ -92,7 +92,7 @@ class ContactCrudTests(ContactTestBase):
     def test_firm_field_cannot_be_switched_off(self):
         r = self.client.patch("/api/settings/fields/", {"module": "contacts", "field_key": "firm", "enabled": False}, format="json")
         self.assertEqual(r.status_code, 400)
-        self.assertFalse(FieldSwitch.objects.exists())
+        self.assertFalse(ModuleLayout.objects.exists())
 
 
 class ContactListTests(ContactTestBase):

@@ -24,6 +24,8 @@ class FirmSettings(models.Model):
     workspace_kind = models.CharField(max_length=12, default="firm", choices=[("firm", "Firm"), ("individual", "Just me")])
     # Set while the install holds the guest sample data (core/guest.py) instead of real data.
     sample_loaded_at = models.DateTimeField(null=True, blank=True)
+    # Changes whenever a module's fields or layout change, so every worker rebuilds its field lists.
+    layout_token = models.CharField(max_length=32, blank=True)
 
     @classmethod
     def load(cls) -> "FirmSettings":
@@ -72,6 +74,54 @@ class Tag(models.Model):
         return self.name
 
 
+class CustomField(models.Model):
+    """A field a firm added to a module in Settings > Fields & layout. Its values live in each
+    record's `custom` JSON column under `key` ("cf_<id>"). Deleting one only hides it (`active`)."""
+
+    TYPES = [
+        ("text", "Short text"), ("longtext", "Long text"), ("integer", "Whole number"), ("decimal", "Number with decimals"),
+        ("percent", "Percentage"), ("money", "Money"), ("date", "Date"), ("datetime", "Date and time"),
+        ("boolean", "Yes / no"), ("tristate", "Yes / no / not known"), ("dropdown", "Dropdown"), ("user", "Person"),
+        ("email", "Email"), ("phone", "Phone"), ("url", "Web address"), ("tags", "Tags"), ("link", "Link to a record"),
+    ]
+
+    module = models.CharField(max_length=30)
+    label = models.CharField(max_length=80)
+    type = models.CharField(max_length=12, choices=TYPES)
+    multi = models.BooleanField(default=False)  # dropdown, person, link: several values
+    targets = models.JSONField(default=list, blank=True)  # link: modules it can point at
+    choice_list = models.ForeignKey(ChoiceList, on_delete=models.PROTECT, null=True, blank=True, related_name="+")
+    required = models.BooleanField(default=False)
+    help = models.CharField(max_length=200, blank=True)
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+
+    class Meta:
+        ordering = ["pk"]
+
+    @property
+    def key(self) -> str:
+        return f"cf_{self.pk}"
+
+
+class ModuleLayout(models.Model):
+    """How one module's fields are laid out when the firm has customised it. With `customised`
+    off the module shows its original layout (custom fields hidden, data kept). See core/layout.py.
+
+    sections: [{"key", "label"}] in order · items: [{"field", "section"}] in order (built-in,
+    custom and linked fields) · labels: {field: new label} · hidden: built-in fields switched off."""
+
+    module = models.CharField(max_length=30, unique=True)
+    customised = models.BooleanField(default=False)
+    sections = models.JSONField(default=list, blank=True)
+    items = models.JSONField(default=list, blank=True)
+    labels = models.JSONField(default=dict, blank=True)
+    hidden = models.JSONField(default=list, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+
+
 class FieldSwitch(models.Model):
     """Firm-wide on/off switch for one field. Missing row = field is on."""
 
@@ -114,6 +164,8 @@ class Record(models.Model):
     archived_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
     )
+    # Values of the firm's custom fields, {"cf_12": value} (core/custom.py).
+    custom = models.JSONField(default=dict, blank=True)
 
     class Meta:
         abstract = True
