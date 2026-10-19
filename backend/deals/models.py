@@ -72,6 +72,11 @@ class Deal(Record):
     team_associate = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name="+")
     team_analyst = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name="+")
 
+    # Restricted deals (deals/access.py): only the deal team, the people in `access` and admins see them.
+    # Changed through access requests, never through the generic forms.
+    restricted = models.BooleanField(default=False, editable=False)
+    access = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name="deal_access", editable=False)
+
     # Transaction terms
     target_raise_amount, target_raise_currency, target_raise_unit, target_raise_value = money_columns("Target raise")
     instrument = models.CharField(max_length=10, choices=INSTRUMENTS, blank=True)
@@ -120,6 +125,14 @@ class Deal(Record):
     def __str__(self):
         return f"{self.company} ({self.get_stage_display()})"
 
+    def save(self, *args, **kwargs):
+        # Ordinary saves (forms, imports, stage moves) never write `restricted`: only deals/access.py
+        # does, with update_fields. Otherwise a form opened before an MD restricted the deal would
+        # quietly lift the restriction when saved.
+        if self.pk and not kwargs.get("update_fields") and not kwargs.get("force_insert") and not self._state.adding:
+            kwargs["update_fields"] = [f.name for f in self._meta.concrete_fields if not f.primary_key and f.name != "restricted"]
+        super().save(*args, **kwargs)
+
 
 class DealInvestor(Record):
     """One investor on one deal's tracker: how far they've got, or why they dropped out."""
@@ -139,3 +152,24 @@ class DealInvestor(Record):
 
     def __str__(self):
         return f"{self.investor} on {self.deal}"
+
+
+class AccessRequest(models.Model):
+    """A request about who can see a restricted deal, waiting for (or decided by) an approver:
+    restrict or lift the restriction, give someone access, or someone asking for access themselves."""
+
+    KINDS = [("restrict", "Restrict the deal"), ("unrestrict", "Lift the restriction"),
+             ("add", "Give access"), ("join", "Asked for access")]
+    STATUSES = [("pending", "Waiting"), ("approved", "Approved"), ("declined", "Declined"), ("withdrawn", "Withdrawn")]
+
+    deal = models.ForeignKey(Deal, on_delete=models.CASCADE, related_name="access_requests")
+    kind = models.CharField(max_length=12, choices=KINDS)
+    person = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True, related_name="+")
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=10, choices=STATUSES, default="pending")
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    decided_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]

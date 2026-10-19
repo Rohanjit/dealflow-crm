@@ -168,6 +168,10 @@ def merge(mod: ModuleDef, keeper, losers: list, values: dict, user) -> dict:
             loser.archived_by = user
             loser.save(update_fields=["archived_at", "archived_by"])
 
+        if mod.key == "deals":
+            from deals.access import merge_access
+
+            merge_access(keeper, losers)
         apply_values(keeper, mod, cleaned, user)
         if mod.timeline:
             names = ", ".join(mod.title_of(x) for x in losers)
@@ -185,12 +189,12 @@ class MergeError(Exception):
 # ---------------------------------------------------------------- finding duplicates
 
 
-def duplicate_groups(mod: ModuleDef) -> list[dict]:
+def duplicate_groups(mod: ModuleDef, user) -> list[dict]:
     """Records that look like the same thing, by the module's duplicate rules (the ones import uses).
     Records sharing any key end up in one group."""
     from .importer import _existing_keys
 
-    index = _existing_keys(mod)
+    index = _existing_keys(mod, user)
     parent: dict[int, int] = {}
     titles: dict[int, str] = {}
     reasons: dict[int, set[str]] = {}

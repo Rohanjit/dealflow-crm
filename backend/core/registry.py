@@ -271,6 +271,14 @@ class ModuleDef:
     segment_default: str = ""  # option the list starts on (sent explicitly by the app)
     # On/off buttons above the list, e.g. "Going cold": {param, value, label, help}; handled by extra_filters.
     quick_filters: list[dict] = field(default_factory=list)
+    # Records a person can't see even with view permission (restricted deals and what goes with them):
+    # user -> Q of records to leave out, or None. Applied by records.visible() everywhere.
+    hide: Callable | None = None
+    # For a record someone can't see: what they're told instead (record, user) -> dict, sent with a
+    # 403 {"code": "restricted"}. Without it the record just doesn't exist for them.
+    placeholder: Callable | None = None
+    # Extra keys for list responses (params, user) -> dict, e.g. placeholders for hidden deals.
+    list_extra: Callable | None = None
     # When the title isn't a plain column (an outreach attempt is named after its company).
     title_path: str | None = None  # database path, e.g. "company__name"
     title_fn: Callable | None = None  # record -> title

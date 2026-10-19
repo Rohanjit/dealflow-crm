@@ -163,6 +163,9 @@ export type RecordData = {
   [key: string]: unknown;
 };
 
-export type Page<T> = { count: number; next: string | null; previous: string | null; results: T[] };
+export type Page<T> = {
+  count: number; next: string | null; previous: string | null; results: T[];
+  restricted?: import("./deals/Restricted").Placeholder[]; // restricted deals left out (deals and tracker lists)
+};
 
 export type UserLookup = { id: number; full_name: string; is_active: boolean };

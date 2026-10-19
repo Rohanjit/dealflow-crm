@@ -23,6 +23,7 @@ import MyTasks from "../tasks/MyTasks";
 import { afterVaultChange } from "../vault/api";
 import VaultGate from "../vault/VaultGate";
 import BoardView from "./BoardView";
+import { RestrictedList } from "../deals/Restricted";
 import BulkBar from "./BulkBar";
 import { DuplicatesButton } from "./Duplicates";
 import { FieldValue } from "./fields";
@@ -297,6 +298,8 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
         </div>
         )
       )}
+
+      {!board && data?.restricted && data.restricted.length > 0 && <RestrictedList items={data.restricted} where="in this list" />}
 
       {!board && !mine && total > PAGE_SIZE && (
         <Group justify="space-between">

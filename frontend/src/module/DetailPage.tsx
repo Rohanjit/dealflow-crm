@@ -1,11 +1,11 @@
 import { Anchor, Badge, Breadcrumbs, Button, Grid, Group, Stack, Text } from "@mantine/core";
 import { modals } from "@mantine/modals";
-import { IconArrowUpRight, IconCheck, IconChevronRight, IconPencil, IconRotate, IconTrash } from "@tabler/icons-react";
+import { IconArrowUpRight, IconCheck, IconChevronRight, IconLock, IconPencil, IconRotate, IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import { useApp, useModuleSchema } from "../context";
 import DealTracker from "../deals/DealTracker";
 import { useCompleteTask } from "../tasks/api";
@@ -21,6 +21,7 @@ import { FieldValue, isEmpty } from "./fields";
 import PipelineBar from "./PipelineBar";
 import { exitForField, stageOf } from "./pipeline";
 import RelatedSection from "./RelatedSection";
+import { AccessPanel, RestrictedPage, type Placeholder } from "../deals/Restricted";
 import Timeline from "./Timeline";
 
 // Record types that live inside another record (a deal's investor tracker): the page leads back there.
@@ -46,6 +47,9 @@ function DetailInner() {
 
   if (isLoading || rec.isLoading) return <PageSkeleton />;
   if (!module) return <Navigate to="/" replace />;
+  if (rec.error instanceof ApiError && rec.error.code === "restricted") {
+    return <RestrictedPage placeholder={(rec.error.body as { placeholder: Placeholder }).placeholder} />;
+  }
   if (rec.error || !rec.data) {
     return (
       <Stack>
@@ -146,7 +150,8 @@ function DetailInner() {
             <Properties module={module} record={r} fields={fields} />
             {module.sections.filter((s) => s.status === "ready" && s.module).map((s) => (
               <div key={s.key} className="df-fade">
-                {s.panel === "tracker" ? <DealTracker section={s} deal={r} />
+                {s.panel === "access" ? <AccessPanel dealId={r.id} />
+                  : s.panel === "tracker" ? <DealTracker section={s} deal={r} />
                   : s.panel === "tasks" ? <TasksPanel section={s} parent={module} record={r} />
                     : s.panel === "documents" ? <DocumentsPanel section={s} parent={module} record={r} />
                       : <RelatedSection section={s} parent={module} record={r} />}
@@ -235,7 +240,7 @@ const HEADER_FIELDS: Record<string, string[]> = {
   contacts: ["designation", "firm", "decision_level", "primary_contact", "relationship_strength", "city"],
   companies: ["sector", "sub_sector", "city"],
   outreach: ["transaction_type", "expected_size", "lead_banker"],
-  deals: ["transaction_type", "target_raise", "lead_banker", "exclusivity"],
+  deals: ["restricted", "transaction_type", "target_raise", "lead_banker", "exclusivity"],
   deal_investors: ["deal"],
   tasks: ["status", "priority", "due", "assigned_to", "related"],
 };
@@ -251,6 +256,8 @@ function HeaderBadges({ r, module }: { r: RecordData; module: ModuleSchema }) {
         <span key={f.key} style={{ display: "inline-flex", alignItems: "center" }}>
           {f.type === "text" ? (
             <Text size="sm" c="dimmed">{String(r[f.key])}</Text>
+          ) : f.key === "restricted" ? (
+            <Badge variant="light" color="orange" leftSection={<IconLock size={12} />} tt="none">Restricted</Badge>
           ) : f.type === "boolean" ? (
             <Badge variant="light" color="teal">{f.label}</Badge>
           ) : f.type === "tristate" ? (

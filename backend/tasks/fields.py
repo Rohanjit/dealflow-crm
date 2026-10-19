@@ -50,8 +50,12 @@ def task_filters(qs, params, user=None):
 def related_title(t: Task) -> str:
     """The name of what the task is about (a deal and an outreach attempt are named after their company)."""
     f = next(f for f in FIELDS if f.key == "related")
+    from core.records import hidden_ids
+
     for mkey, attr in active_targets(f):
-        if getattr(t, f"{attr}_id") is not None:
+        if (pk := getattr(t, f"{attr}_id")) is not None:
+            if pk in hidden_ids(mkey):
+                return f"Restricted {get_module(mkey).singular.lower()}"
             return get_module(mkey).title_of(getattr(t, attr))
     return ""
 
@@ -74,6 +78,7 @@ TASKS = register(
         label="Tasks & Reminders",
         singular="Task",
         model=Task,
+        hide=lambda user: __import__("deals.access", fromlist=["x"]).hide_tasks(user),  # with restricted deals
         fields=FIELDS,
         groups=[T, W, R],
         title_field="title",

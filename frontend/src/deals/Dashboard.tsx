@@ -30,6 +30,7 @@ type Snapshot = {
   active: number;
   near_close: DealRow[];
   expiring: DealRow[];
+  restricted_hidden: number; // restricted deals this person can't see: counted, never described
 };
 
 const BAR = "var(--mantine-color-navy-6)"; // one series, one colour (validated against the page surface)
@@ -72,6 +73,7 @@ export default function DealsDashboard() {
             <Text size="xs" c="dimmed">
               Dates in the next {data.days} days
               {me.flags.manage_settings && <> · <Anchor component={Link} to="/settings/firm" size="xs">change</Anchor></>}
+              {data.restricted_hidden > 0 && <> · {data.restricted_hidden} restricted {data.restricted_hidden === 1 ? "deal isn't" : "deals aren't"} counted</>}
             </Text>
           </div>
         </Group>

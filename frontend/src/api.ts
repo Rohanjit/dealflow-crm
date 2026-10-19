@@ -4,10 +4,12 @@ export class ApiError extends Error {
   status: number;
   fields: Record<string, string>;
   code?: string;
+  body: unknown; // the full answer, e.g. a restricted deal's placeholder
 
   constructor(status: number, body: unknown) {
     const { message, fields, code } = parseErrorBody(body);
     super(message);
+    this.body = body;
     this.status = status;
     this.fields = fields;
     this.code = code;

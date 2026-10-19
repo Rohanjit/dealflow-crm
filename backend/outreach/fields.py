@@ -230,6 +230,7 @@ OUTREACH = register(
         label="Outreach",
         singular="Outreach",
         model=Outreach,
+        hide=lambda user: __import__("deals.access", fromlist=["x"]).hide_outreach(user),  # with restricted deals
         fields=OUTREACH_FIELDS,
         groups=[CO, FS, OP, PE, CM, TR, EX, OO],
         title_field="company",

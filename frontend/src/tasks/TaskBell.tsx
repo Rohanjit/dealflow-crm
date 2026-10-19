@@ -10,6 +10,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { useMe } from "../context";
 import { useCold, useColdAction, useReminders, type ColdItem, type Reminder } from "./api";
+import { useAccessRequests, useDecide, type AccessRequest } from "../deals/Restricted";
 import { dueText } from "./TaskRow";
 
 export default function TaskBell() {
@@ -19,17 +20,19 @@ export default function TaskBell() {
   const cold = useCold().data;
   const coldAction = useColdAction();
   const [acting, setActing] = useState<string | null>(null);
-  const total = (data?.count ?? 0) + (cold?.count ?? 0);
+  const asks = useAccessRequests(!!me.perms.deals?.view).data;
+  const decide = useDecide();
+  const total = (data?.count ?? 0) + (cold?.count ?? 0) + (asks?.count ?? 0);
   const [opened, setOpened] = useState(false);
   const seen = useRef<Map<number, "overdue" | "today"> | null>(null);
   // The bell rings (a short wiggle) whenever the count goes up.
   const [ring, setRing] = useState(0);
   const lastCount = useRef<number | null>(null);
   useEffect(() => {
-    if (!data && !cold) return;
+    if (!data && !cold && !asks) return;
     if (lastCount.current !== null && total > lastCount.current) setRing((r) => r + 1);
     lastCount.current = total;
-  }, [data, cold, total]);
+  }, [data, cold, asks, total]);
 
   useEffect(() => {
     if (!data) return;
@@ -64,7 +67,20 @@ export default function TaskBell() {
     seen.current = current;
   }, [data, nav]);
 
-  if (!data && !cold) return null;
+  if (!data && !cold && !asks) return null;
+  const toDecide = asks?.to_decide ?? [];
+  const askRow = (r: AccessRequest) => (
+    <div key={`ask-${r.id}`}>
+      <Anchor component={Link} to={`/m/deals/${r.deal}`} size="sm" fw={500} onClick={() => setOpened(false)}>{r.deal_title}</Anchor>
+      <Text size="xs" c="dimmed">{r.what} · asked by {r.requested_by.name}</Text>
+      <Group gap={6} mt={4}>
+        <Button size="compact-xs" color="teal" loading={acting === `ask${r.id}a`}
+          onClick={async () => { setActing(`ask${r.id}a`); await decide(r, "approve"); setActing(null); }}>Approve</Button>
+        <Button size="compact-xs" variant="default" loading={acting === `ask${r.id}d`}
+          onClick={async () => { setActing(`ask${r.id}d`); await decide(r, "decline"); setActing(null); }}>Decline</Button>
+      </Group>
+    </div>
+  );
   const overdue = data?.overdue ?? [];
   const today = data?.today ?? [];
   const coldItems = cold?.items ?? [];
@@ -113,6 +129,8 @@ export default function TaskBell() {
         ) : (
           <ScrollArea.Autosize mah={420}>
             <Stack gap="sm">
+              {toDecide.length > 0 && <Text size="xs" fw={600} c="navy.7" tt="uppercase">Access requests</Text>}
+              {toDecide.map(askRow)}
               {overdue.length > 0 && <Text size="xs" fw={600} c="red.8" tt="uppercase">Overdue</Text>}
               {overdue.map((t) => item(t, true))}
               {today.length > 0 && <Text size="xs" fw={600} c="orange.8" tt="uppercase">Today</Text>}

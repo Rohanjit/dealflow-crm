@@ -565,7 +565,7 @@ def row_to_data(row: list[str], mapping: list[dict], ctx: RowContext, commit=Fal
 # ---------------------------------------------------------------- check and import
 
 
-def _existing_keys(mod: ModuleDef) -> dict[str, list[tuple[int, str]]]:
+def _existing_keys(mod: ModuleDef, user=None) -> dict[str, list[tuple[int, str]]]:
     index: dict[str, list[tuple[int, str]]] = {}
     if not mod.duplicate_keys:
         return index
@@ -574,7 +574,9 @@ def _existing_keys(mod: ModuleDef) -> dict[str, list[tuple[int, str]]]:
     links = [(f.key, mkey, f"{attr}_id") for f in own if f.type == "link" and not f.multi
              for mkey, attr in active_targets(f)]
     cols = list(dict.fromkeys([*text_fields, *(c for _, _, c in links), mod.title_lookup]))
-    for rec in mod.model.objects.filter(archived_at__isnull=True).values("pk", *cols):
+    from .records import visible
+
+    for rec in visible(mod.model.objects.filter(archived_at__isnull=True), mod, user).values("pk", *cols):
         values = {k: rec[k] for k in text_fields}
         for key, mkey, col in links:
             if rec[col] is not None:
@@ -609,7 +611,7 @@ def _clean_row(mod: ModuleDef, data: dict, errors: dict, enabled: dict):
 
 def check_rows(mod: ModuleDef, rows, mapping, user, enabled, add_missing_options=False, create_links=None) -> dict:
     ctx = RowContext(mod, user, add_missing_options, create_links)
-    existing = _existing_keys(mod)
+    existing = _existing_keys(mod, user)
     seen_in_file: dict[str, int] = {}
     results = []
     for n, row in enumerate(rows, start=2):  # row 1 is the header

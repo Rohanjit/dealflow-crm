@@ -8,6 +8,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import { RestrictedList } from "../deals/Restricted";
 import { api } from "../api";
 import { useMe, useSchema, useUsers } from "../context";
 import { errorMessage } from "../components/errors";
@@ -116,6 +117,7 @@ export default function BoardView({ module, params }: { module: ModuleSchema; pa
 
   return (
     <>
+      {data?.restricted && data.restricted.length > 0 && <Box mb="sm"><RestrictedList items={data.restricted} where="on this board" /></Box>}
       <ScrollArea type="hover" scrollbarSize={8} offsetScrollbars>
         <DragDropContext onBeforeCapture={onBeforeCapture} onDragEnd={onDragEnd}>
           <Group align="flex-start" gap="lg" wrap="nowrap" pb="sm">

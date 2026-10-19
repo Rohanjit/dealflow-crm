@@ -65,6 +65,7 @@ VAULT = register(
         label="Vault",
         singular="Document",
         model=Document,
+        hide=lambda user: __import__("deals.access", fromlist=["x"]).hide_documents(user),  # with restricted deals
         fields=FIELDS,
         groups=[D, F],
         title_field="title",

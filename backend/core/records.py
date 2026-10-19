@@ -137,7 +137,32 @@ def link_value(obj, f: FieldDef):
     return _link_value(h, f) if h is not None else empty_value(f)
 
 
+def hidden_ids(mkey: str) -> set[int]:
+    """Ids of records in a module that the person making this request can't see (restricted deals),
+    worked out once per request."""
+    from . import current
+
+    tmod = get_module(mkey)
+    if tmod.hide is None:
+        return set()
+    req = current._request.get()
+    cache = getattr(req, "_df_hidden", None) if req is not None else None
+    if cache is None:
+        cache = {}
+        if req is not None:
+            req._df_hidden = cache
+    if mkey not in cache:
+        cond = tmod.hide(current.user())
+        cache[mkey] = set(tmod.model.objects.filter(cond).values_list("pk", flat=True)) if cond is not None else set()
+    return cache[mkey]
+
+
 def _link_item(mkey: str, target) -> dict:
+    if target.pk in hidden_ids(mkey):
+        # e.g. a task linked to a restricted deal, seen by the person it's assigned to.
+        tmod = get_module(mkey)
+        return {"module": mkey, "id": target.pk, "title": f"Restricted {tmod.singular.lower()}", "archived": False,
+                "restricted": True}
     return {
         "module": mkey,
         "id": target.pk,
@@ -466,6 +491,8 @@ def _link_target(f: FieldDef, v, current: set):
     if pk is None:
         raise FieldError("Pick a record from the list.")
     target = tmod.model.objects.filter(pk=pk).first()
+    if target is not None and pk in hidden_ids(mkey) and (mkey, pk) not in current:
+        target = None  # a restricted record this person can't see: as if it didn't exist
     if not target:
         raise FieldError(f"That {tmod.singular.lower()} doesn't exist any more.")
     # A record can keep a link to an archived record, but can't be newly linked to one.
@@ -675,6 +702,22 @@ def apply_values(obj, mod: ModuleDef, values: dict, user, importing=False, log_t
         pipeline.record_event(obj, mod, event, user)
         pipeline.stage_changed.send(sender=mod.key, record=obj, event=event, user=user, importing=importing)
     return obj
+
+
+# ---------------------------------------------------------------- who can see what
+
+
+def visible(qs: QuerySet, mod: ModuleDef, user) -> QuerySet:
+    """Leave out records this person can't see even though their role can view the module."""
+    if mod.hide is not None:
+        cond = mod.hide(user)
+        if cond is not None:
+            qs = qs.exclude(cond)
+    return qs
+
+
+def can_see(obj, mod: ModuleDef, user) -> bool:
+    return mod.hide is None or visible(mod.model.objects.filter(pk=obj.pk), mod, user).exists()
 
 
 # ---------------------------------------------------------------- filtering

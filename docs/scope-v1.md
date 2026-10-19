@@ -182,7 +182,6 @@ No separate Interactions module: interactions are captured as dated notes inside
 ---
 
 ## Not in V1 (to discuss after V1)
-- Record-level access (restricting individual deals to specific users)
 - Field-level permissions (hiding specific fields from specific roles)
 - Custom fields created by admins
 - Configurable pipeline stages (rename/add/reorder/remove)

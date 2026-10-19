@@ -11,6 +11,7 @@ import { errorMessage } from "../components/errors";
 import type { LinkValue, ModuleSchema, Page, RecordData, Section } from "../types";
 import { FieldValue } from "./fields";
 import { Skeleton } from "../components/ui";
+import { RestrictedList } from "../deals/Restricted";
 
 export default function RelatedSection({ section, parent, record }: { section: Section; parent: ModuleSchema; record: RecordData }) {
   const nav = useNavigate();
@@ -32,7 +33,8 @@ export default function RelatedSection({ section, parent, record }: { section: S
   const columns = (section.columns ?? []).map((k) => rel.fields.find((f) => f.key === k && f.enabled)).filter((f) => !!f);
   const rows = (data?.results ?? []).filter((r) => !(section.exclude_self && rel.key === parent.key && r.id === record.id));
   const count = rows.length;
-  if (section.hide_empty && data && count === 0) return null;
+  const hiddenDeals = data?.restricted ?? [];
+  if (section.hide_empty && data && count === 0 && !hiddenDeals.length) return null;
   const back = `/m/${parent.key}/${record.id}`;
   const addUrl = `/m/${rel.key}/new${qs({ [section.link_field!]: linkParam, return: back })}`;
 
@@ -54,7 +56,7 @@ export default function RelatedSection({ section, parent, record }: { section: S
       ) : error ? (
         <Text c="red" size="sm" px="lg" pb="lg">{errorMessage(error)}</Text>
       ) : count === 0 ? (
-        <Text size="sm" c="dimmed" px="lg" pb="lg">No {rel.label.toLowerCase()} linked yet.</Text>
+        !hiddenDeals.length && <Text size="sm" c="dimmed" px="lg" pb="lg">No {rel.label.toLowerCase()} linked yet.</Text>
       ) : (
         <ScrollArea>
           <Table className="df-table" highlightOnHover verticalSpacing="xs" horizontalSpacing="lg" miw={640}>
@@ -81,6 +83,7 @@ export default function RelatedSection({ section, parent, record }: { section: S
           </Table>
         </ScrollArea>
       )}
+      {hiddenDeals.length > 0 && <div style={{ padding: "0 var(--mantine-spacing-lg) var(--mantine-spacing-lg)" }}><RestrictedList items={hiddenDeals} /></div>}
     </Paper>
   );
 }

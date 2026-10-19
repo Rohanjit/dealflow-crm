@@ -59,6 +59,8 @@ DEAL_FIELDS = [
     FieldDef("team_vp", "VP", "user", TE, multi=True, filterable=True),
     FieldDef("team_associate", "Associate", "user", TE, multi=True, filterable=True),
     FieldDef("team_analyst", "Analyst", "user", TE, multi=True, filterable=True),
+    FieldDef("restricted", "Restricted", "boolean", TE, readonly=True, filterable=True,
+             help="Only the deal team, people added by name and admins can see a restricted deal. Change it in the Access panel."),
 
     FieldDef("target_raise", "Target raise", "money", TT, list_default=True,
              aliases=["deal size", "raise", "size", "issue size", "round size"]),
@@ -107,6 +109,12 @@ DEAL_VIEWS = [
     {"value": "ended", "label": "Withdrawn / dropped"},
     {"value": "all", "label": "All"},
 ]
+def _access():
+    from . import access  # imported late: it needs the models loaded
+
+    return access
+
+
 TEAM_FIELDS = ["lead_banker", "team_md", "team_vp", "team_associate", "team_analyst"]
 
 
@@ -145,6 +153,9 @@ DEALS = register(
         label="Active Deals",
         singular="Deal",
         model=Deal,
+        hide=lambda user: _access().hide_deals(user),
+        placeholder=lambda obj, user: _access().placeholder(obj, user),
+        list_extra=lambda params, user: _access().deals_list_extra(params, user),
         fields=DEAL_FIELDS,
         groups=[CO, FS, MA, TE, TT, FE, TL, CL, OT],
         title_field="company",
@@ -182,6 +193,8 @@ DEALS = register(
                 "order": "-primary_contact,decision_level,full_name",
             },
             {"key": "documents", "label": "Documents", "module": "vault", "panel": "documents"},
+            # Who can see the deal (restricted deals, deals/access.py).
+            {"key": "access", "label": "Access", "module": "deals", "panel": "access"},
         ],
     )
 )
@@ -240,6 +253,8 @@ TRACKER = register(
         label="Investor tracker",
         singular="Tracked investor",
         model=DealInvestor,
+        hide=lambda user: _access().hide_tracker(user),
+        list_extra=lambda params, user: _access().tracker_list_extra(params, user),
         fields=TRACKER_FIELDS,
         groups=[TI, TR, TN],
         title_field="investor",

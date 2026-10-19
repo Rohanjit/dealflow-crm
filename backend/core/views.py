@@ -15,13 +15,14 @@ from rest_framework.views import APIView
 from accounts.permissions import IsActiveUser, flag_required
 
 from . import backups, bulk, importer, stale
+from .errors import Restricted
 from . import guest
 from .guest import NotInSample, NotOnDemo
 from .exporter import export_workbook
 from .models import ChoiceList, ChoiceOption, FieldSwitch, FirmSettings, Note
 from .modules import BUILT_MODULES
 from .pagination import StandardPagination
-from .records import apply_values, clean_values, filter_queryset, serialize, text_in, to_id, with_related
+from .records import apply_values, can_see, clean_values, filter_queryset, serialize, text_in, to_id, visible, with_related
 from .registry import CURRENCIES, UNITS, active_targets, all_modules, enabled_map, get_module
 
 
@@ -120,9 +121,9 @@ class LookupView(APIView):
         _open(request, mod)
         ids = [n for p in (request.query_params.get("ids") or "").split(",") if (n := to_id(p)) is not None]
         if ids:
-            qs = mod.model.objects.filter(pk__in=ids[:100])
+            qs = visible(mod.model.objects.filter(pk__in=ids[:100]), mod, request.user)
         else:
-            qs = mod.model.objects.filter(archived_at__isnull=True)
+            qs = visible(mod.model.objects.filter(archived_at__isnull=True), mod, request.user)
             if q := (request.query_params.get("q") or "").strip():
                 qs = qs.filter(**{f"{mod.title_lookup}__icontains": q})
             qs = qs.order_by(mod.title_lookup, "pk")[:20]
@@ -198,11 +199,14 @@ class RecordListView(APIView):
         _require(request.user, module, "view")
         _open(request, mod)
         enabled = enabled_map(module)
-        qs = mod.model.objects.filter(archived_at__isnull=True)
+        qs = visible(mod.model.objects.filter(archived_at__isnull=True), mod, request.user)
         qs = with_related(filter_queryset(qs, mod, request.query_params, request.user, enabled), mod)
         pager = StandardPagination()
         page = pager.paginate_queryset(qs, request, view=self)
-        return pager.get_paginated_response([serialize(o, mod) for o in page])
+        resp = pager.get_paginated_response([serialize(o, mod) for o in page])
+        if mod.list_extra:
+            resp.data.update(mod.list_extra(request.query_params, request.user))
+        return resp
 
     def post(self, request, module):
         mod = _module(module)
@@ -218,12 +222,21 @@ class RecordListView(APIView):
         return Response(serialize(obj, mod), status=status.HTTP_201_CREATED)
 
 
+def _get_record(mod, pk, user):
+    """A live record this person may see. A restricted one they can't see answers with its placeholder."""
+    obj = with_related(mod.model.objects.filter(pk=pk, archived_at__isnull=True), mod).first()
+    if not obj:
+        raise NotFound(f"This {mod.singular.lower()} doesn't exist or has been archived.")
+    if not can_see(obj, mod, user):
+        if mod.placeholder:
+            raise Restricted(f"This {mod.singular.lower()} is restricted.", mod.placeholder(obj, user))
+        raise NotFound(f"This {mod.singular.lower()} doesn't exist or has been archived.")
+    return obj
+
+
 class RecordDetailView(APIView):
     def _get(self, mod, pk):
-        obj = with_related(mod.model.objects.filter(pk=pk, archived_at__isnull=True), mod).first()
-        if not obj:
-            raise NotFound(f"This {mod.singular.lower()} doesn't exist or has been archived.")
-        return obj
+        return _get_record(mod, pk, self.request.user)
 
     def get(self, request, module, pk):
         mod = _module(module)
@@ -259,7 +272,7 @@ NOT_MERGEABLE = {"deal_investors"}
 BULK_LIMIT = 500
 
 
-def _selected(mod, raw):
+def _selected(mod, raw, user):
     """The chosen records, in the order given; all must exist and not be deleted."""
     if not isinstance(raw, list) or not raw:
         raise ValidationError({"detail": "Select at least one record."})
@@ -268,7 +281,7 @@ def _selected(mod, raw):
         raise ValidationError({"detail": "Those records couldn't be read."})
     if len(ids) > BULK_LIMIT:
         raise ValidationError({"detail": f"Work on up to {BULK_LIMIT} records at a time."})
-    objs = list(with_related(mod.model.objects.filter(pk__in=ids, archived_at__isnull=True), mod))
+    objs = list(with_related(visible(mod.model.objects.filter(pk__in=ids, archived_at__isnull=True), mod, user), mod))
     if len(objs) != len(ids):
         raise ValidationError({"detail": "Some of the selected records no longer exist. Reload and try again."})
     order = {pk: i for i, pk in enumerate(ids)}
@@ -286,7 +299,7 @@ class BulkView(APIView):
             raise ValidationError({"detail": "Pick what to do with the selected records."})
         _require(request.user, module, "edit" if action == "edit" else "delete")
         _open(request, mod)
-        objs = _selected(mod, request.data.get("ids"))
+        objs = _selected(mod, request.data.get("ids"), request.user)
         if action == "delete":
             n = bulk.bulk_archive(objs, request.user)
             return Response({"deleted": n})
@@ -326,7 +339,7 @@ class MergeView(APIView):
             raise ValidationError({"detail": "Select at least two records to merge."})
         if len(others) > 9:
             raise ValidationError({"detail": "Merge up to 10 records at a time."})
-        records = _selected(mod, [keep, *others])
+        records = _selected(mod, [keep, *others], request.user)
         keeper, losers = records[0], records[1:]
         values = request.data.get("values") or {}
         if not isinstance(values, dict):
@@ -348,7 +361,7 @@ class DuplicatesView(APIView):
         _open(request, mod)
         if module in NOT_MERGEABLE or not mod.duplicate_keys:
             return Response({"groups": []})
-        return Response({"groups": bulk.duplicate_groups(mod)})
+        return Response({"groups": bulk.duplicate_groups(mod, request.user)})
 
 
 class RecordExportView(APIView):
@@ -357,7 +370,7 @@ class RecordExportView(APIView):
         _require(request.user, module, "view")
         _open(request, mod)
         enabled = enabled_map(module)
-        qs = mod.model.objects.filter(archived_at__isnull=True)
+        qs = visible(mod.model.objects.filter(archived_at__isnull=True), mod, request.user)
         qs = with_related(filter_queryset(qs, mod, request.query_params, request.user, enabled), mod)
         cols = [c for c in (request.query_params.get("columns") or "").split(",") if c]
         data = export_workbook(mod, qs, request.user, enabled, cols or None)
@@ -420,7 +433,7 @@ class NotesView(APIView):
             raise NotFound("This module has no interaction log.")
         _require(request.user, module, action)
         _open(request, mod)
-        if not mod.model.objects.filter(pk=pk, archived_at__isnull=True).exists():
+        if not visible(mod.model.objects.filter(pk=pk, archived_at__isnull=True), mod, request.user).exists():
             raise NotFound(f"This {mod.singular.lower()} doesn't exist or has been archived.")
         return mod
 
@@ -558,7 +571,7 @@ class SearchView(APIView):
                 continue
             enabled = enabled_map(mod.key)
             qs = filter_queryset(
-                mod.model.objects.filter(archived_at__isnull=True), mod, {"q": q}, request.user, enabled
+                visible(mod.model.objects.filter(archived_at__isnull=True), mod, request.user), mod, {"q": q}, request.user, enabled
             )
             qs = with_related(qs, mod)
             total = qs.count()
@@ -592,7 +605,7 @@ class ArchiveListView(APIView):
                 continue
             if not _is_open(request, mod):
                 continue
-            qs = with_related(mod.model.objects.filter(archived_at__isnull=False), mod)
+            qs = with_related(visible(mod.model.objects.filter(archived_at__isnull=False), mod, request.user), mod)
             if q:
                 qs = qs.filter(**{f"{mod.title_lookup}__icontains": q})
             for obj in qs.order_by("-archived_at")[:500]:
@@ -617,7 +630,10 @@ class ArchiveItemView(APIView):
     def _get(self, module, pk):
         mod = _module(module)
         _open(self.request, mod)
-        return mod, get_object_or_404(mod.model, pk=pk, archived_at__isnull=False)
+        obj = get_object_or_404(mod.model, pk=pk, archived_at__isnull=False)
+        if not can_see(obj, mod, self.request.user):
+            raise NotFound
+        return mod, obj
 
     def post(self, request, module, pk):
         """Restore."""
