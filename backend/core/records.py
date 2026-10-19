@@ -648,8 +648,10 @@ def tags_from_names(names: list[str]) -> list[Tag]:
 @transaction.atomic
 def apply_values(obj, mod: ModuleDef, values: dict, user, importing=False, log_text: str | None = None):
     """Save cleaned values. `log_text` replaces the automatic stage entry (e.g. "Created from outreach")."""
-    from . import pipeline
+    from . import audit_text, current, pipeline
 
+    created = obj.pk is None
+    before = audit_text.snapshot(obj, mod, values.keys())
     old = None
     if mod.pipeline:
         p = mod.pipeline
@@ -696,6 +698,12 @@ def apply_values(obj, mod: ModuleDef, values: dict, user, importing=False, log_t
     obj.save()
     for key, items in m2m.items():
         getattr(obj, key).set(items)
+    # For the audit log: what this save changed, old and new values in plain words.
+    after = audit_text.snapshot(obj, mod, values.keys())
+    changes = audit_text.diff(mod, before, after)
+    if created or changes:
+        current.add_change({"record": f"{mod.key}:{obj.pk}", "title": mod.title_of(obj),
+                            "kind": "added" if created else "edited", "changes": changes})
     if event:
         if log_text:
             event["text"] = log_text

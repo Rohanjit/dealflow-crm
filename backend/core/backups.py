@@ -75,6 +75,11 @@ def _write_zip(target: Path, kind: str):
             for p in media.rglob("*"):
                 if p.is_file():
                     z.write(p, "files/" + p.relative_to(media).as_posix())
+        # A copy of the audit log, still encrypted. Restores never put it back over the live log.
+        from . import audit
+
+        for p in audit.backup_files():
+            z.write(p, "audit/" + p.name)
     tmp.replace(target)
 
 

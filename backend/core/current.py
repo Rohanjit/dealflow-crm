@@ -25,3 +25,27 @@ class CurrentRequestMiddleware:
             return self.get_response(request)
         finally:
             _request.reset(token)
+
+
+# ---------------------------------------------------------------- audit details for this request
+
+
+def add_change(change: dict):
+    """Something this request changed, for the audit log entry (core/audit_middleware.py)."""
+    req = _request.get()
+    if req is not None:
+        req.__dict__.setdefault("_df_changes", []).append(change)
+
+
+def set_subject(module: str, pk, title: str):
+    """The record this request is about ("Opened deal Zeta Pharma")."""
+    req = _request.get()
+    if req is not None and not hasattr(req, "_df_subject"):
+        req._df_subject = {"record": f"{module}:{pk}", "title": title}
+
+
+def note(text: str):
+    """A plain-words detail for the audit log ("Approved: Restrict the deal")."""
+    req = _request.get()
+    if req is not None:
+        req.__dict__.setdefault("_df_notes", []).append(text)

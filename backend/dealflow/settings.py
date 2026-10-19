@@ -5,6 +5,7 @@ same Docker image runs on a laptop (SQLite) or a firm server (Postgres).
 """
 
 import os
+import sys
 import secrets
 from pathlib import Path
 
@@ -18,6 +19,16 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 MEDIA_ROOT = DATA_DIR / "files"
 BACKUP_DIR = DATA_DIR / "backups"
 IMPORT_DIR = DATA_DIR / "imports"
+# Audit log (core/audit.py): encrypted, append-only files. Never touched by restores or the guest sample.
+AUDIT_DIR = Path(os.environ.get("DEALFLOW_AUDIT_DIR", DATA_DIR / "audit"))
+if len(sys.argv) > 1 and sys.argv[1] == "test":
+    import tempfile
+
+    import atexit
+    import shutil
+
+    AUDIT_DIR = Path(tempfile.mkdtemp(prefix="dealflow-audit-test-"))
+    atexit.register(shutil.rmtree, AUDIT_DIR, True)
 
 
 def _secret_key() -> str:
@@ -73,6 +84,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "core.current.CurrentRequestMiddleware",
+    "core.audit_middleware.AuditMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 

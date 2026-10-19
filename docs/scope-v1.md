@@ -191,7 +191,6 @@ No separate Interactions module: interactions are captured as dated notes inside
 - Vault links to external storage (Google Drive, SharePoint, Dropbox)
 - Vault document version history
 - Full dashboard: my tasks, outreach funnel, investor tracker totals, stale relationships, fees view
-- Full audit log (history of every change, deletion and Vault download)
 - Automatic currency conversion
 - Advanced investor matching (learning from past deal outcomes)
 - Mobile-optimised layout and installable phone app (PWA)

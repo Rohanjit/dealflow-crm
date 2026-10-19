@@ -1,4 +1,7 @@
-import { Button, Group, Paper, SimpleGrid, Stack, Text, ThemeIcon, UnstyledButton } from "@mantine/core";
+import { Alert, Anchor, Button, Group, Paper, SimpleGrid, Stack, Text, ThemeIcon, UnstyledButton } from "@mantine/core";
+import { useQuery } from "@tanstack/react-query";
+
+import { api } from "../api";
 import {
   IconArrowRight, IconBriefcase, IconBuildingBank, IconChecklist, IconFileImport, IconLock, IconPlus, IconTargetArrow, IconUsers,
   IconUsersPlus,
@@ -35,6 +38,8 @@ export default function Home() {
         <Text c="dimmed" size="sm" mb={4}>{[today, info.firm_name].filter(Boolean).join(" · ")}</Text>
         <h1 className="df-page-title">{greeting()}, {firstName}</h1>
       </div>
+
+      {me.role.is_admin && !info.sample && <AuditPassphraseNotice />}
 
       <div>
         <Text fw={600} size="sm" c="dimmed" mb="xs">Your workspace</Text>
@@ -85,5 +90,17 @@ export default function Home() {
 
       {me.perms.deals?.view && info.built_modules.includes("deals") && <DealsDashboard />}
     </Stack>
+  );
+}
+
+/** Admins: the audit log records from day one, but stays readable by the server until a passphrase locks it. */
+function AuditPassphraseNotice() {
+  const { data } = useQuery({ queryKey: ["audit"], queryFn: () => api<{ has_passphrase: boolean }>("audit/") });
+  if (!data || data.has_passphrase) return null;
+  return (
+    <Alert color="orange" variant="light" title="Set the audit log passphrase">
+      Dealflow records every action in an encrypted audit log. Set a passphrase so only people who know it can read the log.{" "}
+      <Anchor component={Link} to="/settings/audit" size="sm">Set it in Settings</Anchor>
+    </Alert>
   );
 }

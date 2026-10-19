@@ -14,7 +14,7 @@ from rest_framework.views import APIView
 
 from accounts.permissions import IsActiveUser, flag_required
 
-from . import backups, bulk, importer, stale
+from . import backups, bulk, current, importer, stale
 from .errors import Restricted
 from . import guest
 from .guest import NotInSample, NotOnDemo
@@ -231,6 +231,7 @@ def _get_record(mod, pk, user):
         if mod.placeholder:
             raise Restricted(f"This {mod.singular.lower()} is restricted.", mod.placeholder(obj, user))
         raise NotFound(f"This {mod.singular.lower()} doesn't exist or has been archived.")
+    current.set_subject(mod.key, obj.pk, mod.title_of(obj))
     return obj
 
 
@@ -264,6 +265,7 @@ class RecordDetailView(APIView):
         obj.archived_at = timezone.now()
         obj.archived_by = request.user
         obj.save(update_fields=["archived_at", "archived_by"])
+        current.add_change({"record": f"{mod.key}:{obj.pk}", "title": mod.title_of(obj), "kind": "deleted"})
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -301,7 +303,7 @@ class BulkView(APIView):
         _open(request, mod)
         objs = _selected(mod, request.data.get("ids"), request.user)
         if action == "delete":
-            n = bulk.bulk_archive(objs, request.user)
+            n = bulk.bulk_archive(objs, request.user, mod)
             return Response({"deleted": n})
         values = request.data.get("values")
         modes = request.data.get("modes") or {}
@@ -445,6 +447,8 @@ class NotesView(APIView):
     def post(self, request, module, pk):
         mod = self._record(request, module, pk, "edit")
         n = Note.objects.create(module=mod.key, record_id=pk, created_by=request.user, **_clean_note(request.data))
+        current.add_change({"record": f"{mod.key}:{pk}", "kind": "log entry added",
+                            "changes": [{"field": n.get_kind_display(), "from": "", "to": n.text[:2000]}]})
         return Response(note_payload(n, request.user), status=status.HTTP_201_CREATED)
 
 
@@ -461,13 +465,19 @@ class NoteDetailView(APIView):
 
     def patch(self, request, pk):
         n = self._note(request, pk)
+        before = n.text
         for k, v in _clean_note(request.data, partial=True).items():
             setattr(n, k, v)
         n.save()
+        current.add_change({"record": f"{n.module}:{n.record_id}", "kind": "log entry edited",
+                            "changes": [{"field": "Log entry", "from": before[:2000], "to": n.text[:2000]}]})
         return Response(note_payload(n, request.user))
 
     def delete(self, request, pk):
-        self._note(request, pk).delete()
+        n = self._note(request, pk)
+        current.add_change({"record": f"{n.module}:{n.record_id}", "kind": "log entry deleted",
+                            "changes": [{"field": "Log entry", "from": n.text[:2000], "to": ""}]})
+        n.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -648,6 +658,7 @@ class ArchiveItemView(APIView):
         obj.archived_by = None
         obj.updated_by = request.user
         obj.save()
+        current.add_change({"record": f"{mod.key}:{obj.pk}", "title": mod.title_of(obj), "kind": "restored"})
         return Response({"id": obj.pk, "module": module})
 
     def delete(self, request, module, pk):
@@ -655,6 +666,7 @@ class ArchiveItemView(APIView):
         if not request.user.is_admin:
             raise PermissionDenied("Only admins can delete records permanently.")
         mod, obj = self._get(module, pk)
+        current.add_change({"record": f"{mod.key}:{obj.pk}", "title": mod.title_of(obj), "kind": "deleted permanently"})
         try:
             with transaction.atomic():
                 obj.delete()  # its interaction log goes with it (core.signals)

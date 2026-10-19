@@ -129,6 +129,9 @@ class AccessError(Exception):
 
 
 def _log(deal: Deal, user, text: str):
+    from core import current
+
+    current.note(f"{deal.company.name if deal.company_id else 'Deal'}: {text}")
     Note.objects.create(module="deals", record_id=deal.pk, kind="note", date=timezone.localdate(), text=text, created_by=user)
 
 

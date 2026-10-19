@@ -15,6 +15,7 @@ from __future__ import annotations
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from . import current
 from .models import Note
 from .records import apply_values, clean_values, read_value
 from .registry import ModuleDef, enabled_map
@@ -78,13 +79,15 @@ def bulk_edit(mod: ModuleDef, objs, values: dict, modes: dict, user) -> dict:
     return {"updated": updated, "failed": failed}
 
 
-def bulk_archive(objs, user) -> int:
+def bulk_archive(objs, user, mod: ModuleDef | None = None) -> int:
     now = timezone.now()
     n = 0
     for obj in objs:
         obj.archived_at = now
         obj.archived_by = user
         obj.save(update_fields=["archived_at", "archived_by"])
+        current.add_change({"record": f"{mod.key if mod else obj._meta.model_name}:{obj.pk}",
+                            "title": mod.title_of(obj) if mod else str(obj), "kind": "deleted"})
         n += 1
     return n
 
@@ -167,6 +170,8 @@ def merge(mod: ModuleDef, keeper, losers: list, values: dict, user) -> dict:
             loser.archived_at = timezone.now()
             loser.archived_by = user
             loser.save(update_fields=["archived_at", "archived_by"])
+            current.add_change({"record": f"{mod.key}:{loser.pk}", "title": mod.title_of(loser),
+                                "kind": f"merged into {mod.title_of(keeper)} and deleted"})
 
         if mod.key == "deals":
             from deals.access import merge_access

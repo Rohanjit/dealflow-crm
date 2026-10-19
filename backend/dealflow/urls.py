@@ -4,6 +4,7 @@ from django.urls import include, path, re_path
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from accounts import views as a
+from core import audit_views as av
 from core import guest as g
 from core import views as c
 from deals import views as d
@@ -71,6 +72,11 @@ api = [
     path("vault/<int:pk>/download/", v.VaultDownloadView.as_view()),
     path("users/<int:pk>/reset-vault-pin/", v.UserVaultPinResetView.as_view()),
     path("health/", c.HealthView.as_view()),
+    path("audit/", av.AuditStatusView.as_view()),
+    path("audit/passphrase/", av.AuditPassphraseView.as_view()),
+    path("audit/new-key/", av.AuditNewKeyView.as_view()),
+    path("audit/settings/", av.AuditSettingsView.as_view()),
+    path("audit/fetch/", av.AuditFetchView.as_view()),
 ]
 
 

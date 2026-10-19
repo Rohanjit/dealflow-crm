@@ -86,6 +86,33 @@ export async function api<T = unknown>(path: string, opts: Options = {}): Promis
   return data as T;
 }
 
+/** POST and save the file that comes back (e.g. the audit log, which needs a password in the body). */
+export async function postDownload(path: string, body: unknown): Promise<Response> {
+  const res = await fetch(`/api/${path.replace(/^\//, "")}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken() },
+    body: JSON.stringify(body),
+    credentials: "same-origin",
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let data: unknown;
+    try { data = JSON.parse(text); } catch { data = { detail: text.slice(0, 200) }; }
+    throw new ApiError(res.status, data);
+  }
+  const blob = await res.blob();
+  const name = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? "download";
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return res;
+}
+
 /** Download a file from the API (export, backups) through a hidden link. */
 export function download(path: string) {
   const a = document.createElement("a");

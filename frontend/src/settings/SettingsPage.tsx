@@ -1,8 +1,9 @@
 import { Group, Select, Stack, Text, UnstyledButton } from "@mantine/core";
-import { IconBuilding, IconDatabase, IconList, IconShieldLock, IconToggleRight, IconUserCircle, IconUsers } from "@tabler/icons-react";
+import { IconBuilding, IconDatabase, IconShieldCheck, IconList, IconShieldLock, IconToggleRight, IconUserCircle, IconUsers } from "@tabler/icons-react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import { useMe } from "../context";
+import AuditSettings from "./AuditSettings";
 import BackupsSettings from "./BackupsSettings";
 import DropdownSettings from "./DropdownSettings";
 import FieldSettings from "./FieldSettings";
@@ -25,6 +26,7 @@ export default function SettingsPage() {
     { path: "fields", label: "Fields", icon: IconToggleRight, show: me.flags.manage_settings, el: <FieldSettings /> },
     { path: "dropdowns", label: "Dropdown lists", icon: IconList, show: me.flags.manage_settings, el: <DropdownSettings /> },
     { path: "backups", label: "Backups", icon: IconDatabase, show: me.role.is_admin, el: <BackupsSettings /> },
+    { path: "audit", label: "Audit log", icon: IconShieldCheck, show: me.role.is_admin, el: <AuditSettings /> },
   ].filter((t) => t.show);
   const firmTabs = tabs.slice(1);
 
