@@ -1,11 +1,11 @@
 // The app frame: a quiet sidebar (firm menu, search, home, modules, archive, settings) and a slim
 // sticky top bar with the reminders bell. The sidebar folds away on desktop and slides in on phones.
 
-import { ActionIcon, AppShell, Avatar, Button, Group, ScrollArea, Text, Tooltip, UnstyledButton } from "@mantine/core";
+import { ActionIcon, AppShell, Avatar, Button, Group, Menu, ScrollArea, Text, Tooltip, UnstyledButton } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { useDisclosure, useWindowScroll } from "@mantine/hooks";
 import {
-  IconChevronsLeft, IconCompass, IconLayoutSidebarLeftExpand, IconLogout, IconMenu2, IconPlus, IconSearch,
+  IconChevronsLeft, IconCompass, IconLayoutSidebarLeftExpand, IconLogout, IconMenu2, IconPlus, IconSearch, IconSelector, IconSettings, IconUserCircle,
 } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
@@ -94,22 +94,31 @@ export default function Shell() {
 
         <AppShell.Section>
           {me.flags.restore_archive && <NavItem to="/archive" icon="archive" label="Deleted items" active={active("/archive")} />}
-          {canSettings && <NavItem to="/settings" icon="settings" label="Settings" active={active("/settings")} />}
-          <div className="df-nav-user">
-            <Group gap={8} wrap="nowrap" px={8} py={6}>
-              <Avatar size={28} radius="xl" color="navy">{initials(me.full_name)}</Avatar>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <Text size="sm" fw={600} truncate>{me.full_name}</Text>
-                <Text size="xs" c="dimmed" truncate>{me.role.name}</Text>
-              </div>
-            </Group>
-            <NavItem to="/preferences" icon="preferences" label="My preferences" active={active("/preferences")} />
-            {!info.is_guest && (
-              <UnstyledButton className="df-nav-item" onClick={signOut} style={{ width: "100%" }}>
-                <IconLogout size={18} stroke={1.7} className="df-nav-icon" />Sign out
+          <Menu position="top-start" width={248} offset={4}>
+            <Menu.Target>
+              <UnstyledButton className="df-nav-user" data-active={active("/settings") ? "" : undefined} aria-label="Your account, settings and sign out">
+                <Avatar size={30} radius="xl" color="navy">{initials(me.full_name)}</Avatar>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <Text size="sm" fw={600} truncate>{me.full_name}</Text>
+                  <Text size="xs" c="dimmed" truncate>Settings and sign out</Text>
+                </div>
+                <IconSelector size={16} className="df-nav-icon" />
               </UnstyledButton>
-            )}
-          </div>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Label>{me.email} · {me.role.name}</Menu.Label>
+              <Menu.Item component={Link} to="/settings/preferences" leftSection={<IconUserCircle size={16} />}>My preferences</Menu.Item>
+              {canSettings && (
+                <Menu.Item component={Link} to={`/settings/${me.flags.manage_settings ? "firm" : "users"}`} leftSection={<IconSettings size={16} />}>Firm settings</Menu.Item>
+              )}
+              {!info.is_guest && (
+                <>
+                  <Menu.Divider />
+                  <Menu.Item onClick={signOut} leftSection={<IconLogout size={16} />}>Sign out</Menu.Item>
+                </>
+              )}
+            </Menu.Dropdown>
+          </Menu>
         </AppShell.Section>
       </AppShell.Navbar>
 

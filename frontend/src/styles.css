@@ -179,7 +179,11 @@ a.mantine-Paper-root:hover, .df-card-link:hover { box-shadow: var(--mantine-shad
   border: 1px solid var(--df-line); border-radius: 8px; background: #fff; color: var(--mantine-color-dimmed); font-size: 14px;
   box-shadow: 0 1px 1px rgba(15, 15, 15, .03); transition: border-color var(--df-fast), box-shadow var(--df-fast), color var(--df-fast); }
 .df-nav-search:hover { border-color: var(--mantine-color-gray-4); color: var(--mantine-color-text); box-shadow: var(--mantine-shadow-xs); }
-.df-nav-user { border-top: 1px solid var(--df-line); margin-top: 6px; padding-top: 4px; }
+.df-nav-user { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 6px; padding: 8px; border-radius: 8px;
+  border: 1px solid var(--df-line); background: #fff; box-shadow: 0 1px 1px rgba(15, 15, 15, .03);
+  transition: background-color var(--df-fast), box-shadow var(--df-fast), border-color var(--df-fast); }
+.df-nav-user:hover, .df-nav-user[aria-expanded="true"] { border-color: var(--mantine-color-gray-4); box-shadow: var(--mantine-shadow-xs); }
+.df-nav-user[data-active] { border-color: var(--mantine-color-gray-4); }
 
 .df-topbar {
   position: sticky; top: 0; z-index: 50; height: 44px;

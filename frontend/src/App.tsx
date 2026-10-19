@@ -13,7 +13,6 @@ import ArchivePage from "./pages/Archive";
 import ChangePassword from "./pages/ChangePassword";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
-import Preferences from "./pages/Preferences";
 import Setup from "./pages/Setup";
 import SettingsPage from "./settings/SettingsPage";
 
@@ -70,7 +69,7 @@ export default function App() {
           <Route path="m/:module/:id/edit" element={<FormPage />} />
           <Route path="archive" element={<ArchivePage />} />
           <Route path="settings/*" element={<SettingsPage />} />
-          <Route path="preferences" element={<Preferences />} />
+          <Route path="preferences" element={<Navigate to="/settings/preferences" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

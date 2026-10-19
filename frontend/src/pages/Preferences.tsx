@@ -8,8 +8,6 @@ import { formatDate, groupDigits } from "../format";
 import { useVaultStatus } from "../vault/api";
 import { SetPinForm } from "../vault/VaultGate";
 import ChangePassword from "./ChangePassword";
-import { IconUserCircle } from "@tabler/icons-react";
-import { PageHeader } from "../components/ui";
 
 export default function Preferences() {
   const { info, me, refresh } = useApp();
@@ -32,9 +30,12 @@ export default function Preferences() {
 
   return (
     <Stack maw={720} gap="lg">
-      <PageHeader icon={IconUserCircle} title="My preferences" sub="How dates and numbers look to you, and your Vault PIN." />
       <Paper withBorder p="lg">
         <Stack>
+          <div>
+            <Title order={4}>My preferences</Title>
+            <Text size="sm" c="dimmed">Your name, and how dates and numbers look to you. Only you see these.</Text>
+          </div>
           <TextInput label="Name" value={v.full_name} onChange={(e) => setV({ ...v, full_name: e.currentTarget.value })} maw={360} />
           <Radio.Group label="Date format" value={v.date_format} onChange={(d) => setV({ ...v, date_format: d as typeof v.date_format })}>
             <Group mt="xs">
