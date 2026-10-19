@@ -101,7 +101,11 @@ function FormInner() {
     const init: Record<string, unknown> = {};
     for (const f of module.fields) {
       if (editing) init[f.key] = rec.data![f.key];
-      else if (f.pipeline_role === "stage" && module.pipeline) init[f.key] = module.pipeline.stages[0].value;
+      else if (f.pipeline_role === "stage" && module.pipeline) {
+        // "+ New" under a board column starts the record in that column's stage.
+        const asked = params.get(f.key);
+        init[f.key] = module.pipeline.stages.some((st) => st.value === asked) ? asked : module.pipeline.stages[0].value;
+      }
       else if (f.default_me && f.type === "user" && !f.multi) init[f.key] = me.id;
       else if (f.default != null && !params.get(f.key)) init[f.key] = f.default;
       else init[f.key] = prefill(f, params.get(f.key)) ?? emptyValue(f);

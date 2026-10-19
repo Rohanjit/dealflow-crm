@@ -1,36 +1,36 @@
-import { AppShell, Avatar, Badge, Burger, Group, Menu, NavLink, ScrollArea, Text, UnstyledButton } from "@mantine/core";
-import { useDisclosure } from "@mantine/hooks";
+// The app frame: a quiet sidebar (firm menu, search, home, modules, archive, settings) and a slim
+// sticky top bar with the reminders bell. The sidebar folds away on desktop and slides in on phones.
+
+import { ActionIcon, AppShell, Avatar, Group, Menu, ScrollArea, Text, Tooltip, UnstyledButton } from "@mantine/core";
+import { useDisclosure, useWindowScroll } from "@mantine/hooks";
 import {
-  IconArchive, IconBriefcase, IconBuildingBank, IconChecklist, IconChevronDown, IconHome, IconLock, IconLogout,
-  IconSettings, IconTargetArrow, IconUserCircle, IconUsers,
+  IconChevronRight, IconChevronsLeft, IconLayoutSidebarLeftExpand, IconLogout, IconMenu2, IconPlus, IconSearch,
+  IconSelector, IconUserCircle,
 } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { api } from "../api";
-import { useApp, resetSession } from "../context";
 import Logo from "../components/Logo";
+import { moduleIcon } from "../components/ui";
+import { resetSession, useApp } from "../context";
 import TaskBell from "../tasks/TaskBell";
-import GlobalSearch from "./GlobalSearch";
-
-const ICONS: Record<string, typeof IconHome> = {
-  investors: IconBuildingBank,
-  contacts: IconUsers,
-  outreach: IconTargetArrow,
-  deals: IconBriefcase,
-  tasks: IconChecklist,
-  vault: IconLock,
-};
+import SearchPalette, { useSearchPalette } from "./SearchPalette";
 
 // Record types shown under another menu item (companies live under Outreach).
 const NAV_CHILDREN: Record<string, string[]> = { outreach: ["companies"] };
+const NEW_LABEL: Record<string, string> = { vault: "Upload" };
 
 export default function Shell() {
   const { info, me } = useApp();
-  const [opened, { toggle, close }] = useDisclosure();
+  const [mobileOpen, mobile] = useDisclosure();
+  const [collapsed, setCollapsed] = useState(false);
+  const [modulesOpen, setModulesOpen] = useState(true);
+  const search = useSearchPalette();
   const loc = useLocation();
   const qc = useQueryClient();
+  const [scroll] = useWindowScroll();
   const canSettings = me.flags.manage_settings || me.flags.manage_users || me.role.is_admin;
 
   async function signOut() {
@@ -42,80 +42,128 @@ export default function Shell() {
   // Each new page starts at the top (React Router keeps the old scroll position otherwise).
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, [loc.pathname]);
+    mobile.close();
+  }, [loc.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const modules = info.modules.filter((m) => me.perms[m.key]?.view && info.built_modules.includes(m.key));
 
   return (
-    <AppShell header={{ height: 56 }} navbar={{ width: 232, breakpoint: "sm", collapsed: { mobile: !opened } }} padding="lg">
-      <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between" wrap="nowrap">
-          <Group gap="sm" wrap="nowrap">
-            <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-            <UnstyledButton component={Link} to="/">
-              <Group gap={8} wrap="nowrap">
-                <Logo size={26} />
-                <Text fw={700}>Dealflow</Text>
-                <Text c="dimmed" size="sm" visibleFrom="md" truncate maw={220}>{info.firm_name}</Text>
-              </Group>
-            </UnstyledButton>
-          </Group>
-          <GlobalSearch />
-          <Group gap="xs" wrap="nowrap">
-          <TaskBell />
-          <Menu position="bottom-end" width={220}>
-            <Menu.Target>
-              <UnstyledButton>
-                <Group gap={6} wrap="nowrap">
-                  <Avatar size={30} radius="xl" color="navy">{initials(me.full_name)}</Avatar>
-                  <Text size="sm" visibleFrom="md">{me.full_name}</Text>
-                  <IconChevronDown size={14} />
-                </Group>
-              </UnstyledButton>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Label>{me.email} · {me.role.name}</Menu.Label>
-              <Menu.Item component={Link} to="/preferences" leftSection={<IconUserCircle size={16} />}>My preferences</Menu.Item>
-              <Menu.Item onClick={signOut} leftSection={<IconLogout size={16} />}>Sign out</Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
-          </Group>
-        </Group>
-      </AppShell.Header>
-
-      <AppShell.Navbar p="sm">
-        <AppShell.Section grow component={ScrollArea}>
-          <NavLink component={Link} to="/" label="Home" leftSection={<IconHome size={18} />} active={loc.pathname === "/"} onClick={close} />
-          <Text size="xs" c="dimmed" fw={600} tt="uppercase" mt="md" mb={4} px="sm">Modules</Text>
-          {info.modules.map((m) => {
-            const Icon = ICONS[m.key] ?? IconHome;
-            const built = info.built_modules.includes(m.key);
-            if (!me.perms[m.key]?.view) return null;
-            if (!built) {
-              return (
-                <NavLink key={m.key} label={m.label} leftSection={<Icon size={18} />} disabled
-                  rightSection={<Badge size="xs" variant="light" color="gray">Soon</Badge>} />
-              );
-            }
-            return (
-              <NavLink key={m.key} component={Link} to={`/m/${m.key}`} label={m.label} leftSection={<Icon size={18} />}
-                active={active(`/m/${m.key}`) || (NAV_CHILDREN[m.key] ?? []).some((c) => active(`/m/${c}`))} onClick={close} />
-            );
-          })}
-        </AppShell.Section>
+    <AppShell navbar={{ width: 248, breakpoint: "sm", collapsed: { mobile: !mobileOpen, desktop: collapsed } }}
+      transitionDuration={220} transitionTimingFunction="cubic-bezier(.2,.8,.2,1)">
+      <AppShell.Navbar className="df-sidebar">
         <AppShell.Section>
-          {me.flags.restore_archive && (
-            <NavLink component={Link} to="/archive" label="Archive" leftSection={<IconArchive size={18} />} active={active("/archive")} onClick={close} />
-          )}
-          {canSettings && (
-            <NavLink component={Link} to="/settings" label="Settings" leftSection={<IconSettings size={18} />} active={active("/settings")} onClick={close} />
-          )}
+          <Group gap={2} wrap="nowrap">
+            <Menu position="bottom-start" width={260}>
+              <Menu.Target>
+                <UnstyledButton className="df-nav-item" style={{ flex: 1, minWidth: 0, minHeight: 40 }}>
+                  <Logo size={22} />
+                  <Text size="sm" fw={600} truncate style={{ flex: 1 }}>{info.firm_name || "Dealflow"}</Text>
+                  <IconSelector size={14} className="df-nav-icon" />
+                </UnstyledButton>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Group gap="sm" px={8} py={6} wrap="nowrap">
+                  <Avatar size={32} radius="sm" color="navy">{initials(me.full_name)}</Avatar>
+                  <div style={{ minWidth: 0 }}>
+                    <Text size="sm" fw={600} truncate>{me.full_name}</Text>
+                    <Text size="xs" c="dimmed" truncate>{me.email} · {me.role.name}</Text>
+                  </div>
+                </Group>
+                <Menu.Divider />
+                <Menu.Item component={Link} to="/preferences" leftSection={<IconUserCircle size={16} />}>My preferences</Menu.Item>
+                <Menu.Item onClick={signOut} leftSection={<IconLogout size={16} />}>Sign out</Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+            <Tooltip label="Close sidebar">
+              <ActionIcon variant="subtle" color="gray" className="df-collapse-toggle" visibleFrom="sm"
+                onClick={() => setCollapsed(true)} aria-label="Close sidebar">
+                <IconChevronsLeft size={18} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+          <UnstyledButton className="df-nav-item" onClick={search.open}>
+            <IconSearch size={18} className="df-nav-icon" />
+            Search
+            <span className="df-nav-extra"><kbd className="df-kbd">{isMac() ? "⌘K" : "Ctrl K"}</kbd></span>
+          </UnstyledButton>
+          <NavItem to="/" icon="home" label="Home" active={loc.pathname === "/"} />
+        </AppShell.Section>
+
+        <AppShell.Section grow component={ScrollArea} type="scroll" mt={4}>
+          <div className="df-nav-section" role="button" tabIndex={0} aria-expanded={modulesOpen}
+            onClick={() => setModulesOpen((o) => !o)} onKeyDown={(e) => e.key === "Enter" && setModulesOpen((o) => !o)}>
+            Workspace
+            <IconChevronRight size={12} className="df-chevron" data-open={modulesOpen ? "" : undefined} />
+          </div>
+          <div className="df-collapse" data-closed={modulesOpen ? undefined : ""}>
+            <div className="df-stagger">
+              {modules.map((m) => (
+                <NavItem key={m.key} to={`/m/${m.key}`} icon={m.key} label={m.label}
+                  active={active(`/m/${m.key}`) || (NAV_CHILDREN[m.key] ?? []).some((c) => active(`/m/${c}`))}
+                  extra={me.perms[m.key]?.create ? (
+                    <Tooltip label={NEW_LABEL[m.key] ?? `New in ${m.label}`} position="right">
+                      <Link to={`/m/${m.key}/new`} className="df-nav-mini df-nav-hover" aria-label={`New in ${m.label}`}
+                        onClick={(e) => e.stopPropagation()}>
+                        <IconPlus size={14} />
+                      </Link>
+                    </Tooltip>
+                  ) : null} />
+              ))}
+            </div>
+          </div>
+        </AppShell.Section>
+
+        <AppShell.Section>
+          {me.flags.restore_archive && <NavItem to="/archive" icon="archive" label="Archive" active={active("/archive")} />}
+          {canSettings && <NavItem to="/settings" icon="settings" label="Settings" active={active("/settings")} />}
         </AppShell.Section>
       </AppShell.Navbar>
 
       <AppShell.Main>
-        <Outlet />
+        <div className="df-topbar" data-scrolled={scroll.y > 4 ? "" : undefined}>
+          <ActionIcon variant="subtle" color="gray" hiddenFrom="sm" onClick={mobile.toggle} aria-label="Menu">
+            <IconMenu2 size={18} />
+          </ActionIcon>
+          {collapsed && (
+            <Tooltip label="Open sidebar">
+              <ActionIcon variant="subtle" color="gray" visibleFrom="sm" onClick={() => setCollapsed(false)} aria-label="Open sidebar">
+                <IconLayoutSidebarLeftExpand size={18} />
+              </ActionIcon>
+            </Tooltip>
+          )}
+          <div style={{ flex: 1 }} />
+          <Tooltip label="Search">
+            <ActionIcon variant="subtle" color="gray" onClick={search.open} aria-label="Search" hiddenFrom="sm">
+              <IconSearch size={18} />
+            </ActionIcon>
+          </Tooltip>
+          <TaskBell />
+        </div>
+        <div className="df-main-inner">
+          <div key={loc.pathname} className="df-page">
+            <Outlet />
+          </div>
+        </div>
       </AppShell.Main>
+      <SearchPalette opened={search.opened} onClose={search.close} />
     </AppShell>
   );
+}
+
+function NavItem({ to, icon, label, active, extra }: { to: string; icon: string; label: string; active: boolean; extra?: ReactNode }) {
+  const I = moduleIcon(icon);
+  return (
+    <UnstyledButton component={Link} to={to} className="df-nav-item" data-active={active ? "" : undefined}
+      aria-current={active ? "page" : undefined}>
+      <I size={18} stroke={1.7} className="df-nav-icon" />
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+      {extra && <span className="df-nav-extra">{extra}</span>}
+    </UnstyledButton>
+  );
+}
+
+function isMac() {
+  return typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 }
 
 function initials(name: string) {

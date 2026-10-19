@@ -1,21 +1,22 @@
 import {
-  ActionIcon, Button, Center, Checkbox, CloseButton, Drawer, Group, Loader, Menu, MultiSelect, NumberInput,
-  Pagination, Paper, ScrollArea, SegmentedControl, Select, Stack, Table, Tabs, TagsInput, Text, TextInput, Title, Tooltip,
+  ActionIcon, Button, Checkbox, CloseButton, Drawer, Group, Loader, Menu, MultiSelect, NumberInput,
+  Pagination, Paper, ScrollArea, SegmentedControl, Select, Stack, Table, Tabs, TagsInput, Text, TextInput, Tooltip,
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { useDebouncedCallback, useDebouncedValue } from "@mantine/hooks";
 import {
-  IconAdjustmentsHorizontal, IconArrowDown, IconArrowUp, IconColumns3, IconDownload, IconFileImport, IconLayoutKanban,
+  IconAdjustmentsHorizontal, IconArrowDown, IconArrowUp, IconArrowUpRight, IconColumns3, IconDownload, IconFileImport, IconLayoutKanban,
   IconLock, IconPlus, IconSearch, IconTable,
 } from "@tabler/icons-react";
 import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { api, download, qs } from "../api";
 import { useMe, useModuleSchema, useSchema, useUsers } from "../context";
 import { errorMessage } from "../components/errors";
+import { fieldIcon, moduleIcon, PageHeader, TableSkeleton } from "../components/ui";
 import { MONTH_NAMES } from "../format";
 import type { FieldSchema, LookupItem, ModuleSchema, Page, RecordData, Schema } from "../types";
 import MyTasks from "../tasks/MyTasks";
@@ -58,7 +59,7 @@ function saveColumns(module: string, keys: string[]) {
 export default function ListPage() {
   const { module: key } = useParams();
   const { module, schema, isLoading } = useModuleSchema(key);
-  if (isLoading) return <Center py="xl"><Loader /></Center>;
+  if (isLoading) return <TableSkeleton />;
   if (!module || !schema) return <Navigate to="/" replace />;
   const inner = <ListInner key={module.key} module={module} schema={schema} />;
   return module.key === "vault" ? <VaultGate>{inner}</VaultGate> : inner;
@@ -128,62 +129,62 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
   return (
     <Stack gap="md">
       <ModuleTabs current={module.key} />
-      <Group justify="space-between" align="flex-end">
-        <div>
-          <Title order={2}>{module.label}</Title>
-          <Text c="dimmed" size="sm">{mine ? "Assigned to you and not done yet" : data ? `${total.toLocaleString(me.number_grouping === "indian" ? "en-IN" : "en-US")} ${total === 1 ? (NOUNS[module.key]?.[0] ?? module.singular.toLowerCase()) : (NOUNS[module.key]?.[1] ?? module.label.toLowerCase())}` : " "}</Text>
-        </div>
-        <Group gap="xs">
-          {module.perms.create && module.importable && (
-            <Button variant="default" leftSection={<IconFileImport size={16} />} component={Link} to={`/m/${module.key}/import`}>Import</Button>
-          )}
-          <Button variant="default" leftSection={<IconDownload size={16} />} onClick={() => download(`m/${module.key}/export/?${exportParams}`)}>
-            Export to Excel
-          </Button>
-          {module.key === "vault" && <LockButton />}
-          {module.perms.create && (
-            <Button leftSection={<IconPlus size={16} />} component={Link} to={`/m/${module.key}/new`}>
-              {module.key === "vault" ? "Upload" : `New ${module.singular.toLowerCase()}`}
+      <PageHeader icon={moduleIcon(module.key)} title={module.label}
+        sub={mine ? "Assigned to you and not done yet" : data ? `${total.toLocaleString(me.number_grouping === "indian" ? "en-IN" : "en-US")} ${total === 1 ? (NOUNS[module.key]?.[0] ?? module.singular.toLowerCase()) : (NOUNS[module.key]?.[1] ?? module.label.toLowerCase())}` : "\u00a0"}
+        actions={
+          <>
+            {module.perms.create && module.importable && (
+              <Button variant="default" leftSection={<IconFileImport size={16} />} component={Link} to={`/m/${module.key}/import`}>Import</Button>
+            )}
+            <Button variant="default" leftSection={<IconDownload size={16} />} onClick={() => download(`m/${module.key}/export/?${exportParams}`)}>
+              Export
             </Button>
+            {module.key === "vault" && <LockButton />}
+            {module.perms.create && (
+              <Button leftSection={<IconPlus size={16} />} component={Link} to={`/m/${module.key}/new`}>
+                {module.key === "vault" ? "Upload" : `New ${module.singular.toLowerCase()}`}
+              </Button>
+            )}
+          </>
+        } />
+
+      <Group gap="xs" justify="space-between" wrap="wrap" mt={4}>
+        <Group gap={4} wrap="wrap">
+          {module.pipeline && (
+            <>
+              <ViewTab active={view === "board"} icon={<IconLayoutKanban size={16} />} label="Board"
+                onClick={() => { setView("board"); saveView(module.key, "board"); }} />
+              <ViewTab active={view === "table"} icon={<IconTable size={16} />} label="Table"
+                onClick={() => { setView("table"); saveView(module.key, "table"); }} />
+            </>
+          )}
+          {module.segments && !board && (
+            <SegmentedControl ml={module.pipeline ? "sm" : 0} data={module.segments.options} value={segValue}
+              onChange={(v) => setParam({ [module.segments!.param]: v === module.segments!.default ? null : v || null })} />
           )}
         </Group>
-      </Group>
-
-      {module.segments && !board && (
-        <SegmentedControl w="fit-content" data={module.segments.options} value={segValue}
-          onChange={(v) => setParam({ [module.segments!.param]: v === module.segments!.default ? null : v || null })} />
-      )}
-
-      <Group gap="xs">
-        <TextInput
-          style={{ flex: 1, maxWidth: 420 }}
-          placeholder={`Search ${NOUNS[module.key]?.[1] ?? module.label.toLowerCase()}`}
-          leftSection={<IconSearch size={16} />}
-          value={search}
-          rightSection={search ? <CloseButton size="sm" onClick={() => { setSearch(""); setParam({ q: null }); }} /> : null}
-          onChange={(e) => { setSearch(e.currentTarget.value); pushSearch(e.currentTarget.value); }}
-        />
-        <Button variant={activeFilters.length ? "light" : "default"} leftSection={<IconAdjustmentsHorizontal size={16} />} onClick={() => setFiltersOpen(true)}>
-          Filters{activeFilters.length ? ` (${countFilters(activeFilters)})` : ""}
-        </Button>
-        {!board && !mine && <ColumnPicker module={module} columns={shown.map((f) => f.key)} onChange={(c) => { setColumns(c); saveColumns(module.key, c); }} />}
-        {module.pipeline && (
-          <SegmentedControl size="sm" value={view} onChange={(v) => { setView(v as "board" | "table"); saveView(module.key, v); }}
-            data={[
-              { value: "board", label: <Group gap={6} wrap="nowrap"><IconLayoutKanban size={16} />Board</Group> },
-              { value: "table", label: <Group gap={6} wrap="nowrap"><IconTable size={16} />Table</Group> },
-            ]} />
-        )}
-        {activeFilters.length > 0 && (
-          <Button variant="subtle" size="compact-sm" onClick={() => {
-            const next = new URLSearchParams();
-            if (params.get("q")) next.set("q", params.get("q")!);
-            if (ordering) next.set("ordering", ordering);
-            if (segParam && params.get(segParam)) next.set(segParam, params.get(segParam)!);
-            setParams(next, { replace: true });
-          }}>Clear filters</Button>
-        )}
-        {isFetching && <Loader size="xs" />}
+        <Group gap={4} wrap="nowrap">
+          {isFetching && <Loader size="xs" mr={4} />}
+          <ExpandingSearch value={search} placeholder={`Search ${NOUNS[module.key]?.[1] ?? module.label.toLowerCase()}`}
+            onChange={(v) => { setSearch(v); pushSearch(v); }}
+            onClear={() => { setSearch(""); setParam({ q: null }); }} />
+          <Button variant={activeFilters.length ? "light" : "subtle"} color={activeFilters.length ? "navy" : "gray"} size="compact-sm"
+            leftSection={<IconAdjustmentsHorizontal size={16} />} onClick={() => setFiltersOpen(true)}>
+            Filter{activeFilters.length ? ` · ${countFilters(activeFilters)}` : ""}
+          </Button>
+          {activeFilters.length > 0 && (
+            <Tooltip label="Clear filters">
+              <CloseButton size="sm" onClick={() => {
+                const next = new URLSearchParams();
+                if (params.get("q")) next.set("q", params.get("q")!);
+                if (ordering) next.set("ordering", ordering);
+                if (segParam && params.get(segParam)) next.set(segParam, params.get(segParam)!);
+                setParams(next, { replace: true });
+              }} aria-label="Clear filters" />
+            </Tooltip>
+          )}
+          {!board && !mine && <ColumnPicker module={module} columns={shown.map((f) => f.key)} onChange={(c) => { setColumns(c); saveColumns(module.key, c); }} />}
+        </Group>
       </Group>
 
       {mine ? (
@@ -193,30 +194,38 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
       ) : error ? (
         <Paper withBorder p="lg"><Text c="red">{errorMessage(error)}</Text></Paper>
       ) : (
-        <Paper withBorder radius="md">
-          <ScrollArea>
-            <Table className="df-table" highlightOnHover verticalSpacing="sm" horizontalSpacing="md" miw={900}>
+        !data ? <TableSkeleton cols={Math.min(shown.length, 6)} /> : (
+        <div className="df-db df-fade">
+          <ScrollArea type="hover" scrollbarSize={8}>
+            <Table className="df-table" verticalSpacing={8} horizontalSpacing="sm" miw={900}>
               <Table.Thead>
                 <Table.Tr>
-                  {shown.map((f) => (
-                    <Table.Th key={f.key} className={f.sortable ? "df-sort" : undefined} onClick={() => sortBy(f)}>
-                      <Group gap={4} wrap="nowrap">
-                        {f.label}
-                        {ordering === f.key && <IconArrowUp size={12} />}
-                        {ordering === `-${f.key}` && <IconArrowDown size={12} />}
-                      </Group>
-                    </Table.Th>
-                  ))}
+                  {shown.map((f) => {
+                    const I = fieldIcon(f);
+                    return (
+                      <Table.Th key={f.key} className={f.sortable ? "df-sort" : undefined} onClick={() => sortBy(f)}>
+                        <span className="df-th">
+                          <I size={14} stroke={1.7} />
+                          {f.label}
+                          {ordering === f.key && <IconArrowUp size={12} />}
+                          {ordering === `-${f.key}` && <IconArrowDown size={12} />}
+                        </span>
+                      </Table.Th>
+                    );
+                  })}
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {data?.results.map((r) => (
+                {data.results.map((r) => (
                   <Table.Tr key={r.id} className="df-row-link" onClick={() => nav(`/m/${module.key}/${r.id}`)}>
                     {shown.map((f) => (
                       <Table.Td key={f.key} maw={f.type === "longtext" ? 320 : undefined}
-                        miw={f.key === module.title_field ? 180 : f.multi || f.type === "tags" ? 200 : undefined}>
+                        miw={f.key === module.title_field ? 220 : f.multi || f.type === "tags" ? 200 : undefined}>
                         {f.key === module.title_field ? (
-                          <Text size="sm" fw={600} c="navy.9">{r._title}</Text>
+                          <div className="df-title-cell">
+                            <Text size="sm" className="df-title-text">{r._title}</Text>
+                            <span className="df-open-chip"><IconArrowUpRight size={11} />Open</span>
+                          </div>
                         ) : (
                           <FieldValue f={f} v={r[f.key]} compact />
                         )}
@@ -224,7 +233,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
                     ))}
                   </Table.Tr>
                 ))}
-                {data && data.results.length === 0 && (
+                {data.results.length === 0 && (
                   <Table.Tr>
                     <Table.Td colSpan={shown.length}>
                       <EmptyState module={module} filtered={activeFilters.length > 0 || !!params.get("q") || !!(segParam && params.get(segParam))} />
@@ -234,7 +243,13 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
               </Table.Tbody>
             </Table>
           </ScrollArea>
-        </Paper>
+          {module.perms.create && data.results.length > 0 && (
+            <Link to={`/m/${module.key}/new`} className="df-ghost-link" style={{ margin: "6px 0 0", textDecoration: "none" }}>
+              <IconPlus size={14} /> {module.key === "vault" ? "Upload" : "New"}
+            </Link>
+          )}
+        </div>
+        )
       )}
 
       {!board && !mine && total > PAGE_SIZE && (
@@ -255,6 +270,42 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
         onApply={(updates) => { setParam(updates); setFiltersOpen(false); }}
       />
     </Stack>
+  );
+}
+
+function ViewTab({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
+  return (
+    <Button variant="subtle" color={active ? "dark" : "gray"} size="compact-sm" leftSection={icon} onClick={onClick}
+      fw={active ? 600 : 500} c={active ? undefined : "dimmed"} bg={active ? "var(--df-hover)" : undefined}
+      aria-pressed={active}>
+      {label}
+    </Button>
+  );
+}
+
+/** A search icon that opens into a box (and stays open while it holds text). */
+function ExpandingSearch({ value, placeholder, onChange, onClear }: {
+  value: string; placeholder: string; onChange: (v: string) => void; onClear: () => void;
+}) {
+  const [open, setOpen] = useState(!!value);
+  const ref = useRef<HTMLInputElement>(null);
+  const shown = open || !!value;
+  if (!shown) {
+    return (
+      <Tooltip label="Search">
+        <ActionIcon variant="subtle" color="gray" aria-label="Search" onClick={() => { setOpen(true); setTimeout(() => ref.current?.focus(), 0); }}>
+          <IconSearch size={17} />
+        </ActionIcon>
+      </Tooltip>
+    );
+  }
+  return (
+    <TextInput ref={ref} autoFocus size="xs" w={240} className="df-expand-search df-fade" placeholder={placeholder}
+      leftSection={<IconSearch size={14} />} value={value}
+      rightSection={value ? <CloseButton size="xs" onClick={onClear} aria-label="Clear search" /> : null}
+      onChange={(e) => onChange(e.currentTarget.value)}
+      onBlur={() => { if (!value) setOpen(false); }}
+      onKeyDown={(e) => { if (e.key === "Escape") { onClear(); setOpen(false); } }} />
   );
 }
 
@@ -343,7 +394,7 @@ function ColumnPicker({ module, columns, onChange }: { module: ModuleSchema; col
     <Menu closeOnItemClick={false} position="bottom-start" width={260}>
       <Menu.Target>
         <Tooltip label="Choose columns">
-          <ActionIcon variant="default" size="lg" aria-label="Choose columns"><IconColumns3 size={18} /></ActionIcon>
+          <ActionIcon variant="subtle" color="gray" aria-label="Choose columns"><IconColumns3 size={17} /></ActionIcon>
         </Tooltip>
       </Menu.Target>
       <Menu.Dropdown>

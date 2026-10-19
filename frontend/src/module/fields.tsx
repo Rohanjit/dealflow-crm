@@ -99,6 +99,15 @@ function LinkAnchor({ l }: { l: LinkValue }) {
   );
 }
 
+/** One dropdown option shown as a coloured tag; the colour follows the option, so it never changes. */
+export function OptionTag({ id, label, removed = false }: { id: number; label: string; removed?: boolean }) {
+  return (
+    <span className={`df-tag df-tag-${id % 9}`} data-removed={removed ? "" : undefined} title={removed ? `${label} (removed from the list)` : label}>
+      {label}
+    </span>
+  );
+}
+
 const STRENGTH_COLOR: Record<string, string> = { cold: "blue", warm: "orange", strong: "teal" };
 const TRI_COLOR: Record<string, string> = { yes: "teal", no: "red", unknown: "gray" };
 
@@ -160,25 +169,25 @@ export function FieldValue({ f, v, compact = false }: { f: FieldSchema; v: unkno
       out = <Text size="sm" className="df-prewrap" lineClamp={compact ? 2 : undefined}>{String(v)}</Text>;
       break;
     case "dropdown":
-      if (f.multi) {
-        const ids = v as number[];
-        const shown = compact ? ids.slice(0, 3) : ids;
+      {
+        const ids = f.multi ? (v as number[]) : [v as number];
+        const shown = compact ? ids.slice(0, 2) : ids;
         out = (
-          <Group gap={4}>
+          <div className="df-tags" data-compact={compact ? "" : undefined}>
             {shown.map((id) => {
               const o = optionLabel(schema, f.choice_list, id);
-              return <Badge key={id} variant="light" color={o.active ? "navy" : "gray"} tt="none" fw={500}>{o.label}</Badge>;
+              return <OptionTag key={id} id={id} label={o.label} removed={!o.active} />;
             })}
-            {compact && ids.length > 3 && <Text size="xs" c="dimmed">+{ids.length - 3}</Text>}
-          </Group>
+            {compact && ids.length > 2 && <Text size="xs" c="dimmed" style={{ alignSelf: "center" }}>+{ids.length - 2}</Text>}
+          </div>
         );
-      } else out = <Text size="sm">{textValue(f, v, ctx)}</Text>;
+      }
       break;
     case "tags":
       out = (
-        <Group gap={4}>
-          {(v as string[]).map((t) => <Badge key={t} variant="outline" color="gray" tt="none" fw={500}>{t}</Badge>)}
-        </Group>
+        <div className="df-tags" data-compact={compact ? "" : undefined}>
+          {(v as string[]).map((t) => <span key={t} className="df-tag df-tag-0">{t}</span>)}
+        </div>
       );
       break;
     case "choice":

@@ -1,6 +1,6 @@
 // Stage bar on a pipeline record: where it is, how long it's been there, and the next move.
 
-import { Button, Group, Menu, Paper, Stack, Text, Tooltip, UnstyledButton } from "@mantine/core";
+import { Button, Group, Menu, Stack, Text, Tooltip, UnstyledButton } from "@mantine/core";
 import { IconChevronDown, IconPlayerPause, IconPlayerPlay, IconX } from "@tabler/icons-react";
 
 import { useApp, useSchema, useUsers } from "../context";
@@ -58,16 +58,15 @@ export default function PipelineBar({ module, record }: { module: ModuleSchema; 
     const current = i === idx;
     const done = i < idx;
     const shade = tone === "gray" ? 6 : isOpen ? 7 : 6;
-    const bg = current ? `var(--mantine-color-${tone}-${shade})` : done ? "var(--mantine-color-navy-1)" : "var(--mantine-color-gray-1)";
+    const bg = current ? `var(--mantine-color-${tone}-${shade})` : done ? "var(--mantine-color-navy-1)" : "var(--mantine-color-gray-2)";
     const fg = current ? "white" : done ? "var(--mantine-color-navy-8)" : "var(--mantine-color-gray-6)";
     const clickable = canEdit && !(current && isOpen);
     const button = (
-      <UnstyledButton key={s.value} disabled={!clickable}
+      <UnstyledButton key={s.value} disabled={!clickable} className="df-stage-cell" lang="en"
         onClick={() => move(record, { kind: "stage", stage: s.value })}
         style={{
           flex: 1, minWidth: dense ? 76 : 110, padding: dense ? "6px 6px 6px 14px" : "8px 10px", background: bg, color: fg,
           textAlign: "center", fontSize: dense ? 12 : 13, fontWeight: current ? 600 : 500, lineHeight: 1.25,
-          overflowWrap: "break-word",
           clipPath: i === 0 ? "polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%)"
             : "polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%, 10px 50%)",
           cursor: clickable ? "pointer" : "default",
@@ -79,7 +78,7 @@ export default function PipelineBar({ module, record }: { module: ModuleSchema; 
   };
 
   return (
-    <Paper withBorder radius="md" p="md">
+    <div className="df-stagebar">
       <Group gap={4} wrap="nowrap" align="stretch" style={{ overflowX: "auto" }}>
         {phases.map((ph) => (
           <Stack key={ph.label || "all"} gap={4} style={{ flex: ph.stages.length, minWidth: 0 }}>
@@ -123,6 +122,6 @@ export default function PipelineBar({ module, record }: { module: ModuleSchema; 
         )}
       </Group>
       {modal}
-    </Paper>
+    </div>
   );
 }

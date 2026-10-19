@@ -1,22 +1,26 @@
 // Kanban board for pipeline modules: one column per stage plus the exits (On hold, Lost, Dropped…).
 // Drag a card to move it; exits ask for what they need first (a reason, a date, a note).
 
-import { Avatar, Badge, Box, Group, Loader, Paper, ScrollArea, Stack, Text, Tooltip } from "@mantine/core";
+import { Avatar, Box, Group, Paper, ScrollArea, Stack, Text, Tooltip } from "@mantine/core";
 import { DragDropContext, Draggable, Droppable, type BeforeCapture, type DropResult } from "@hello-pangea/dnd";
-import { IconCalendarEvent } from "@tabler/icons-react";
+import { IconCalendarEvent, IconPlus } from "@tabler/icons-react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { api } from "../api";
 import { useMe, useSchema, useUsers } from "../context";
 import { errorMessage } from "../components/errors";
+import { Skeleton } from "../components/ui";
 import { formatDate } from "../format";
 import type { ModuleSchema, Page, RecordData } from "../types";
 import { FieldValue, textValue } from "./fields";
 import { stageLabel, stageOf, usePipelineMove } from "./pipeline";
 
 type Column = { id: string; label: string; kind: "stage" | "exit"; value: string; tone: string };
+
+// Column headers read as coloured labels (see .df-tag-* in styles.css).
+const TONE_TAG: Record<string, number> = { navy: 5, teal: 4, orange: 2, red: 8, gray: 0, yellow: 3, grape: 6 };
 
 // Where a card was picked up. The drag library decides the target column from the dragged card's
 // box, and a wide card spans several narrow (folded) columns at once, so while dragging the card's
@@ -96,7 +100,18 @@ export default function BoardView({ module, params }: { module: ModuleSchema; pa
     move(record, { kind: "stage", stage: value });
   }
 
-  if (isLoading) return <Group p="xl"><Loader /></Group>;
+  if (isLoading) {
+    return (
+      <Group align="flex-start" gap={10} wrap="nowrap" className="df-fade">
+        {[3, 2, 1, 2].map((n, i) => (
+          <Stack key={i} w={236} gap={8}>
+            <Skeleton w={110} h={20} />
+            {Array.from({ length: n }, (_, j) => <Skeleton key={j} h={88} r={8} />)}
+          </Stack>
+        ))}
+      </Group>
+    );
+  }
   if (error) return <Paper withBorder p="lg"><Text c="red">{errorMessage(error)}</Text></Paper>;
 
   return (
@@ -107,8 +122,8 @@ export default function BoardView({ module, params }: { module: ModuleSchema; pa
             {phases.map((ph) => (
               <Stack key={ph.label || "all"} gap={6}>
                 {ph.label && (
-                  <Text size="xs" fw={600} c="dimmed" tt="uppercase" px={4} pb={2}
-                    style={{ borderBottom: "1px solid var(--mantine-color-gray-3)", letterSpacing: 0.4 }}>{ph.label}</Text>
+                  <Text size="xs" fw={600} c="dimmed" px={4} pb={4}
+                    style={{ borderBottom: "1px solid var(--df-line)" }}>{ph.label}</Text>
                 )}
                 <Group align="flex-start" gap={8} wrap="nowrap">
                   {ph.columns.map((col) => (
@@ -145,13 +160,12 @@ function BoardColumn({
     return (
       <Droppable droppableId={column.id} isDropDisabled={!canMove}>
         {(provided, snapshot) => (
-          <Paper ref={provided.innerRef} {...provided.droppableProps} w={52} miw={52} mih={260} radius="md" p={6}
-            bg={snapshot.isDraggingOver ? "navy.0" : "gray.1"} aria-label={`${column.label}: empty`}
-            style={{ flexShrink: 0, outline: snapshot.isDraggingOver ? "2px solid var(--mantine-color-navy-3)" : undefined }}>
-            <Stack align="center" gap={8}>
-              <Badge size="sm" variant="light" color={color} circle>0</Badge>
-              <Text size="sm" fw={600} c={color !== "navy" ? `${color}.8` : "gray.7"}
-                style={{ writingMode: "vertical-rl", whiteSpace: "nowrap" }}>{column.label}</Text>
+          <Paper ref={provided.innerRef} {...provided.droppableProps} w={52} miw={52} mih={260} radius="md" p={6} py={10}
+            bg="gray.0" className="df-board-col" data-over={snapshot.isDraggingOver ? "" : undefined} aria-label={`${column.label}: empty`}
+            style={{ flexShrink: 0 }}>
+            <Stack align="center" gap={10}>
+              <Text size="xs" c="dimmed" className="df-count">0</Text>
+              <Text size="sm" fw={500} c="gray.7" style={{ writingMode: "vertical-rl", whiteSpace: "nowrap" }}>{column.label}</Text>
             </Stack>
             <div style={{ height: 0, overflow: "hidden" }}>{provided.placeholder}</div>
           </Paper>
@@ -160,16 +174,16 @@ function BoardColumn({
     );
   }
   return (
-    <Paper w={width} miw={width} radius="md" bg="gray.1" p={8} style={{ flexShrink: 0 }}>
-      <Group justify="space-between" px={4} pb={8} wrap="nowrap" align="flex-start">
-        <Text size="sm" fw={600} lh={1.3} c={color !== "navy" ? `${color}.8` : undefined}>{column.label}</Text>
-        <Badge size="sm" variant="light" color={color}>{records.length}</Badge>
+    <Paper w={width} miw={width} radius="md" bg="transparent" p={4} style={{ flexShrink: 0 }}>
+      <Group gap={8} px={2} pb={8} wrap="nowrap" align="center">
+        <span className={`df-tag df-tag-${TONE_TAG[color] ?? 0}`} style={{ fontWeight: 500 }}>{column.label}</span>
+        <Text size="sm" c="dimmed" className="df-count">{records.length}</Text>
       </Group>
       <Droppable droppableId={column.id} isDropDisabled={!canMove}>
         {(provided, snapshot) => (
           <ScrollArea.Autosize mah="calc(100vh - 330px)" type="auto">
-            <Stack gap={8} ref={provided.innerRef} {...provided.droppableProps} mih={80} p={2}
-              style={{ borderRadius: 8, background: snapshot.isDraggingOver ? "var(--mantine-color-navy-0)" : undefined }}>
+            <Stack gap={8} ref={provided.innerRef} {...provided.droppableProps} mih={80} p={3}
+              className="df-board-col" data-over={snapshot.isDraggingOver ? "" : undefined}>
               {records.map((r, i) => (
                 <Draggable key={r.id} draggableId={String(r.id)} index={i} isDragDisabled={!canMove}>
                   {(drag, dragSnap) => {
@@ -193,6 +207,12 @@ function BoardColumn({
               {provided.placeholder}
               {records.length === 0 && !snapshot.isDraggingOver && (
                 <Text size="xs" c="dimmed" ta="center" py="md">Nothing here</Text>
+              )}
+              {column.kind === "stage" && module.perms.create && !snapshot.isDraggingOver && (
+                <Link to={`/m/${module.key}/new?${module.pipeline!.stage_field}=${column.value}`} className="df-ghost-link"
+                  style={{ textDecoration: "none", marginLeft: 0 }}>
+                  <IconPlus size={14} /> New
+                </Link>
               )}
             </Stack>
           </ScrollArea.Autosize>
@@ -224,8 +244,8 @@ function BoardCard({ record: r, module, dragging, onOpen }: { record: RecordData
   const overdue = !!followDate && followDate < today && isOpen;
 
   return (
-    <Paper withBorder radius="md" p="sm" shadow={dragging ? "md" : undefined} onClick={onOpen}
-      style={{ cursor: "pointer", borderLeft: overdue ? "3px solid var(--mantine-color-red-6)" : undefined }}>
+    <Paper withBorder radius="md" p="sm" onClick={onOpen} className="df-board-card" data-dragging={dragging ? "" : undefined}
+      style={{ cursor: "pointer" }}>
       <Text size="sm" fw={600} lineClamp={2}>{r._title}</Text>
       {type && r[type.key] ? <Text size="xs" c="dimmed">{textValue(type, r[type.key], ctx)}</Text> : null}
       {size && r[size.key] && (r[size.key] as { amount: string | null }).amount ? (

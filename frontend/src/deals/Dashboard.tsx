@@ -2,7 +2,7 @@
 // close date, and which mandates are nearing expiry. The look-ahead window is set in Settings > Firm.
 
 import {
-  Anchor, Badge, Box, Button, Grid, Group, Loader, Paper, SimpleGrid, Stack, Text, Title, Tooltip, UnstyledButton,
+  Anchor, Badge, Box, Button, Grid, Group, Paper, SimpleGrid, Stack, Text, Tooltip, UnstyledButton,
 } from "@mantine/core";
 import { IconAlertTriangle, IconBriefcase, IconClockHour4 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
@@ -11,6 +11,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { api } from "../api";
 import { errorMessage } from "../components/errors";
+import { CountUp, Skeleton } from "../components/ui";
 import { useMe } from "../context";
 import { formatDate, formatMoney } from "../format";
 import type { Money } from "../types";
@@ -38,7 +39,14 @@ export default function DealsDashboard() {
   const nav = useNavigate();
   const { data, isLoading, error, isFetching } = useQuery({ queryKey: ["dashboard"], queryFn: () => api<Snapshot>("dashboard/") });
 
-  if (isLoading) return <Paper withBorder p="lg" radius="md"><Loader size="sm" /></Paper>;
+  if (isLoading) {
+    return (
+      <Stack gap="sm" className="df-fade">
+        <Skeleton w={160} h={20} />
+        <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">{[0, 1, 2, 3].map((i) => <Skeleton key={i} h={70} r={8} />)}</SimpleGrid>
+      </Stack>
+    );
+  }
   if (error || !data) return <Paper withBorder p="lg" radius="md"><Text c="red" size="sm">{errorMessage(error)}</Text></Paper>;
 
   const count = (v: string) => data.exits.find((e) => e.value === v)?.count ?? 0;
@@ -56,26 +64,25 @@ export default function DealsDashboard() {
     : [{ label: "", stages: open }];
 
   return (
-    <Paper withBorder p="lg" radius="md" style={{ opacity: isFetching ? 0.7 : 1, transition: "opacity 150ms" }}>
+    <Box style={{ opacity: isFetching ? 0.7 : 1, transition: "opacity 150ms" }}>
       <Group justify="space-between" mb="md" align="flex-start">
         <Group gap="sm">
-          <IconBriefcase size={22} color="var(--mantine-color-navy-7)" />
           <div>
-            <Title order={4}>Active deals</Title>
+            <Group gap={8}><IconBriefcase size={18} stroke={1.7} color="var(--mantine-color-gray-7)" /><Text fw={600}>Active deals</Text></Group>
             <Text size="xs" c="dimmed">
               Dates in the next {data.days} days
               {me.flags.manage_settings && <> · <Anchor component={Link} to="/settings/firm" size="xs">change</Anchor></>}
             </Text>
           </div>
         </Group>
-        <Button size="xs" variant="light" component={Link} to="/m/deals">Open active deals</Button>
+        <Button size="compact-sm" variant="subtle" color="gray" component={Link} to="/m/deals">Open active deals →</Button>
       </Group>
 
       <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm" mb="lg">
         {tiles.map((t) => (
           <UnstyledButton key={t.label} component={Link} to={t.to} className="df-tile">
             <Text size="xs" c="dimmed">{t.label}</Text>
-            <Text fw={650} fz={28} lh={1.15}>{t.value}</Text>
+            <Text fw={650} fz={28} lh={1.15}><CountUp value={t.value} /></Text>
           </UnstyledButton>
         ))}
       </SimpleGrid>
@@ -87,7 +94,7 @@ export default function DealsDashboard() {
           <Stack gap="md">
             {phases.map((ph) => (
               <div key={ph.label || "all"}>
-                {ph.label && <Text size="xs" fw={600} c="dimmed" tt="uppercase" mb={4} style={{ letterSpacing: 0.4 }}>{ph.label}</Text>}
+                {ph.label && <Text size="xs" fw={600} c="dimmed" mb={4}>{ph.label}</Text>}
                 <Stack gap={2}>
                   {ph.stages.map((s) => (
                     <Tooltip key={s.value} label={`${s.count} ${s.count === 1 ? "deal" : "deals"} at ${s.label}`} position="top-start"
@@ -116,7 +123,7 @@ export default function DealsDashboard() {
           </Stack>
         </Grid.Col>
       </Grid>
-    </Paper>
+    </Box>
   );
 }
 
