@@ -185,6 +185,7 @@ html[data-nav="same"]::view-transition-new(root) { animation: df-fade 220ms ease
 .df-hero-title { display: inline-block; max-width: 100%; }
 
 /* The sidebar highlight glides. */
+::view-transition-group(df-settings-pill),
 ::view-transition-group(df-nav-pill) { animation-duration: var(--df-snappy); animation-timing-function: var(--df-spring-snappy); }
 
 /* ------------------------------------------------------------------ Reduce Motion: dissolves, no movement */

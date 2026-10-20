@@ -191,9 +191,9 @@ def load():
     o_kite = outreach("Kite Learning", "meeting", transaction_type=opt("transaction_types", "Equity raise"),
                       expected_size=money(60), lead_banker=vikram.pk, source=opt("outreach_sources", "Inbound"), next_follow_up=day(-3))
     note("outreach", o_kite, "meeting", 9, "Intro meeting with the founders. Burn is high; they need a bridge round first.", by=vikram)
-    outreach("Halcyon Hotels", "proposal", transaction_type=opt("transaction_types", "Debt raise"), expected_size=money(220),
+    o_halcyon = outreach("Halcyon Hotels", "proposal", transaction_type=opt("transaction_types", "Debt raise"), expected_size=money(220),
              proposed_success_fee="1.5", lead_banker=asha.pk, source=opt("outreach_sources", "Existing relationship"), next_follow_up=day(6))
-    outreach("Brightpath Clinics", "contacted", transaction_type=opt("transaction_types", "Pre-IPO"), expected_size=money(300),
+    o_bright = outreach("Brightpath Clinics", "contacted", transaction_type=opt("transaction_types", "Pre-IPO"), expected_size=money(300),
              lead_banker=guest.pk, source=opt("outreach_sources", "Cold outreach"), next_follow_up=day(1))
     outreach("Coastline Seafoods", "identified", transaction_type=opt("transaction_types", "M&A sell-side"), expected_size=money(25, "USD", "Mn"),
              lead_banker=anu.pk, source=opt("outreach_sources", "Event"))
@@ -238,7 +238,7 @@ def load():
                        "target_close_date": day(45), "mandate_expiry": day(150), "team_vp": [vikram.pk], "team_analyst": [anu.pk]})
     note("deals", d_orbit, "meeting", 6, "Peak XV issued a term sheet at ₹1,400 Cr pre-money. Blume still deciding.", by=vikram)
     note("deals", d_orbit, "call", 2, "Meera wants a better liquidation preference. Going back to Peak XV.", by=vikram)
-    note("deals", d_nova, "email", 3, "Shared the DD tracker with Kotak Alt Credit's legal counsel.")
+    note("deals", d_nova, "email", 18, "Shared the DD tracker with Kotak Alt Credit's legal counsel.")
 
     # Investor trackers
     def track(deal, investor, stage, **kw):
@@ -249,7 +249,7 @@ def load():
     track(d_orbit, "A91 Partners", "nda_signed")
     track(d_orbit, "Iron Bridge Capital", "teaser_sent", status="declined", decline_reason=opt("decline_reasons", "Ticket size mismatch"))
     track(d_orbit, "Gulf Horizon Investments", "teaser_sent", status="no_response")
-    track(d_nova, "Kotak Alt Credit", "term_sheet_received")
+    t_kotak = track(d_nova, "Kotak Alt Credit", "term_sheet_received")
     track(d_verdant, "Sahyadri Family Office", "teaser_sent")
     track(d_verdant, "Motilal Oswal PE", "identified")
     track(d_zeta, "Lighthouse Pharma Fund", "identified")
@@ -303,6 +303,31 @@ def load():
                        content_type=kind.content_type, sha256=hashlib.sha256(data).hexdigest())
         doc._ext = "pdf"
         apply_values(doc, vault, values, guest)
+
+    # ------------------------------------------------------------------ some history, so Insights and Reminders have
+    # something to say: a stuck outreach attempt, a quiet deal, tracker investors not moving, a meeting
+    # with no follow-up task yet.
+    from deals.models import DealInvestor
+    from outreach.models import Outreach
+
+    note("outreach", o_halcyon, "meeting", 2, "Walked the CFO through the debt structure. They want a term sheet comparison by next week.")
+
+    def at(days_ago: int):
+        return timezone.make_aware(dt.datetime.combine(today - dt.timedelta(days=days_ago), dt.time(10, 0)))
+
+    def back(model, module: str, rec, days_ago: int):
+        model.objects.filter(pk=rec.pk).update(stage_entered=today - dt.timedelta(days=days_ago), updated_at=at(days_ago))
+        Note.objects.filter(module=module, record_id=rec.pk, kind="stage").update(
+            date=today - dt.timedelta(days=days_ago), created_at=at(days_ago))
+
+    back(Outreach, "outreach", o_bright, 30)
+    back(Outreach, "outreach", o_kite, 40)
+    back(Deal, "deals", d_nova, 20)
+    back(DealInvestor, "deal_investors", t_kotak, 16)
+    # Log entries were written as history: date them on their own day.
+    for n in Note.objects.exclude(kind="stage"):
+        Note.objects.filter(pk=n.pk).update(created_at=at((today - n.date).days))
+    Deal.objects.filter(pk=d_nova.pk).update(updated_at=at(18))
 
     fs.sample_loaded_at = timezone.now()
     fs.save(update_fields=["sample_loaded_at"])

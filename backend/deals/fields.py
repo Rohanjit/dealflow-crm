@@ -1,5 +1,6 @@
 from django.db.models import Q
 
+from core import stuck
 from core.registry import Exit, FieldDef, ModuleDef, PipelineDef, proxy, register
 from outreach.fields import COMPANY_FIELDS
 
@@ -162,7 +163,8 @@ DEALS = register(
         title_path="company__name",
         title_fn=lambda d: d.company.name,
         subtitle=deal_subtitle,
-        extra_filters=deal_filters,
+        extra_filters=stuck.make_filter("deals", deal_filters),
+        quick_filters=[stuck.QUICK_FILTER],
         segment_param="view",
         segment_options=DEAL_VIEWS,
         segment_default="active",

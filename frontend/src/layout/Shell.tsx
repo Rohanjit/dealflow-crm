@@ -69,6 +69,9 @@ export default function Shell() {
             <kbd className="df-kbd">{isMac() ? "⌘K" : "Ctrl K"}</kbd>
           </UnstyledButton>
           <NavItem to="/" icon="home" label="Home" active={loc.pathname === "/"} />
+          {(me.perms.outreach?.view || me.perms.deals?.view) && (
+            <NavItem to="/insights" icon="insights" label="Insights" active={active("/insights")} />
+          )}
         </AppShell.Section>
 
         <AppShell.Section grow component={ScrollArea} type="scroll" mt={4}>

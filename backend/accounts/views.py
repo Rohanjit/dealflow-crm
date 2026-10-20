@@ -421,7 +421,7 @@ def _save_role(role: Role, d: dict):
     perms = d.get("perms") or {}
     if not isinstance(flags, dict) or not isinstance(perms, dict) or not all(isinstance(p, (dict, type(None))) for p in perms.values()):
         raise ValidationError({"detail": "The permissions couldn't be read."})
-    for flag in ("manage_users", "manage_settings", "restore_archive"):
+    for flag in ("manage_users", "manage_settings", "restore_archive", "see_team_performance"):
         if flag in flags:
             setattr(role, flag, _flag(flags[flag], flag))
     role.save()

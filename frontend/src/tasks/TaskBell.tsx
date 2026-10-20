@@ -1,5 +1,5 @@
-// Reminders in the header: a bell with the number of tasks due today or overdue (plus relationships
-// going cold), a list on click, and a notice when a task falls due (or someone assigns you one)
+// Reminders in the header: a bell with the number of tasks due today or overdue (plus stuck deals,
+// follow-ups and relationships going cold), a list on click, and a notice when a task falls due (or someone assigns you one)
 // while Dealflow is open.
 
 import { Anchor, Badge, Button, Divider, Group, Popover, ScrollArea, Stack, Text } from "@mantine/core";
@@ -11,6 +11,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useMe } from "../context";
 import { useCold, useColdAction, useReminders, type ColdItem, type Reminder } from "./api";
 import { useAccessRequests, useDecide, type AccessRequest } from "../deals/Restricted";
+import { useInsightAlerts, useSnooze, type Alerts } from "../insights/api";
 import { dueText } from "./TaskRow";
 
 export default function TaskBell() {
@@ -22,17 +23,19 @@ export default function TaskBell() {
   const [acting, setActing] = useState<string | null>(null);
   const asks = useAccessRequests(!!me.perms.deals?.view).data;
   const decide = useDecide();
-  const total = (data?.count ?? 0) + (cold?.count ?? 0) + (asks?.count ?? 0);
+  const alerts = useInsightAlerts().data;
+  const snooze = useSnooze();
+  const total = (data?.count ?? 0) + (cold?.count ?? 0) + (asks?.count ?? 0) + (alerts?.count ?? 0);
   const [opened, setOpened] = useState(false);
   const seen = useRef<Map<number, "overdue" | "today"> | null>(null);
   // The bell rings (a short wiggle) whenever the count goes up.
   const [ring, setRing] = useState(0);
   const lastCount = useRef<number | null>(null);
   useEffect(() => {
-    if (!data && !cold && !asks) return;
+    if (!data && !cold && !asks && !alerts) return;
     if (lastCount.current !== null && total > lastCount.current) setRing((r) => r + 1);
     lastCount.current = total;
-  }, [data, cold, asks, total]);
+  }, [data, cold, asks, alerts, total]);
 
   useEffect(() => {
     if (!data) return;
@@ -67,7 +70,7 @@ export default function TaskBell() {
     seen.current = current;
   }, [data, nav]);
 
-  if (!data && !cold && !asks) return null;
+  if (!data && !cold && !asks && !alerts) return null;
   const toDecide = asks?.to_decide ?? [];
   const askRow = (r: AccessRequest) => (
     <div key={`ask-${r.id}`}>
@@ -102,6 +105,51 @@ export default function TaskBell() {
       </Group>
     </div>
   );
+  const close = () => setOpened(false);
+  const later = async (kind: keyof Alerts["counts"], it: { module: string; id: number; title: string; subtitle: string }, forever = false) => {
+    setActing(`${kind}:${it.module}:${it.id}`);
+    await snooze(kind, it, forever);
+    setActing(null);
+  };
+  const snoozeBtn = (kind: keyof Alerts["counts"], it: { module: string; id: number; title: string; subtitle: string }) => (
+    <Button size="compact-xs" variant="subtle" color="gray" loading={acting === `${kind}:${it.module}:${it.id}`}
+      onClick={() => later(kind, it)}>Snooze 7 days</Button>
+  );
+  const recLink = (module: string, id: number, title: string) => (
+    <Anchor component={Link} to={`/m/${module}/${id}`} size="sm" fw={500} onClick={close}>{title}</Anchor>
+  );
+  const stuckItems = alerts?.stuck ?? [];
+  const followUps = [
+    ...(alerts?.meeting ?? []).map((m) => (
+      <div key={`meet-${m.module}-${m.id}`}>
+        {recLink(m.module, m.id, m.title)}
+        <Text size="xs" c="dimmed">You logged a {m.kind} {m.days === 0 ? "today" : `${ago(m.days)} ago`}. No follow-up task yet.</Text>
+        <Group gap={6} mt={4}>
+          <Button size="compact-xs" variant="light" component={Link} onClick={close}
+            to={`/m/tasks/new?related=${encodeURIComponent(m.related)}&return=${encodeURIComponent(`/m/${m.related.replace(":", "/")}`)}`}>Add a task</Button>
+          <Button size="compact-xs" variant="subtle" color="gray" loading={acting === `meeting:${m.module}:${m.id}`}
+            onClick={() => later("meeting", m, true)}>No follow-up needed</Button>
+        </Group>
+      </div>
+    )),
+    ...(alerts?.tracker ?? []).map((t) => (
+      <div key={`trk-${t.id}`}>
+        {recLink(t.module, t.id, t.title)}
+        <Text size="xs" c="dimmed">
+          {t.count === 1 ? "1 investor hasn't" : `${t.count} investors haven't`} moved on the tracker for {ago(t.days)}
+          {" "}({t.investors.join(", ")}{t.count > t.investors.length ? "…" : ""})
+        </Text>
+        <Group gap={6} mt={4}>{snoozeBtn("tracker", t)}</Group>
+      </div>
+    )),
+    ...(alerts?.quiet ?? []).map((q) => (
+      <div key={`quiet-${q.module}-${q.id}`}>
+        {recLink(q.module, q.id, q.title)}
+        <Text size="xs" c="dimmed">{q.module === "deals" ? "Deal" : "Outreach"} · no activity for {ago(q.days)}</Text>
+        <Group gap={6} mt={4}>{snoozeBtn("quiet", q)}</Group>
+      </div>
+    )),
+  ];
   const item = (t: Reminder, late: boolean) => (
     <div key={t.id}>
       <Anchor component={Link} to={`/m/tasks/${t.id}`} size="sm" fw={500} onClick={() => setOpened(false)}>{t.title}</Anchor>
@@ -135,6 +183,26 @@ export default function TaskBell() {
               {overdue.map((t) => item(t, true))}
               {today.length > 0 && <Text size="xs" fw={600} c="orange.8" tt="uppercase">Today</Text>}
               {today.map((t) => item(t, false))}
+              {stuckItems.length > 0 && (
+                <Text size="xs" fw={600} c="orange.8" tt="uppercase">Stuck · {alerts!.counts.stuck}</Text>
+              )}
+              {stuckItems.map((st) => (
+                <div key={`stuck-${st.module}-${st.id}`}>
+                  {recLink(st.module, st.id, st.title)}
+                  <Text size="xs" c="dimmed">
+                    {st.module === "deals" ? "Deal" : "Outreach"} · {st.days} days at {st.stage_label}
+                    {st.source === "learned" && st.usual != null ? ` (usually ${Math.round(st.usual)})` : ` (flagged after ${st.flag_after})`}
+                  </Text>
+                  <Group gap={6} mt={4}>{snoozeBtn("stuck", st)}</Group>
+                </div>
+              ))}
+              {(alerts?.counts.stuck ?? 0) > stuckItems.length && (["deals", "outreach"] as const).map((m) => (
+                <Anchor key={m} component={Link} to={`/m/${m}?stuck=1`} size="xs" onClick={close}>
+                  See every stuck {m === "deals" ? "deal" : "outreach attempt"}
+                </Anchor>
+              ))}
+              {followUps.length > 0 && <Text size="xs" fw={600} c="navy.7" tt="uppercase">Follow-ups</Text>}
+              {followUps}
               {coldItems.length > 0 && (
                 <Text size="xs" fw={600} c="dimmed" tt="uppercase" mt={overdue.length + today.length ? 4 : 0}>
                   Going cold · {cold!.count} {cold!.count === 1 ? "relationship" : "relationships"}

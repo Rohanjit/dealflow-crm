@@ -376,3 +376,7 @@ tr:hover .df-open-chip { opacity: 1; transform: none; }
 .df-layout-row { transition: background-color 120ms var(--df-ease); }
 .df-layout-row:hover { background-color: var(--df-hover); }
 .df-layout-row[data-dragging] { box-shadow: var(--mantine-shadow-md); }
+
+/* A stuck record (insights/Stuck.tsx): one calm line under the stage bar. */
+.df-stuck-line { padding: 8px 12px; border-radius: 6px; background: #fbf3db; color: #5c4508; }
+.df-stuck-line b { font-weight: 600; }

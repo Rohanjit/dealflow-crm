@@ -26,6 +26,13 @@ class FirmSettings(models.Model):
     sample_loaded_at = models.DateTimeField(null=True, blank=True)
     # Changes whenever a module's fields or layout change, so every worker rebuilds its field lists.
     layout_token = models.CharField(max_length=32, blank=True)
+    # Stuck alerts and follow-up nudges (core/stuck.py, core/nudges.py). Overrides are days per
+    # stage, {"outreach": {"meeting": 30}}; 0 = never flag that stage.
+    stuck_alerts = models.BooleanField(default=True)
+    stuck_overrides = models.JSONField(default=dict, blank=True)
+    nudge_meeting_task = models.BooleanField(default=True)
+    nudge_tracker_days = models.PositiveSmallIntegerField(default=10)
+    nudge_quiet_days = models.PositiveSmallIntegerField(default=14)
 
     @classmethod
     def load(cls) -> "FirmSettings":
@@ -208,3 +215,18 @@ class Note(models.Model):
     class Meta:
         ordering = ["-date", "-created_at", "-id"]
         indexes = [models.Index(fields=["module", "record_id"])]
+
+
+class AlertSnooze(models.Model):
+    """Someone set aside a stuck alert or a follow-up nudge until a date (core/nudges.py). Kinds:
+    "stuck:<stage>" (ends early when the record changes stage), "quiet", "tracker" (per deal) and
+    "meeting" (per log entry; "No follow-up needed" sets it for good)."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    kind = models.CharField(max_length=60)
+    module = models.CharField(max_length=30)
+    record_id = models.PositiveBigIntegerField()
+    until = models.DateField()
+
+    class Meta:
+        unique_together = [("user", "kind", "module", "record_id")]

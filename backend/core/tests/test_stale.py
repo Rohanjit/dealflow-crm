@@ -117,4 +117,5 @@ class StaleTests(APITestBase):
         mods = {m["key"]: m for m in self.client.get("/api/schema/").json()["modules"]}
         self.assertEqual(mods["investors"]["quick_filters"][0]["param"], "stale")
         self.assertEqual(mods["contacts"]["quick_filters"][0]["label"], "Going cold")
-        self.assertEqual(mods["deals"]["quick_filters"], [])
+        self.assertEqual([q["param"] for q in mods["deals"]["quick_filters"]], ["stuck"])  # not going cold
+        self.assertEqual(mods["tasks"]["quick_filters"], [])

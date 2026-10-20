@@ -11,6 +11,7 @@ import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { RestrictedList } from "../deals/Restricted";
+import { StuckTag } from "../insights/Stuck";
 import { api } from "../api";
 import { useMe, useSchema, useUsers } from "../context";
 import { errorMessage } from "../components/errors";
@@ -258,6 +259,7 @@ function BoardCard({ record: r, module, dragging, onOpen }: { record: RecordData
     <Paper withBorder radius="md" p="sm" onClick={onOpen} className="df-board-card" data-dragging={dragging ? "" : undefined}
       data-hero-row={`${module.key}:${r.id}`} style={{ cursor: "pointer" }}>
       <Text size="sm" fw={600} lineClamp={2} data-hero={`${module.key}:${r.id}`} style={{ width: "fit-content", maxWidth: "100%" }}>{r._title}</Text>
+      <StuckTag module={module} record={r} />
       {type && r[type.key] ? <Text size="xs" c="dimmed">{textValue(type, r[type.key], ctx)}</Text> : null}
       {size && r[size.key] && (r[size.key] as { amount: string | null }).amount ? (
         <Box mt={4}><FieldValue f={size} v={r[size.key]} compact /></Box>

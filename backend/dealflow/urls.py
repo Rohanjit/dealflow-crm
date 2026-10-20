@@ -6,6 +6,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from accounts import views as a
 from core import audit_views as av
 from core import guest as g
+from core import insight_views as iv
 from core import layout_views as lv
 from core import views as c
 from deals import views as d
@@ -65,6 +66,11 @@ api = [
     path("access-requests/", d.AccessRequestsView.as_view()),
     path("access-requests/<int:pk>/", d.AccessRequestDecideView.as_view()),
     path("tasks/alerts/", t.TaskAlertsView.as_view()),
+    path("insights/alerts/", iv.InsightAlertsView.as_view()),
+    path("insights/alerts/snooze/", iv.InsightSnoozeView.as_view()),
+    path("insights/stages/", iv.StuckRulesView.as_view()),
+    path("insights/analytics/", iv.AnalyticsView.as_view()),
+    path("settings/alerts/", iv.AlertSettingsView.as_view()),
     path("stale/", c.StaleView.as_view()),
     path("stale/<str:module>/<int:pk>/", c.StaleActionView.as_view()),
     path("vault/status/", v.VaultStatusView.as_view()),

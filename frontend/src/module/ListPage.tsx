@@ -5,7 +5,7 @@ import {
 import { DateInput } from "@mantine/dates";
 import { useDebouncedCallback, useDebouncedValue } from "@mantine/hooks";
 import {
-  IconAdjustmentsHorizontal, IconSnowflake, IconArrowDown, IconArrowsSort, IconArrowUp, IconArrowUpRight, IconColumns3, IconDownload, IconFileImport, IconLayoutKanban,
+  IconAdjustmentsHorizontal, IconHourglassHigh, IconSnowflake, IconArrowDown, IconArrowsSort, IconArrowUp, IconArrowUpRight, IconColumns3, IconDownload, IconFileImport, IconLayoutKanban,
   IconLock, IconPlus, IconSearch, IconTable, IconX,
 } from "@tabler/icons-react";
 import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -180,12 +180,12 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
             aria-label={`Search ${module.label}`} leftSection={<IconSearch size={14} />} value={search}
             rightSection={search ? <CloseButton size="xs" onClick={() => { setSearch(""); setParam({ q: null }); }} aria-label="Clear search" /> : null}
             onChange={(e) => { setSearch(e.currentTarget.value); pushSearch(e.currentTarget.value); }} />
-          {!board && module.quick_filters.map((q) => {
+          {module.quick_filters.map((q) => {
             const on = params.get(q.param) === q.value;
             return (
               <Tooltip key={q.param} label={q.help} multiline w={240} openDelay={300}>
                 <Button size="xs" variant={on ? "light" : "default"} color={on ? "navy" : "gray"}
-                  leftSection={on ? <IconX size={14} /> : <IconSnowflake size={15} />}
+                  leftSection={on ? <IconX size={14} /> : q.param === "stuck" ? <IconHourglassHigh size={15} /> : <IconSnowflake size={15} />}
                   onClick={() => setParam({ [q.param]: on ? null : q.value })} aria-pressed={on}>
                   {q.label}
                 </Button>
@@ -209,7 +209,7 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
         </Group>
       </Group>
 
-      {!board && module.quick_filters.filter((q) => params.get(q.param) === q.value).map((q) => (
+      {module.quick_filters.filter((q) => params.get(q.param) === q.value).map((q) => (
         <Text key={q.param} size="xs" c="navy.7" mt={-6}>Showing only “{q.label}”: {q.help.charAt(0).toLowerCase() + q.help.slice(1)} Click “{q.label}” again to see everything.</Text>
       ))}
       {!mine && (

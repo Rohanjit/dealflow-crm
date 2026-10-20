@@ -1,6 +1,7 @@
 import re
 from urllib.parse import urlparse
 
+from core import stuck
 from core.registry import Exit, FieldDef, ModuleDef, PipelineDef, proxy, register, this_year
 
 from .models import STAGES, STATUSES, Company, Outreach
@@ -238,7 +239,8 @@ OUTREACH = register(
         title_fn=lambda o: o.company.name,
         subtitle=outreach_subtitle,
         duplicate_keys=outreach_duplicate_keys,
-        extra_filters=outreach_view_filter,
+        extra_filters=stuck.make_filter("outreach", outreach_view_filter),
+        quick_filters=[stuck.QUICK_FILTER],
         segment_param="view",
         segment_options=VIEWS,
         segment_default="active",

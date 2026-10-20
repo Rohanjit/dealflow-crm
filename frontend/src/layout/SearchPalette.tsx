@@ -52,9 +52,9 @@ export default function SearchPalette({ opened, onClose }: { opened: boolean; on
       }));
     }
     const lower = q.trim().toLowerCase();
-    const jump = [{ key: "home", label: "Home" }, ...modules].filter((m) => m.label.toLowerCase().includes(lower));
+    const jump = [{ key: "home", label: "Home" }, ...(me.perms.outreach?.view || me.perms.deals?.view ? [{ key: "insights", label: "Insights" }] : []), ...modules].filter((m) => m.label.toLowerCase().includes(lower));
     return [
-      ...jump.map((m) => ({ key: `go:${m.key}`, group: "Go to", label: m.label, icon: moduleIcon(m.key), to: m.key === "home" ? "/" : `/m/${m.key}` })),
+      ...jump.map((m) => ({ key: `go:${m.key}`, group: "Go to", label: m.label, icon: moduleIcon(m.key), to: m.key === "home" ? "/" : m.key === "insights" ? "/insights" : `/m/${m.key}` })),
       ...modules.filter((m) => me.perms[m.key]?.create && m.label.toLowerCase().includes(lower)).map((m) => ({
         key: `new:${m.key}`, group: "Create", label: NEW_LABEL[m.key] ?? `New in ${m.label}`, icon: moduleIcon(m.key), plus: true,
         to: `/m/${m.key}/new`,

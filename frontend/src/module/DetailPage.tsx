@@ -23,6 +23,7 @@ import { exitForField, stageOf } from "./pipeline";
 import RelatedSection from "./RelatedSection";
 import { AccessPanel, RestrictedPage, type Placeholder } from "../deals/Restricted";
 import Timeline from "./Timeline";
+import { StuckLine } from "../insights/Stuck";
 
 /** The record as a list already loaded it (lists send whole records), if any list has it. */
 function fromLists(qc: QueryClient, key?: string, id?: string): RecordData | undefined {
@@ -158,6 +159,7 @@ function DetailInner() {
       </PageHeader>
 
       {p && <PipelineBar module={module} record={r} />}
+      {p && <StuckLine module={module} record={r} />}
       {module.key === "vault" && <FileCard doc={r} />}
 
       <Grid gutter={{ base: "md", lg: 48 }} align="flex-start">
