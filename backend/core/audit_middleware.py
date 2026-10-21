@@ -81,6 +81,8 @@ ACTIONS = {
     ("TaskAlertsView", "GET"): "Checked reminders",
     ("StaleView", "GET"): "Checked relationships going cold",
     ("InsightAlertsView", "GET"): "Checked stuck deals and follow-ups",
+    ("ClearedAlertsView", "GET"): "Checked cleared notifications",
+    ("ClearedAlertsView", "PUT"): "Cleared notifications",
     ("InsightSnoozeView", "POST"): "Snoozed a reminder",
     ("StuckRulesView", "GET"): "Checked when deals count as stuck",
     ("AnalyticsView", "GET"): "Viewed insights",

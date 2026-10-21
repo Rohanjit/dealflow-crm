@@ -21,6 +21,7 @@ api = [
     path("auth/login/", a.LoginView.as_view()),
     path("auth/logout/", a.LogoutView.as_view()),
     path("auth/me/", a.MeView.as_view()),
+    path("notifications/cleared/", a.ClearedAlertsView.as_view()),
     path("auth/change-password/", a.ChangePasswordView.as_view()),
     path("users/", a.UserListView.as_view()),
     path("users/lookup/", a.UserLookupView.as_view()),

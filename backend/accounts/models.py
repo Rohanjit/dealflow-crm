@@ -109,6 +109,10 @@ class User(AbstractBaseUser):
     date_format = models.CharField(max_length=12, choices=DATE_FORMATS, default="DD/MM/YYYY")
     number_grouping = models.CharField(max_length=15, choices=NUMBER_GROUPINGS, default="indian")
 
+    # The notification bell's "Clear all": keys of the items that were showing when this person
+    # cleared it. They stay hidden; anything new (a new key) shows again. See ClearedAlertsView.
+    cleared_alerts = models.JSONField(default=list, blank=True)
+
     objects = UserManager()
 
     USERNAME_FIELD = "email"

@@ -128,7 +128,7 @@ export default function AlertSettings() {
         <Stack gap="md" maw={560}>
           <div>
             <Title order={4}>Follow-up nudges</Title>
-            <Text size="sm" c="dimmed">Shown in Reminders to the people on the record. Each one can be snoozed for 7 days.</Text>
+            <Text size="sm" c="dimmed">Shown under the notification bell to the people on the record. Each one can be snoozed for 7 days.</Text>
           </div>
           <Switch checked={meeting} onChange={(e) => setMeeting(e.currentTarget.checked)}
             label="A meeting or call was logged but no follow-up task was added"

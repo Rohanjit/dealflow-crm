@@ -380,3 +380,11 @@ tr:hover .df-open-chip { opacity: 1; transform: none; }
 /* A stuck record (insights/Stuck.tsx): one calm line under the stage bar. */
 .df-stuck-line { padding: 8px 12px; border-radius: 6px; background: #fbf3db; color: #5c4508; }
 .df-stuck-line b { font-weight: 600; }
+
+/* The notification bell (tasks/TaskBell.tsx): icon only, a small count on its shoulder. */
+.df-bell { position: relative; overflow: visible; }
+.df-bell-icon { display: inline-flex; }
+.df-bell-count { position: absolute; top: 1px; right: 0; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+  font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; color: #fff; background: var(--mantine-color-orange-6);
+  box-shadow: 0 0 0 2px #fff; font-variant-numeric: tabular-nums; pointer-events: none; }
+.df-bell-count[data-tone="red"] { background: var(--mantine-color-red-6); }

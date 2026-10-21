@@ -568,3 +568,27 @@ class InviteAcceptView(APIView):
             i.save()
         login(request, u)
         return Response(me_payload(u), status=status.HTTP_201_CREATED)
+
+
+CLEARED_MAX = 1000
+
+
+class ClearedAlertsView(APIView):
+    """The notification bell's "Clear all", per person and across devices. The app sends the keys of
+    every item it was showing ("task:12:overdue", "stuck:deals:5:term_sheet", ...); they stay hidden
+    until something new arrives. An empty list brings everything back."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({"keys": request.user.cleared_alerts or []})
+
+    def put(self, request):
+        keys = request.data.get("keys")
+        if not isinstance(keys, list) or not all(isinstance(k, str) and 0 < len(k) <= 120 for k in keys):
+            raise ValidationError({"keys": "Send a list of short text keys."})
+        keys = list(dict.fromkeys(k.replace("\x00", "") for k in keys))[:CLEARED_MAX]
+        request.user.cleared_alerts = keys
+        request.user.save(update_fields=["cleared_alerts"])
+        return Response({"keys": keys})
+
