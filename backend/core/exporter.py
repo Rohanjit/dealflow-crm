@@ -1,4 +1,4 @@
-"""Export any module list (with its current filters) to an Excel file."""
+"""Export any module list (with its current filters) to an Excel file; the same rows feed CSV reports."""
 
 from __future__ import annotations
 
@@ -44,7 +44,9 @@ EXCEL_NUMBER = {
 }
 
 
-def export_workbook(mod: ModuleDef, qs, user, enabled: dict, columns: list[str] | None = None) -> bytes:
+def export_fields(mod: ModuleDef, enabled: dict, columns: list[str] | None = None) -> list:
+    """The fields an export writes: the chosen columns in their order (always led by the record's
+    name), or every field that's switched on."""
     fields = [f for f in mod.fields if enabled.get(f.key, True)]
     if columns:
         order = {k: i for i, k in enumerate(columns)}
@@ -52,17 +54,11 @@ def export_workbook(mod: ModuleDef, qs, user, enabled: dict, columns: list[str] 
         # Always lead with the record's name so the sheet is readable.
         if mod.title_field not in order:
             fields.insert(0, mod.field(mod.title_field))
+    return fields
 
-    headers = []
-    for f in fields:
-        if f.type == "money":
-            headers += [f.label, f"{f.label} – currency & unit"]
-        else:
-            headers.append(f.label)
-    headers += ["Created by", "Created on", "Last edited by", "Last edited on"]
 
-    option_labels = dict(ChoiceOption.objects.values_list("pk", "label"))
-    user_names = dict(get_user_model().objects.values_list("pk", "full_name"))
+def export_workbook(mod: ModuleDef, qs, user, enabled: dict, columns: list[str] | None = None) -> bytes:
+    headers, rows = sheet_rows(mod, qs, user, export_fields(mod, enabled, columns))
     date_fmt = EXCEL_DATE.get(user.date_format, "dd/mm/yyyy")
     num_fmt = EXCEL_NUMBER.get(user.number_grouping, "#,##0.##")
 
@@ -75,6 +71,36 @@ def export_workbook(mod: ModuleDef, qs, user, enabled: dict, columns: list[str] 
         c.fill = PatternFill("solid", fgColor="1F3A5F")
         c.alignment = Alignment(vertical="center", wrap_text=True)
     ws.freeze_panes = "B2"
+    for row, kinds in rows:
+        ws.append(row)
+        r = ws.max_row
+        for i, kind in enumerate(kinds, start=1):
+            fmt = {"date": date_fmt, "datetime": date_fmt + " hh:mm", "number": num_fmt}.get(kind or "")
+            if fmt:
+                ws.cell(row=r, column=i).number_format = fmt
+    for i, h in enumerate(headers, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = min(max(len(h) + 2, 14), 40)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def sheet_rows(mod: ModuleDef, qs, user, fields) -> tuple[list[str], list[tuple[list, list]]]:
+    """Headers and typed rows for a spreadsheet-style export (Excel, CSV): one numeric column per
+    money field plus a "currency & unit" column, so exports import back. Each row comes with the
+    kind of each cell (date / datetime / number / None) for formatting."""
+    headers = []
+    for f in fields:
+        if f.type == "money":
+            headers += [f.label, f"{f.label} – currency & unit"]
+        else:
+            headers.append(f.label)
+    headers += ["Created by", "Created on", "Last edited by", "Last edited on"]
+
+    option_labels = dict(ChoiceOption.objects.values_list("pk", "label"))
+    user_names = dict(get_user_model().objects.values_list("pk", "full_name"))
+    date_fmt, num_fmt = "date", "number"
+    out = []
 
     tz = timezone.get_current_timezone()
     for obj in qs:
@@ -98,7 +124,7 @@ def export_workbook(mod: ModuleDef, qs, user, enabled: dict, columns: list[str] 
                 v = (", ".join(i["title"] for i in v) or None) if f.multi else (v["title"] if v else None)
             elif t == "datetime":
                 row.append(_datetime_cell(v))
-                fmts.append(date_fmt + (" hh:mm" if v and "T" in v else ""))
+                fmts.append("datetime" if v and "T" in v else date_fmt)
                 continue
             elif t == "birthday":
                 v = birthday_text(v)
@@ -116,16 +142,6 @@ def export_workbook(mod: ModuleDef, qs, user, enabled: dict, columns: list[str] 
             fmts.append(date_fmt if t == "date" else (num_fmt if t in ("decimal",) else None))
         for u, when in ((obj.created_by, obj.created_at), (obj.updated_by, obj.updated_at)):
             row += [u.full_name if u else None, when.astimezone(tz).replace(tzinfo=None) if when else None]
-            fmts += [None, date_fmt + " hh:mm"]
-        ws.append(row)
-        r = ws.max_row
-        for i, fmt in enumerate(fmts, start=1):
-            if fmt:
-                ws.cell(row=r, column=i).number_format = fmt
-
-    for i, h in enumerate(headers, start=1):
-        ws.column_dimensions[get_column_letter(i)].width = min(max(len(h) + 2, 14), 40)
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
+            fmts += [None, "datetime"]
+        out.append((row, fmts))
+    return headers, out

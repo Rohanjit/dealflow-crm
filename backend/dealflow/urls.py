@@ -7,6 +7,7 @@ from accounts import views as a
 from core import audit_views as av
 from core import guest as g
 from core import insight_views as iv
+from reports import views as rv
 from core import layout_views as lv
 from core import views as c
 from deals import views as d
@@ -22,6 +23,10 @@ api = [
     path("auth/logout/", a.LogoutView.as_view()),
     path("auth/me/", a.MeView.as_view()),
     path("notifications/cleared/", a.ClearedAlertsView.as_view()),
+    path("reports/", rv.SavedReportListView.as_view()),
+    path("reports/run/", rv.ReportRunView.as_view()),
+    path("reports/<int:pk>/", rv.SavedReportDetailView.as_view()),
+    path("reports/<int:pk>/run/", rv.SavedReportRunView.as_view()),
     path("auth/change-password/", a.ChangePasswordView.as_view()),
     path("users/", a.UserListView.as_view()),
     path("users/lookup/", a.UserLookupView.as_view()),

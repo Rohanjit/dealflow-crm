@@ -7,3 +7,4 @@ gunicorn>=23
 dj-database-url>=2.2,<4
 psycopg[binary]>=3.2,<4
 cryptography>=43,<47
+reportlab>=4.2,<6

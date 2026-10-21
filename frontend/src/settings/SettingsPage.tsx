@@ -1,9 +1,10 @@
 import { Group, Select, Stack, Text, UnstyledButton } from "@mantine/core";
-import { IconBell, IconBuilding, IconDatabase, IconShieldCheck, IconList, IconShieldLock, IconToggleRight, IconUserCircle, IconUsers } from "@tabler/icons-react";
+import { IconBell, IconBuilding, IconFileExport, IconDatabase, IconShieldCheck, IconList, IconShieldLock, IconToggleRight, IconUserCircle, IconUsers } from "@tabler/icons-react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import { useMe } from "../context";
 import AlertSettings from "./AlertSettings";
+import ExportSettings from "./ExportSettings";
 import AuditSettings from "./AuditSettings";
 import BackupsSettings from "./BackupsSettings";
 import DropdownSettings from "./DropdownSettings";
@@ -21,6 +22,7 @@ export default function SettingsPage() {
   // Everyone has their own preferences; the firm-wide sections depend on the role.
   const tabs = [
     { path: "preferences", label: "My preferences", icon: IconUserCircle, show: true, el: <Preferences />, group: "You" },
+    { path: "export", label: "Export", icon: IconFileExport, show: true, el: <ExportSettings />, group: "You" },
     { path: "firm", label: "Firm", icon: IconBuilding, show: me.flags.manage_settings, el: <FirmSettings /> },
     { path: "users", label: "Users", icon: IconUsers, show: me.flags.manage_users, el: <UsersSettings /> },
     { path: "roles", label: "Roles & permissions", icon: IconShieldLock, show: me.role.is_admin, el: <RolesSettings /> },
@@ -30,13 +32,14 @@ export default function SettingsPage() {
     { path: "backups", label: "Backups", icon: IconDatabase, show: me.role.is_admin, el: <BackupsSettings /> },
     { path: "audit", label: "Audit log", icon: IconShieldCheck, show: me.role.is_admin, el: <AuditSettings /> },
   ].filter((t) => t.show);
-  const firmTabs = tabs.slice(1);
+  const firmTabs = tabs.filter((t) => t.group !== "You");
+  const ownTabs = tabs.filter((t) => t.group === "You");
 
   return (
     <Stack gap="lg" maw={1200}>
       <PageHeader icon={moduleIcon("settings")} title="Settings" sub={firmTabs.length ? "Your own preferences, and the settings that apply to everyone at the firm." : "Your own preferences."} />
       <Select hiddenFrom="sm" label="Section" data={[
-        { group: "Just for you", items: [{ value: "preferences", label: "My preferences" }] },
+        { group: "Just for you", items: ownTabs.map((t) => ({ value: t.path, label: t.label })) },
         ...(firmTabs.length ? [{ group: "For everyone at the firm", items: firmTabs.map((t) => ({ value: t.path, label: t.label })) }] : []),
       ]}
         value={tabs.find((t) => loc.pathname.startsWith(`/settings/${t.path}`))?.path ?? null}
@@ -48,7 +51,7 @@ export default function SettingsPage() {
             return (
               <div key={t.path}>
                 {i === 0 && <Text size="xs" fw={600} c="dimmed" px={8} pb={4}>Just for you</Text>}
-                {i === 1 && <Text size="xs" fw={600} c="dimmed" px={8} pt="md" pb={4}>For everyone at the firm</Text>}
+                {i === ownTabs.length && <Text size="xs" fw={600} c="dimmed" px={8} pt="md" pb={4}>For everyone at the firm</Text>}
                 <UnstyledButton component={Link} to={`/settings/${t.path}`} className="df-nav-item" data-active={on ? "" : undefined}>
                   {on && <span className="df-nav-pill" style={{ viewTransitionName: "df-settings-pill" }} aria-hidden />}
                   <t.icon size={18} stroke={1.7} className="df-nav-icon" />{t.label}

@@ -145,9 +145,21 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
             {module.perms.create && module.importable && (
               <Button variant="default" leftSection={<IconFileImport size={16} />} component={Link} to={`/m/${module.key}/import`}>Import</Button>
             )}
-            <Button variant="default" leftSection={<IconDownload size={16} />} onClick={() => download(`m/${module.key}/export/?${exportParams}`)}>
-              Export
-            </Button>
+            <Menu position="bottom-end" width={260}>
+              <Menu.Target>
+                <Button variant="default" leftSection={<IconDownload size={16} />}>Export</Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item onClick={() => download(`m/${module.key}/export/?${exportParams}`)}>
+                  <Text size="sm">Excel, as shown</Text>
+                  <Text size="xs" c="dimmed">These records and columns</Text>
+                </Menu.Item>
+                <Menu.Item component={Link} to={`/settings/export?module=${module.key}&${exportParams}`}>
+                  <Text size="sm">PDF, CSV and more…</Text>
+                  <Text size="xs" c="dimmed">Opens Export with these filters</Text>
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
             {module.key === "vault" && <LockButton />}
             <DuplicatesButton module={module} />
             {module.perms.create && (
@@ -446,7 +458,7 @@ function ColumnPicker({ module, columns, onChange }: { module: ModuleSchema; col
 
 type Draft = Record<string, string>;
 
-function FilterDrawer({
+export function FilterDrawer({
   opened, onClose, module, schema, params, onApply,
 }: {
   opened: boolean; onClose: () => void; module: ModuleSchema; schema: Schema; params: URLSearchParams;
