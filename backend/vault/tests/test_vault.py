@@ -226,12 +226,16 @@ class DownloadTests(VaultBase):
 
         path = Path(settings.MEDIA_ROOT) / Document.objects.get(pk=self.pdf["id"]).file.name
         backup = backups.create_backup("manual")
-        with zipfile.ZipFile(backup) as z:
+        from core import backup_crypto
+
+        plain = Path(settings.DATA_DIR) / "plain.zip"
+        backup_crypto.decrypt(backup, plain)
+        with zipfile.ZipFile(plain) as z:
             self.assertIn("files/" + Document.objects.get(pk=self.pdf["id"]).file.name, z.namelist())
         path.unlink()
         with open(backup, "rb") as fh:
             backups.restore_backup(fh)
-        self.assertEqual(path.read_bytes(), PDF)
+        self.assertTrue(path.read_bytes().startswith(b"DFV1"))  # stored encrypted (decision 63, S4)
 
 
 class VaultListTests(VaultBase):

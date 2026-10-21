@@ -15,9 +15,10 @@ class DataDirMixin:
     @classmethod
     def setUpClass(cls):
         cls._tmp = Path(tempfile.mkdtemp())
+        cls._keys = Path(tempfile.mkdtemp(suffix="-keys"))  # apart from the data, as in production
         cls._override = override_settings(
             DATA_DIR=cls._tmp, BACKUP_DIR=cls._tmp / "backups", IMPORT_DIR=cls._tmp / "imports",
-            MEDIA_ROOT=cls._tmp / "files",
+            MEDIA_ROOT=cls._tmp / "files", KEYS_DIR=cls._keys,
         )
         cls._override.enable()
         super().setUpClass()
@@ -27,6 +28,7 @@ class DataDirMixin:
         super().tearDownClass()
         cls._override.disable()
         shutil.rmtree(cls._tmp, ignore_errors=True)
+        shutil.rmtree(cls._keys, ignore_errors=True)
 
 
 class APITestBase(DataDirMixin, TestCase):

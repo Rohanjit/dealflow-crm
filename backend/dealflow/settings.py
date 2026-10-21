@@ -5,6 +5,7 @@ same Docker image runs on a laptop (SQLite) or a firm server (Postgres).
 """
 
 import os
+import shutil
 import sys
 import secrets
 from pathlib import Path
@@ -31,20 +32,35 @@ if len(sys.argv) > 1 and sys.argv[1] == "test":
     atexit.register(shutil.rmtree, AUDIT_DIR, True)
 
 
+# Keys live apart from the data they protect (dealflow/keys.py). In Docker: its own volume, /keys.
+KEYS_DIR = Path(os.environ.get("DEALFLOW_KEYS_DIR", DATA_DIR.parent / f"{DATA_DIR.name}-keys"))
+KEYS_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    KEYS_DIR.chmod(0o700)
+except OSError:
+    pass
+
+
 def _secret_key() -> str:
-    """Use DJANGO_SECRET_KEY if given, else generate one once and keep it in the data volume."""
+    """DJANGO_SECRET_KEY (or a Docker secret file named by DJANGO_SECRET_KEY_FILE) if given, else one
+    made once and kept in the keys folder. An older install's key in the data folder is moved there."""
     env_key = os.environ.get("DJANGO_SECRET_KEY")
     if env_key:
         return env_key
-    key_file = DATA_DIR / "secret_key"
+    if key_path := os.environ.get("DJANGO_SECRET_KEY_FILE"):
+        return Path(key_path).read_text().strip()
+    key_file = KEYS_DIR / "secret_key"
+    old = DATA_DIR / "secret_key"
+    if not key_file.exists() and old.exists():
+        shutil.copyfile(old, key_file)
+        key_file.chmod(0o600)
+        old.unlink()
     if key_file.exists():
         return key_file.read_text().strip()
     key = secrets.token_urlsafe(50)
-    key_file.write_text(key)
-    try:
-        key_file.chmod(0o600)
-    except OSError:
-        pass
+    fd = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(key)
     return key
 
 
@@ -119,6 +135,19 @@ DATABASES = {
 if DATABASES["default"]["ENGINE"] == "django.db.backends.sqlite3":
     DATABASES["default"]["OPTIONS"] = {"timeout": 20}
     DATABASES["default"]["CONN_MAX_AGE"] = 0
+# SQLite is encrypted with SQLCipher (AES-256) unless DEALFLOW_DB_ENCRYPTION=0 (never in production).
+# The test run uses an unencrypted in-memory database. Postgres: see docs/postgres-encryption.md.
+_testing = len(sys.argv) > 1 and sys.argv[1] == "test"
+DB_ENCRYPTED = (DATABASES["default"]["ENGINE"] == "django.db.backends.sqlite3" and not _testing
+                and os.environ.get("DEALFLOW_DB_ENCRYPTION", "1") == "1")
+if DB_ENCRYPTED:
+    import sqlcipher3
+    import sqlcipher3.dbapi2
+
+    # Django's SQLite backend imports `sqlite3`; this hands it the SQLCipher build of the same module.
+    sys.modules["sqlite3"] = sqlcipher3
+    sys.modules["sqlite3.dbapi2"] = sqlcipher3.dbapi2
+    DATABASES["default"]["ENGINE"] = "dealflow.db_cipher"
 
 AUTH_USER_MODEL = "accounts.User"
 # Argon2id only (decision 63). There are no installs with older hashes to carry over.
@@ -137,6 +166,7 @@ AUTH_PASSWORD_VALIDATORS = [
 MFA_REQUIRED = True
 if len(sys.argv) > 1 and sys.argv[1] == "test":
     MFA_REQUIRED = False
+    VAULT_KDF = {"time_cost": 1, "memory_cost": 256, "parallelism": 1}  # Vault PIN keys, lighter for tests
     # Same algorithm, lighter settings, so the test suite doesn't spend minutes hashing.
     PASSWORD_HASHERS = ["accounts.validators.TestArgon2Hasher"]
 

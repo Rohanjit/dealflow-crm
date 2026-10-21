@@ -27,6 +27,9 @@ class Document(Record):
     file_size = models.PositiveBigIntegerField()
     content_type = models.CharField(max_length=100)
     sha256 = models.CharField(max_length=64)
+    # The Vault key the stored file is encrypted with (AES-256-GCM); empty = not encrypted yet
+    # (files from before encryption, or from an older backup, are encrypted when the Vault is next opened).
+    encrypted_with = models.ForeignKey("VaultKey", on_delete=models.PROTECT, null=True, blank=True, related_name="+")
 
     companies = models.ManyToManyField("outreach.Company", blank=True, related_name="documents")
     outreach = models.ManyToManyField("outreach.Outreach", blank=True, related_name="documents")
@@ -38,3 +41,37 @@ class Document(Record):
 
     def __str__(self):
         return self.title
+
+
+# ---------------------------------------------------------------- encryption (decision 63, S4)
+
+
+class VaultKey(models.Model):
+    """The firm's Vault key (32 random bytes) is never stored as it is: only wrapped for each person
+    (to their public key) and for the recovery key. A new one comes with a rotation."""
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    active = models.BooleanField(default=True)
+
+
+class VaultKeyWrap(models.Model):
+    KINDS = [("user", "Person"), ("recovery", "Recovery key")]
+
+    vault_key = models.ForeignKey(VaultKey, on_delete=models.CASCADE, related_name="wraps")
+    user = models.ForeignKey("accounts.User", on_delete=models.CASCADE, null=True, blank=True, related_name="+")
+    kind = models.CharField(max_length=10, choices=KINDS, default="user")
+    sealed = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("vault_key", "user", "kind")]
+
+
+class UserVaultKeypair(models.Model):
+    """A person's X25519 key pair for the Vault. The private half is sealed with a key made from their
+    PIN (Argon2id) mixed with the install's master key, so it opens only with both."""
+
+    user = models.OneToOneField("accounts.User", on_delete=models.CASCADE, related_name="vault_keypair")
+    public_key = models.CharField(max_length=64)
+    private_sealed = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)

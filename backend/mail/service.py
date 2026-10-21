@@ -234,19 +234,48 @@ def _upload_dir(user) -> Path:
     return p
 
 
+_MAGIC = b"DFM1"
+
+
+def _upload_cipher():
+    """Files waiting to be emailed are sealed with a key from the install's master key (in the keys
+    folder), so the data volume alone doesn't hold them readable (decision 63, S4)."""
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
+    from dealflow import keys
+
+    return AESGCM(HKDF(algorithm=hashes.SHA256(), length=32, salt=b"dealflow-mail", info=b"uploads").derive(keys.master()))
+
+
+def _store_bytes(user, data: bytes, meta: dict) -> dict:
+    token = secrets.token_urlsafe(18)
+    d = _upload_dir(user)
+    nonce = os.urandom(12)
+    blob = _MAGIC + nonce + _upload_cipher().encrypt(nonce, data, f"{user.pk}:{token}".encode())
+    with open(d / f"{token}.bin", "wb") as out:
+        out.write(blob)
+    (d / f"{token}.json").write_text(json.dumps(meta))
+    return {"kind": "upload", "token": token, **meta}
+
+
 def save_upload(user, f) -> dict:
     """A file from the person's computer, kept for a week so a campaign can send it later."""
     from vault.files import check, clean_name
 
     ext, kind, digest = check(f)  # same allowlist and checks as the Vault
-    token = secrets.token_urlsafe(18)
-    d = _upload_dir(user)
-    with open(d / f"{token}.bin", "wb") as out:
-        for chunk in f.chunks():
-            out.write(chunk)
+    f.seek(0)
+    data = b"".join(f.chunks())
     meta = {"name": clean_name(f.name), "size": f.size, "content_type": kind.content_type, "type": kind.label}
-    (d / f"{token}.json").write_text(json.dumps(meta))
-    return {"kind": "upload", "token": token, **meta}
+    return _store_bytes(user, data, meta)
+
+
+def _read_upload(user, token: str) -> bytes:
+    blob = (_upload_dir(user) / f"{token}.bin").read_bytes()
+    if not blob.startswith(_MAGIC):
+        return blob  # from before uploads were sealed
+    return _upload_cipher().decrypt(blob[4:16], blob[16:], f"{user.pk}:{token}".encode())
 
 
 def _valid_token(token) -> bool:
@@ -288,6 +317,16 @@ def clean_attachments(raw, user, request=None, for_campaign=False) -> list[dict]
                 raise ValueError("A Vault document you picked has been deleted.")
             entry = {"kind": "vault", "id": doc.pk, "name": doc.file_name, "size": doc.file_size,
                      "content_type": doc.content_type, "type": doc.file_type}
+            if for_campaign:
+                # The scheduler sends without anyone's Vault key, so a campaign keeps its own sealed copy.
+                from vault import keyring
+
+                if request is None:
+                    raise ValueError("Open the Vault to attach its documents.")
+                data = keyring.read_document(request, doc)
+                entry = {**_store_bytes(user, data, {"name": doc.file_name, "size": doc.file_size,
+                                                     "content_type": doc.content_type, "type": doc.file_type}),
+                         "from_vault": doc.pk}
         elif item.get("kind") == "upload":
             info = upload_info(user, item.get("token"))
             if not info:
@@ -306,25 +345,32 @@ def clean_attachments(raw, user, request=None, for_campaign=False) -> list[dict]
     return out
 
 
-def read_attachments(items: list[dict], user) -> list[tuple[str, str, bytes]]:
+def read_attachments(items: list[dict], user, request=None) -> list[tuple[str, str, bytes]]:
     from vault.models import Document
 
     files = []
     for a in items:
         if a["kind"] == "vault":
+            from vault import keyring
+
             doc = Document.objects.filter(pk=a["id"], archived_at__isnull=True).first()
             if not doc:
                 raise MailError(f"{a['name']} has been deleted from the Vault.", "rejected")
-            with doc.file.open("rb") as fh:
-                files.append((doc.file_name, doc.content_type, fh.read()))
+            if request is None:
+                raise MailError(f"{a['name']} needs an open Vault. Attach it again.", "rejected")
+            try:
+                files.append((doc.file_name, doc.content_type, keyring.read_document(request, doc)))
+            except Exception:
+                raise MailError(f"{a['name']} couldn't be read from the Vault. Open the Vault and try again.", "rejected")
         else:
             if not _valid_token(a.get("token")):
                 raise MailError(f"{a.get('name', 'An attachment')} has expired.", "rejected")
-            p = _upload_dir(user) / f"{a['token']}.bin"
             try:
-                files.append((a["name"], a["content_type"], p.read_bytes()))
+                files.append((a["name"], a["content_type"], _read_upload(user, a["token"])))
             except OSError:
                 raise MailError(f"{a['name']} has expired. Attach it again.", "rejected")
+            except Exception:
+                raise MailError(f"{a['name']} couldn't be read. Attach it again.", "rejected")
     return files
 
 
@@ -460,7 +506,7 @@ def recheck_pending(now=None, batch=50):
 
 
 def send_email(user, *, to, cc=(), bcc=(), subject, text, attachments=(), records=(), campaign=None,
-               unsubscribe=False, box: Mailbox | None = None, contacts=None, files=None) -> SentEmail:
+               unsubscribe=False, box: Mailbox | None = None, contacts=None, files=None, request=None) -> SentEmail:
     """Send now from the person's own mailbox and record it. Raises MailError."""
     box = box or mailbox_for(user)
     account = box.account
@@ -468,7 +514,7 @@ def send_email(user, *, to, cc=(), bcc=(), subject, text, attachments=(), record
         raise MailError(f"You've sent {daily_limit(account)} emails today, this install's daily limit for one "
                         "mailbox. It resets at midnight.", "limit")
     if files is None:
-        files = read_attachments(list(attachments), user)
+        files = read_attachments(list(attachments), user, request)
     named = {e.lower(): c.full_name for c in (contacts if contacts is not None else contacts_by_email([*to, *cc, *bcc]))
              for e in (c.work_email, c.personal_email) if e}
     out = Outgoing(

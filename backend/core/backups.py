@@ -21,7 +21,8 @@ from django.db import connection, transaction
 from django.utils import timezone
 
 FORMAT_VERSION = 1
-NAME_RE = re.compile(r"^dealflow-(daily|manual|pre-restore)-\d{8}-\d{6}\.zip$")
+# .dfb = encrypted (decision 63, S4); .zip = from before backups were encrypted (still restorable).
+NAME_RE = re.compile(r"^dealflow-(daily|manual|pre-restore)-\d{8}-\d{6}\.(dfb|zip)$")
 EXCLUDE = ["contenttypes", "auth.permission", "sessions"]
 
 
@@ -88,11 +89,21 @@ def create_backup(kind: str = "manual") -> Path:
 
     assert kind in ("daily", "manual", "pre-restore")
     stamp = timezone.localtime().strftime("%Y%m%d-%H%M%S")
-    target = backup_dir() / f"dealflow-{kind}-{stamp}.zip"
+    target = backup_dir() / f"dealflow-{kind}-{stamp}.dfb"
     fs = FirmSettings.load()
     with _Lock():
         try:
-            _write_zip(target, kind)
+            from . import backup_crypto
+
+            plain = backup_dir() / f".{target.stem}.zip.part"
+            try:
+                _write_zip(plain, kind)
+                part = target.with_suffix(".dfb.part")
+                backup_crypto.encrypt(plain, part, {"kind": kind, "created_at": timezone.now().isoformat(),
+                                                    "firm_name": fs.firm_name})
+                part.replace(target)
+            finally:
+                plain.unlink(missing_ok=True)
         except Exception as e:  # record the failure for the Settings screen
             FirmSettings.objects.filter(pk=1).update(last_backup_error=str(e)[:2000])
             raise
@@ -104,7 +115,9 @@ def create_backup(kind: str = "manual") -> Path:
 
 def list_backups() -> list[dict]:
     out = []
-    for p in sorted(backup_dir().glob("dealflow-*.zip"), reverse=True):
+    stamp = re.compile(r"(\d{8}-\d{6})")
+    files = [p for p in backup_dir().glob("dealflow-*") if NAME_RE.match(p.name)]
+    for p in sorted(files, key=lambda x: stamp.search(x.name).group(1), reverse=True):
         if not NAME_RE.match(p.name):
             continue
         st = p.stat()
@@ -146,6 +159,15 @@ def restore_backup(fileobj) -> dict:
         zpath = tmp / "upload.zip"
         with open(zpath, "wb") as out:
             shutil.copyfileobj(fileobj, out)
+        from . import backup_crypto
+
+        if backup_crypto.is_encrypted(zpath):
+            plain = tmp / "decrypted.zip"
+            try:
+                backup_crypto.decrypt(zpath, plain)
+            except backup_crypto.BackupKeyError as e:
+                raise BackupError(str(e))
+            zpath = plain
         try:
             z = zipfile.ZipFile(zpath)
         except zipfile.BadZipFile:

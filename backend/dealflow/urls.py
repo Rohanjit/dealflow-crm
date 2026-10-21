@@ -8,6 +8,7 @@ from accounts import views as a
 from core import audit_views as av
 from core import guest as g
 from core import insight_views as iv
+from core import key_views as kv
 from mail import views as m
 from reports import views as rv
 from core import layout_views as lv
@@ -98,6 +99,12 @@ api = [
     path("choice-options/<int:pk>/", c.ChoiceOptionView.as_view()),
     path("backups/", c.BackupListView.as_view()),
     path("backups/restore/", c.BackupRestoreView.as_view()),
+    path("backups/key/", kv.BackupKeyView.as_view()),
+    path("vault/keys/", kv.VaultKeysView.as_view()),
+    path("vault/keys/grant/", kv.VaultGrantView.as_view()),
+    path("vault/keys/recovery-key/", kv.VaultRecoveryKeyView.as_view()),
+    path("vault/keys/recover/", kv.VaultRecoverView.as_view()),
+    path("vault/keys/rotate/", kv.VaultRotateView.as_view()),
     path("backups/<str:name>/download/", c.BackupDownloadView.as_view()),
     path("dashboard/", d.DashboardView.as_view()),
     path("deals/<int:pk>/matches/", d.MatchesView.as_view()),

@@ -6,3 +6,8 @@ backend/data
 data
 .git
 .env
+**/*-keys
+keys
+*.key
+*.pem
+secrets

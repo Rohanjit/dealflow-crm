@@ -311,7 +311,7 @@ class SendView(APIView):
         body = _text(d, "body", 100_000, "Message", required=True)
         try:
             se = service.send_email(request.user, to=to, cc=cc, bcc=bcc, subject=subject, text=body,
-                                    attachments=attachments, records=[(mod, obj)])
+                                    attachments=attachments, records=[(mod, obj)], request=request)
         except MailError as e:
             return _err(e)
         current.set_subject(mod.key, obj.pk, mod.title_of(obj))
@@ -537,7 +537,7 @@ class CampaignActionView(APIView):
                 raise ValidationError({"detail": " ".join(probs)})
             try:
                 box = service.mailbox_for(request.user)
-                service.read_attachments(c.attachments or [], request.user)
+                service.read_attachments(c.attachments or [], request.user, request)
             except MailError as e:
                 return _err(e)
             del box  # only checked: the scheduler sends
@@ -645,7 +645,7 @@ class CampaignTestView(APIView):
         subject, body = cmp.compose(c, values)
         try:
             box = service.mailbox_for(request.user)
-            files = service.read_attachments(c.attachments or [], request.user)
+            files = service.read_attachments(c.attachments or [], request.user, request)
             from .providers import Outgoing
 
             out = Outgoing(from_name=request.user.full_name, from_email=box.email, to=[("", box.email)],

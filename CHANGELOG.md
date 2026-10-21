@@ -4,6 +4,28 @@ Security-relevant changes are listed with what they mean for an install.
 
 ## Unreleased
 
+### Encryption at rest and keys (phase S4 of decision 63)
+- **Keys are kept apart from the data** in `DEALFLOW_KEYS_DIR` (Docker: its own `dealflow-keys` volume at
+  `/keys`; otherwise `<data>-keys` beside the data folder), owner-only. The Django secret moved there from the
+  data folder. A copy of the data volume, the database or a backup is unreadable on its own. A missing key
+  stops the app rather than making a new one over encrypted data. See `docs/key-management.md`.
+- **Database:** SQLite installs use SQLCipher 4 (AES-256, `sqlcipher3-binary`, pinned); an existing plain
+  database is encrypted in place on first start. Postgres: see `docs/postgres-encryption.md` (disk or
+  managed-service encryption, TLS to the database).
+- **Vault files:** AES-256-GCM under one firm Vault key, bound to the document (key id + SHA-256). The Vault
+  key is stored only sealed to each person's X25519 key, whose private half is sealed by Argon2id(PIN) mixed
+  with the master key, and with a recovery key shown once to an admin. While someone's Vault is open the key
+  sits in their session sealed by a key only their browser holds (HttpOnly, SameSite=Strict cookie). Older
+  files are encrypted the first time someone opens the Vault. Admins: Give access now, Make a recovery key,
+  Use a recovery key, Change the Vault key (every file re-encrypted).
+- **Backups:** AES-256-GCM in 1 MiB pieces (`.dfb`), key in the keys folder; Settings > Backups downloads the
+  key file (password needed) to keep offline; restoring needs the password and, on another server, the key
+  file. Older plain `.zip` backups still restore.
+- **Files waiting to be emailed** (one-to-one and campaigns) are sealed with the master key; Vault documents
+  attached to a campaign are kept as sealed copies so the scheduler never needs anyone's PIN.
+- `manage.py rotate_keys --type=backup|database|secret` rotates keys; Settings > Security shows what is
+  encrypted and where the keys are.
+
 ### Field access per role (phase S3 of decision 63)
 - Roles & permissions sets, per module and per field, **Can change / Read only / Hidden** (`accounts.RoleFieldAccess`).
   Admins always see everything; the primary field, the pipeline's own fields and company details shown on

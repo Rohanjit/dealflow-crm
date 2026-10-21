@@ -246,6 +246,12 @@ class KeepingTests(AuditBase):
 
         Investor.objects.create(firm_name="Kept", created_by=self.admin, updated_by=self.admin)
         self.client.get("/api/m/investors/")
-        z = zipfile.ZipFile(create_backup("manual"))
+        from django.conf import settings as dj
+
+        from core import backup_crypto
+
+        plain = dj.DATA_DIR / "audit-plain.zip"
+        backup_crypto.decrypt(create_backup("manual"), plain)
+        z = zipfile.ZipFile(plain)
         self.assertTrue(any(n.startswith("audit/") and n.endswith(".log") for n in z.namelist()))
         self.assertFalse(any(n == "audit/temp-key.json" for n in z.namelist()))

@@ -957,7 +957,7 @@ class BackupDownloadView(APIView):
             p = backups.backup_path(name)
         except backups.BackupError:
             raise Http404
-        return FileResponse(open(p, "rb"), as_attachment=True, filename=p.name, content_type="application/zip")
+        return FileResponse(open(p, "rb"), as_attachment=True, filename=p.name, content_type="application/octet-stream")
 
 
 class BackupRestoreView(APIView):
@@ -970,6 +970,19 @@ class BackupRestoreView(APIView):
             raise ValidationError({"file": "Choose a backup file."})
         if request.data.get("confirm") != "RESTORE":
             raise ValidationError({"confirm": "Type RESTORE to confirm."})
+        pw = request.data.get("password")
+        if not isinstance(pw, str) or not request.user.check_password(pw):
+            raise ValidationError({"password": "Enter your password to restore."})
+        if key_file := request.FILES.get("key"):
+            # The backup key of the install that made the backup (moving to a new server).
+            from dealflow import keys
+
+            if key_file.size > 1000:
+                raise ValidationError({"key": "That isn't a Dealflow backup key file."})
+            try:
+                keys.import_backup_key(key_file.read().decode("utf-8", "replace"))
+            except keys.KeyMissing as e:
+                raise ValidationError({"key": str(e)})
         try:
             result = backups.restore_backup(f)
         except backups.BackupError as e:

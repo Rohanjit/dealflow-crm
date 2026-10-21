@@ -18,9 +18,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./
 COPY --from=frontend /frontend/dist /app/frontend/dist
 COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh && useradd --create-home --uid 1000 dealflow && mkdir -p /data && chown dealflow /data
+RUN chmod +x /entrypoint.sh && useradd --create-home --uid 1000 dealflow && mkdir -p /data /keys && chown dealflow /data /keys && chmod 700 /keys
 USER dealflow
-VOLUME ["/data"]
+VOLUME ["/data", "/keys"]
 EXPOSE 8000
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["web"]

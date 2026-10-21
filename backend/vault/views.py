@@ -17,6 +17,7 @@ from core.sample import GUEST_PIN
 from core.records import apply_values, clean_values, serialize, text_in, with_related
 from core.registry import enabled_map, get_module
 
+from . import keyring
 from . import pin as vp
 from .files import ACCEPTED, KINDS, FileRejected, check, clean_name, max_bytes
 from .models import Document
@@ -45,6 +46,8 @@ def status_payload(request) -> dict:
         "max_file_mb": max_bytes() // (1024 * 1024),
         # Guests can't set a PIN (they have no password), so the sample comes with one.
         "sample_pin": GUEST_PIN if is_guest(user) else None,
+        # Files are encrypted: "ready" once this person holds the Vault key, "waiting" for a colleague.
+        "files": "ready" if keyring.current(request) else ("waiting" if until and keyring.active_key() else "locked"),
     }
 
 
@@ -76,9 +79,15 @@ class VaultPinView(APIView):
         elif not user.check_password(str(request.data.get("password") or "")):
             left = vp.record_failure(user)
             raise ValidationError({"password": "That isn't your password." + _tries(left)})
+        old = str(request.data.get("current_pin") or "") if vp.has_pin(user) else None
         vp.set_pin(user, new)
+        keyring.on_pin_set(user, new, old_pin=old)
         vp.open_session(request)
-        return Response(status_payload(request))
+        keyring.unlock(request, user, new)
+        keyring.on_use(request)
+        resp = Response(status_payload(request))
+        keyring.set_cookie(request, resp)
+        return resp
 
 
 def _tries(left: int) -> str:
@@ -103,13 +112,19 @@ class VaultUnlockView(APIView):
             raise ValidationError({"pin": "Wrong PIN." + _tries(left)})
         vp.record_success(user)
         vp.open_session(request)
-        return Response(status_payload(request))
+        keyring.unlock(request, user, str(request.data.get("pin")))
+        keyring.on_use(request)
+        resp = Response(status_payload(request))
+        keyring.set_cookie(request, resp)
+        return resp
 
 
 class VaultLockView(APIView):
     def post(self, request):
         vp.close_session(request)
-        return Response(status_payload(request))
+        resp = Response(status_payload(request))
+        keyring.forget(request, resp)
+        return resp
 
 
 class VaultUploadView(APIView):
@@ -157,11 +172,18 @@ class VaultUploadView(APIView):
                 raise ValidationError(errors)
             prepared.append((f, name, ext, kind, sha, values))
 
+        from django.core.files.base import ContentFile
+
+        from . import crypto
+
+        key_id, key = keyring.require_key(request)
         created = []
         with transaction.atomic():
             for f, name, ext, kind, sha, values in prepared:
-                doc = Document(file=f, file_name=name, file_type=kind.label, file_size=f.size,
-                               content_type=kind.content_type, sha256=sha)
+                f.seek(0)
+                blob = crypto.encrypt_file(f.read(), key, crypto.file_aad(sha, key_id))
+                doc = Document(file=ContentFile(blob, name=f"upload.{ext}"), file_name=name, file_type=kind.label,
+                               file_size=f.size, content_type=kind.content_type, sha256=sha, encrypted_with_id=key_id)
                 doc._ext = ext
                 created.append(apply_values(doc, mod, values, request.user))
         docs = {d.pk: d for d in with_related(Document.objects.filter(pk__in=[d.pk for d in created]), mod)}
@@ -178,11 +200,18 @@ class VaultDownloadView(APIView):
         if not doc:
             raise NotFound("This document doesn't exist or has been archived.")
         inline = request.query_params.get("inline") == "1" and doc.content_type in INLINE_TYPES
+        import io
+
         try:
-            fh = doc.file.open("rb")
+            data = keyring.read_document(request, doc)
         except (FileNotFoundError, ValueError):
             raise NotFound("The file is missing from the server. Restore it from a backup.")
-        resp = FileResponse(fh, as_attachment=not inline, filename=doc.file_name, content_type=doc.content_type)
+        except PermissionDenied:
+            raise
+        except Exception:  # the file's tag doesn't match: changed on disk or the wrong key
+            raise NotFound("This file can't be opened: it was changed outside Dealflow or needs another key.")
+        resp = FileResponse(io.BytesIO(data), as_attachment=not inline, filename=doc.file_name,
+                            content_type=doc.content_type)
         resp["X-Content-Type-Options"] = "nosniff"
         resp["Cache-Control"] = "private, no-store"
         if inline and doc.content_type.startswith("image/"):

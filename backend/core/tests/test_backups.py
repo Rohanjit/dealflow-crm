@@ -27,14 +27,22 @@ class BackupTests(APITestBase):
         self.assertEqual(listing["backups"][0]["name"], name)
         dl = self.client.get(f"/api/backups/{name}/download/")
         blob = b"".join(dl.streaming_content)
-        z = zipfile.ZipFile(io.BytesIO(blob))
+        # Encrypted (decision 63, S4): nothing readable without the backup key.
+        self.assertTrue(blob.startswith(b"DFBK"))
+        self.assertNotIn(b"Blume", blob)
+        from core import backup_crypto
+
+        src, plain = settings.DATA_DIR / "t.dfb", settings.DATA_DIR / "t.zip"
+        src.write_bytes(blob)
+        backup_crypto.decrypt(src, plain)
+        z = zipfile.ZipFile(plain)
         self.assertIn("files/doc.txt", z.namelist())
 
         # change things, then restore
         Investor.objects.all().delete()
         self.client.post("/api/m/investors/", {"firm_name": "Other"}, format="json")
         (media / "doc.txt").unlink()
-        r = self.client.post("/api/backups/restore/", {"file": SimpleUploadedFile("b.zip", blob), "confirm": "RESTORE"}, format="multipart")
+        r = self.client.post("/api/backups/restore/", {"file": SimpleUploadedFile("b.dfb", blob), "confirm": "RESTORE", "password": self.password}, format="multipart")
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual(list(Investor.objects.values_list("firm_name", flat=True)), ["Blume"])
         self.assertEqual([t.name for t in Investor.objects.get().tags.all()], ["a"])
@@ -59,13 +67,13 @@ class BackupTests(APITestBase):
         before = (Contact.objects.get().company_id, Deal.objects.count(), DealInvestor.objects.count(), Task.objects.count())
         blob = open(backups.create_backup("manual"), "rb").read()
         Task.objects.all().delete()
-        r = c.post("/api/backups/restore/", {"file": SimpleUploadedFile("b.zip", blob), "confirm": "RESTORE"}, format="multipart")
+        r = c.post("/api/backups/restore/", {"file": SimpleUploadedFile("b.zip", blob), "confirm": "RESTORE", "password": self.password}, format="multipart")
         self.assertEqual(r.status_code, 200, r.content)
         after = (Contact.objects.get().company_id, Deal.objects.count(), DealInvestor.objects.count(), Task.objects.count())
         self.assertEqual(after, before)
 
     def test_restore_rejects_garbage_and_needs_confirm(self):
-        r = self.client.post("/api/backups/restore/", {"file": SimpleUploadedFile("b.zip", b"nope"), "confirm": "RESTORE"}, format="multipart")
+        r = self.client.post("/api/backups/restore/", {"file": SimpleUploadedFile("b.zip", b"nope"), "confirm": "RESTORE", "password": self.password}, format="multipart")
         self.assertEqual(r.status_code, 400)
         r = self.client.post("/api/backups/restore/", {"file": SimpleUploadedFile("b.zip", b"nope")}, format="multipart")
         self.assertEqual(r.status_code, 400)
@@ -75,7 +83,7 @@ class BackupTests(APITestBase):
         fs.backup_keep = 2
         fs.save()
         d = backups.backup_dir()
-        for old in d.glob("*.zip"):
+        for old in d.glob("dealflow-*"):
             old.unlink()
         for i in range(4):
             (d / f"dealflow-daily-2026010{i}-020000.zip").write_bytes(b"x")

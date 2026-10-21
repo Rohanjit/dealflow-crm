@@ -42,6 +42,9 @@ def set_pin(user, pin: str):
 
 
 def clear_pin(user):
+    from . import keyring
+
+    keyring.on_pin_cleared(user)
     user.vault_pin = ""
     user.vault_pin_failures = 0
     user.vault_locked_until = None
@@ -82,7 +85,10 @@ def open_session(request):
 
 
 def close_session(request):
+    from . import keyring
+
     request.session.pop(SESSION_KEY, None)
+    keyring.forget(request)
 
 
 def open_until(request) -> dt.datetime | None:
@@ -109,3 +115,6 @@ def require_open(request):
         close_session(request)
         raise PermissionDenied({"detail": "The Vault is locked. Enter your PIN to open it.", "code": "vault_locked"})
     open_session(request)
+    from . import keyring
+
+    keyring.on_use(request)  # grant colleagues waiting, encrypt older files

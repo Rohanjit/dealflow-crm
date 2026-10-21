@@ -1,11 +1,11 @@
 import {
-  Alert, Button, FileInput, Group, Modal, NumberInput, Paper, Select, Stack, Switch, Table, Text, TextInput, Title,
+  Alert, Button, FileInput, Group, Modal, NumberInput, Paper, PasswordInput, Select, Stack, Switch, Table, Text, TextInput, Title,
 } from "@mantine/core";
 import { IconDownload, IconUpload } from "@tabler/icons-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
-import { api, download } from "../api";
+import { api, download, postDownload } from "../api";
 import { useMe } from "../context";
 import { errorMessage, notifyError, notifyOk } from "../components/errors";
 import { formatBytes, formatDateTime } from "../format";
@@ -63,7 +63,7 @@ export default function BackupsSettings() {
           <Group justify="space-between">
             <div>
               <Title order={4}>Backups</Title>
-              <Text size="sm" c="dimmed">Each backup holds all records and uploaded files. They're stored on this server{data ? <> in <code>{data.folder}</code></> : null}.</Text>
+              <Text size="sm" c="dimmed">Each backup holds all records and uploaded files, encrypted. They're stored on this server{data ? <> in <code>{data.folder}</code></> : null}.</Text>
             </div>
             <Button leftSection={<IconDownload size={16} />} onClick={backupNow} loading={busy === "now"}>Download a backup now</Button>
           </Group>
@@ -98,13 +98,51 @@ export default function BackupsSettings() {
           </Table.Tbody>
         </Table>
       </Paper>
+      <BackupKey />
       {restoreOpen && <RestoreModal onClose={() => setRestoreOpen(false)} />}
     </Stack>
   );
 }
 
+/** The key that unlocks the backups: kept apart from them, needed to restore on another server. */
+function BackupKey() {
+  const [pw, setPw] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function get() {
+    setBusy(true);
+    setErr("");
+    try {
+      await postDownload("backups/key/", { password: pw });
+      setPw("");
+      notifyOk("Backup key downloaded. Keep it somewhere safe, apart from the backups.");
+    } catch (e) {
+      setErr(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Paper withBorder p="lg">
+      <Stack gap="xs">
+        <Title order={5}>Backup key</Title>
+        <Text size="sm" c="dimmed">
+          Backups are encrypted with a key kept on this server, apart from them. To restore a backup on a new server (if this one
+          is lost), you'll need this key file too. Download it once and keep it in a password manager or a safe, never next to the backups.
+        </Text>
+        <Group align="flex-end" gap="sm">
+          <PasswordInput label="Your password" value={pw} onChange={(e) => setPw(e.currentTarget.value)} w={260} error={err || undefined} />
+          <Button variant="default" leftSection={<IconDownload size={16} />} onClick={get} loading={busy} disabled={!pw}>Download the backup key</Button>
+        </Group>
+      </Stack>
+    </Paper>
+  );
+}
+
 function RestoreModal({ onClose }: { onClose: () => void }) {
   const [file, setFile] = useState<File | null>(null);
+  const [keyFile, setKeyFile] = useState<File | null>(null);
+  const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -116,6 +154,8 @@ function RestoreModal({ onClose }: { onClose: () => void }) {
     const form = new FormData();
     form.append("file", file);
     form.append("confirm", confirm);
+    form.append("password", password);
+    if (keyFile) form.append("key", keyFile);
     try {
       await api("backups/restore/", { form });
       // Everyone, including you, is signed out by a restore.
@@ -134,11 +174,13 @@ function RestoreModal({ onClose }: { onClose: () => void }) {
           A safety backup of the current data is taken first. Everyone will be signed out.
         </Alert>
         {error && <Alert color="red">{error}</Alert>}
-        <FileInput label="Backup file (.zip)" accept=".zip" value={file} onChange={setFile} />
+        <FileInput label="Backup file" accept=".dfb,.zip" value={file} onChange={setFile} />
+        <FileInput label="Backup key file (only for a backup from another server)" accept=".txt" value={keyFile} onChange={setKeyFile} clearable />
+        <PasswordInput label="Your password" value={password} onChange={(e) => setPassword(e.currentTarget.value)} />
         <TextInput label="Type RESTORE to confirm" value={confirm} onChange={(e) => setConfirm(e.currentTarget.value)} />
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>Cancel</Button>
-          <Button color="red" onClick={restore} loading={busy} disabled={!file || confirm !== "RESTORE"}>Restore</Button>
+          <Button color="red" onClick={restore} loading={busy} disabled={!file || !password || confirm !== "RESTORE"}>Restore</Button>
         </Group>
       </Stack>
     </Modal>

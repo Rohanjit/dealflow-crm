@@ -13,8 +13,11 @@ x-app: &app
       required: false
   environment:
     TZ: ${TZ:-Asia/Kolkata}
+    DEALFLOW_KEYS_DIR: /keys
   volumes:
     - dealflow-data:/data
+    # Keys live in their own volume, apart from the data they protect (docs/key-management.md).
+    - dealflow-keys:/keys
 
 services:
   app:
@@ -42,4 +45,5 @@ services:
 
 volumes:
   dealflow-data:
+  dealflow-keys:
   dealflow-db:

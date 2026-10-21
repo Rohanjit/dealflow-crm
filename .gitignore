@@ -30,3 +30,7 @@ media/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Keys (kept apart from data; never committed)
+*-keys/
+keys/

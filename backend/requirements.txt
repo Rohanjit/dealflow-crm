@@ -12,3 +12,4 @@ argon2-cffi==25.1.0
 webauthn==2.7.0
 pyotp==2.9.0
 segno==1.6.6
+sqlcipher3-binary==0.5.4
