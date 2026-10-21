@@ -104,6 +104,8 @@ ACTIONS = {
     ("VaultRecoveryKeyView", "POST"): "Made a Vault recovery key",
     ("VaultRecoverView", "POST"): "Used the Vault recovery key",
     ("VaultRotateView", "POST"): "Changed the Vault key",
+    ("ScannerStatusView", "GET"): "Viewed the virus scanner",
+    ("ScanRefusalAlertsView", "GET"): "Checked refused files",
     ("SessionView", "GET"): "Checked their session",
     ("SessionView", "POST"): "Chose to stay signed in",
     ("SecuritySettingsView", "GET"): "Viewed security settings",

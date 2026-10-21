@@ -263,7 +263,12 @@ class AttachmentUploadView(APIView):
             raise ValidationError({"files": "Choose a file."})
         if len(files) > 20:
             raise ValidationError({"files": "Attach at most 20 files."})
+        from core import antivirus
+        from vault.files import clean_name
+
         out = []
+        for f in files:
+            antivirus.check_upload(f, name=clean_name(f.name), place="email", user=request.user)
         for f in files:
             try:
                 out.append(service.save_upload(request.user, f))

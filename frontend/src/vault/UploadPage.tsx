@@ -9,7 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import { errorMessage, fieldErrors, notifyOk } from "../components/errors";
 import { useSchema } from "../context";
 import { formatBytes } from "../format";
@@ -86,6 +86,7 @@ export default function UploadPage({ module }: { module: ModuleSchema }) {
       notifyOk(docs.length === 1 ? `${docs[0]._title} is in the Vault.` : `${docs.length} documents are in the Vault.`);
       nav(returnTo ?? (docs.length === 1 ? `/m/vault/${docs[0].id}` : "/m/vault"), { replace: true });
     } catch (e) {
+      if (e instanceof ApiError && e.code === "scanner_unavailable") qc.invalidateQueries({ queryKey: ["vault-status"] });
       const fe = fieldErrors(e);
       const list = (e as { fields?: Record<string, string> }).fields?.files;
       setProblems(list ? [list] : []);
@@ -97,6 +98,7 @@ export default function UploadPage({ module }: { module: ModuleSchema }) {
   }
 
   const good = picked.filter((p) => !p.problem).length;
+  const paused = status?.uploads_allowed === false;
   return (
     <Stack gap="lg" maw={1000}>
       <Breadcrumbs>
@@ -105,6 +107,12 @@ export default function UploadPage({ module }: { module: ModuleSchema }) {
       </Breadcrumbs>
       <Title order={2}>Upload documents</Title>
       {problems.length > 0 && <Alert color="red">{problems.map((p, i) => <div key={i}>{p}</div>)}</Alert>}
+      {paused && (
+        <Alert color="orange" title="Uploads are paused">
+          Every file is checked for viruses before it's stored, and the virus scanner isn't answering right now.
+          Try again in a few minutes, or ask your admin to check it.
+        </Alert>
+      )}
 
       <Paper withBorder radius="md" p="lg">
         <UnstyledButton w="100%" onClick={() => input.current?.click()}
@@ -153,7 +161,7 @@ export default function UploadPage({ module }: { module: ModuleSchema }) {
 
       <Group justify="flex-end" pb="xl">
         <Button variant="default" component={Link} to={returnTo ?? "/m/vault"}>Cancel</Button>
-        <Button onClick={upload} loading={busy} disabled={!good} leftSection={<IconCloudUpload size={16} />}>
+        <Button onClick={upload} loading={busy} disabled={!good || paused} leftSection={<IconCloudUpload size={16} />}>
           {good > 1 ? `Upload ${good} documents` : "Upload"}
         </Button>
       </Group>

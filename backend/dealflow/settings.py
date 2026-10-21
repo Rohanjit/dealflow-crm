@@ -164,8 +164,22 @@ AUTH_PASSWORD_VALIDATORS = [
 # Two-step login for everyone (decision 63). Only the test suite turns it off, for tests that are
 # about something else; tests of sign-in turn it back on.
 MFA_REQUIRED = True
+# Virus scanning (decision 63, S5): every uploaded file goes through ClamAV (clamd) before it is stored,
+# and uploads are refused while the scanner can't be reached ("fails closed"). DEALFLOW_CLAMD is
+# "host:port" or the path of clamd's socket. Turning it off is honoured only on a development server
+# (DJANGO_DEBUG=1) and in the test run; Settings > Security shows it in red.
+CLAMD_ADDRESS = os.environ.get("DEALFLOW_CLAMD", "").strip()
+CLAMD_TIMEOUT = int(os.environ.get("DEALFLOW_CLAMD_TIMEOUT", "120") or 120)
+
+
+def antivirus_mode(debug: bool, value: str) -> str:
+    return "off" if debug and value.strip().lower() == "off" else "required"
+
+
+ANTIVIRUS = antivirus_mode(DEBUG, os.environ.get("DEALFLOW_ANTIVIRUS", ""))
 if len(sys.argv) > 1 and sys.argv[1] == "test":
     MFA_REQUIRED = False
+    ANTIVIRUS = "off"  # tests of scanning turn it on against a stand-in clamd
     VAULT_KDF = {"time_cost": 1, "memory_cost": 256, "parallelism": 1}  # Vault PIN keys, lighter for tests
     # Same algorithm, lighter settings, so the test suite doesn't spend minutes hashing.
     PASSWORD_HASHERS = ["accounts.validators.TestArgon2Hasher"]

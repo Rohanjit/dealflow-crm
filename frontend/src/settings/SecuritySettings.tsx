@@ -10,6 +10,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { api } from "../api";
+import { useMe } from "../context";
+import { formatDateTime } from "../format";
 import { errorMessage, fieldErrors, notifyOk } from "../components/errors";
 import { Skeleton } from "../components/ui";
 
@@ -29,7 +31,15 @@ const IN_PLACE = [
   "Two-step login for everyone: passkeys or an authenticator app, with recovery codes.",
   "Fields can be hidden from or made read-only for each role.",
   "The database, Vault files, backups and files waiting to be emailed are encrypted, with the keys kept apart from them.",
+  "Every uploaded file is checked for viruses before it's stored, and Vault files again each time they're opened.",
 ];
+
+type ScanStatus = {
+  mode: "required" | "off"; configured: boolean; available: boolean; engine: string | null; signatures: string | null;
+  signatures_date: string | null; signatures_stale: boolean; problem: string | null; uploads_allowed: boolean;
+  refused_30_days: number;
+  recent: { id: number; at: string; place: string; file_name: string; signature: string; user: string | null }[];
+};
 
 type VaultKeys = {
   encrypted: boolean; files_waiting: number; people_with_access: number; people_waiting: number; has_recovery_key: boolean;
@@ -84,6 +94,7 @@ export default function SecuritySettings() {
         </Stack>
       </Paper>
       <Encryption />
+      <Scanner />
       <Paper withBorder p="lg">
         <Title order={5} mb="sm">Already in place</Title>
         <List spacing={6} size="sm" icon={<ThemeIcon size={18} radius="xl" color="teal" variant="light"><IconCheck size={12} /></ThemeIcon>}>
@@ -182,6 +193,56 @@ function Encryption() {
         )}
       </Modal>
       {useRec && <UseRecovery onClose={() => { setUseRec(false); refresh(); }} />}
+    </Paper>
+  );
+}
+
+function Scanner() {
+  const me = useMe();
+  const { data } = useQuery({
+    queryKey: ["scanner"], refetchInterval: 60_000,
+    queryFn: () => api<ScanStatus>("settings/security/scanner/", { background: true }),
+  });
+  if (!data) return null;
+  const line = (good: boolean, text: string) => (
+    <Group gap={8} wrap="nowrap" align="flex-start">
+      <ThemeIcon size={18} radius="xl" variant="light" color={good ? "teal" : "red"}>{good ? <IconCheck size={12} /> : <IconAlertTriangle size={12} />}</ThemeIcon>
+      <Text size="sm">{text}</Text>
+    </Group>
+  );
+  const when = (iso: string) => formatDateTime(iso, me);
+  return (
+    <Paper withBorder p="lg">
+      <Stack gap="sm">
+        <Title order={5}>Virus scanning</Title>
+        {data.mode === "off" ? (
+          <Alert color="red" variant="light" icon={<IconAlertTriangle size={16} />}>
+            Virus scanning is switched off on this development server (DEALFLOW_ANTIVIRUS=off). Files are stored without being checked.
+          </Alert>
+        ) : data.available ? (
+          line(true, `The scanner is working (${data.engine}). Uploads are checked before anything is stored.`)
+        ) : (
+          <Alert color="red" variant="light" icon={<IconAlertTriangle size={16} />} title="Uploads are paused">
+            The virus scanner isn't answering, so nobody can upload files until it's back. {data.problem}
+          </Alert>
+        )}
+        {data.available && data.signatures_date && line(!data.signatures_stale, data.signatures_stale
+          ? `Virus signatures are from ${data.signatures_date}, more than 3 days old. Check that the scanner can reach the internet to update.`
+          : `Virus signatures are up to date (${data.signatures_date}).`)}
+        <Text size="sm" c="dimmed">
+          {data.refused_30_days === 0 ? "No files refused in the last 30 days."
+            : `${data.refused_30_days} ${data.refused_30_days === 1 ? "file" : "files"} refused in the last 30 days. Refused files are never stored.`}
+        </Text>
+        {data.recent.length > 0 && (
+          <Stack gap={4}>
+            {data.recent.map((r) => (
+              <Text key={r.id} size="sm">
+                {when(r.at)} · {r.file_name} · {r.signature} · {r.place}{r.user ? ` by ${r.user}` : ""}
+              </Text>
+            ))}
+          </Stack>
+        )}
+      </Stack>
     </Paper>
   );
 }

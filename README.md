@@ -33,7 +33,7 @@ Dealflow is not a hosted service. You run it yourself with Docker, on a laptop f
 
 ## Install
 
-You need [Docker](https://docs.docker.com/get-docker/) with Compose.
+You need [Docker](https://docs.docker.com/get-docker/) with Compose, and about 3 GB of memory (the virus scanner that checks every upload uses about 1.5 GB).
 
 ```sh
 git clone https://github.com/Rohanjit/dealflow-crm.git
@@ -45,7 +45,9 @@ Open <http://localhost:8000>. You can **look around first** with a sample firm (
 
 **Public demo site:** set `DEALFLOW_DEMO=1` in `.env` on a server of its own. Visitors get **Continue as guest** with sample data that resets every day. Never set it on an install that holds real data.
 
-All data lives in the `dealflow-data` Docker volume: the database, uploaded files and daily backups (in `/data/backups` inside the volume). Backups can also be downloaded and restored from **Settings → Backups**.
+All data lives in the `dealflow-data` Docker volume: the encrypted database, encrypted uploaded files and daily encrypted backups (in `/data/backups` inside the volume). The keys that open them live apart, in the `dealflow-keys` volume; see [`docs/key-management.md`](docs/key-management.md). Backups can be downloaded and restored from **Settings → Backups**: download the backup key there too and keep it offline.
+
+Uploads are checked by a virus scanner (the `clamav` service) before they're stored. On first start it takes a few minutes to load, and uploads wait until it answers.
 
 Optional settings go in a `.env` file next to `docker-compose.yml`; see [`.env.example`](.env.example) for the port, time zone, Postgres and HTTPS options.
 
@@ -59,7 +61,9 @@ Optional settings go in a `.env` file next to `docker-compose.yml`; see [`.env.e
 # API on :8000
 cd backend && python -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
-DJANGO_DEBUG=1 python manage.py migrate && DJANGO_DEBUG=1 python manage.py runserver
+# (DEALFLOW_ANTIVIRUS=off skips virus scanning on a development server only;
+#  or run clamd: docker run -d -p 127.0.0.1:3310:3310 clamav/clamav:1.4 and set DEALFLOW_CLAMD=127.0.0.1:3310)
+DJANGO_DEBUG=1 DEALFLOW_ANTIVIRUS=off python manage.py migrate && DJANGO_DEBUG=1 DEALFLOW_ANTIVIRUS=off python manage.py runserver
 
 # App on :5173 (proxies /api to :8000)
 cd frontend && npm install && npm run dev

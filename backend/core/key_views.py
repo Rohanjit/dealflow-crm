@@ -135,3 +135,31 @@ class VaultRotateView(APIView):
         resp = Response({**result, **keyring.summary()})
         keyring.set_cookie(request, resp)
         return resp
+
+
+class ScannerStatusView(APIView):
+    """Settings > Security (admins): whether the virus scanner answers, its signatures, recent refusals."""
+
+    def get(self, request):
+        if not request.user.is_admin:
+            raise PermissionDenied("Only admins can see the virus scanner.")
+        from core import antivirus
+
+        return Response(antivirus.status_info())
+
+
+class ScanRefusalAlertsView(APIView):
+    """Files the scanner refused in the last 14 days, for admins' notification bell (`virus:<id>`)."""
+
+    def get(self, request):
+        if not request.user.is_admin:
+            return Response([])
+        from django.utils import timezone
+
+        from core.models import ScanRefusal
+
+        since = timezone.now() - timezone.timedelta(days=14)
+        rows = ScanRefusal.objects.filter(at__gte=since).select_related("user")[:20]
+        return Response([{"id": r.id, "at": r.at.isoformat(), "place": r.get_place_display(), "file_name": r.file_name,
+                          "signature": r.signature, "user": (r.user.full_name or r.user.email) if r.user else None}
+                         for r in rows])

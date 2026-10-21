@@ -4,6 +4,23 @@ Security-relevant changes are listed with what they mean for an install.
 
 ## Unreleased
 
+### Virus scanning (phase S5 of decision 63)
+- **Every upload is checked by ClamAV before it's stored:** Vault documents, email attachments from the
+  computer and import files. Files are streamed to clamd (`INSTREAM`, stdlib client in `core/antivirus.py`,
+  no new dependency); Vault files are checked before encryption, so the scanner sees the real content.
+- **Fails closed:** no scanner set up, scanner not answering, an error answer, or a file clamd couldn't check
+  completely (size or nesting limits, `AlertExceedsMax`) means the upload is refused (503
+  `scanner_unavailable` / 400 `infected`) and nothing is stored. The Vault's upload screen says "Uploads are
+  paused" while the scanner is down. Switching scanning off is only honoured on a development server.
+- **Checked again when opened:** a Vault file that matches newer signatures is refused on download and
+  reported (opening still works if the scanner is briefly down: the file was checked on upload).
+- **Refused files** are recorded (`core.ScanRefusal`: who, where, file name, signature, SHA-256; never the
+  file), written to the audit log, shown to admins in the notification bell and in Settings > Security, which
+  also shows the scanner's state and how old its signatures are (flagged after 3 days).
+- Docker Compose runs `clamav/clamav:1.4` with `deploy/clamav/clamd.conf` (limits above Dealflow's own, alert
+  on anything not fully checked; password-protected PDFs and archives accepted, a setting away from refused).
+  `manage.py check --deploy` warns when no scanner is set (`dealflow.W002`).
+
 ### Encryption at rest and keys (phase S4 of decision 63)
 - **Keys are kept apart from the data** in `DEALFLOW_KEYS_DIR` (Docker: its own `dealflow-keys` volume at
   `/keys`; otherwise `<data>-keys` beside the data folder), owner-only. The Django secret moved there from the

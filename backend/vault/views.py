@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 
 from accounts.models import User
 from accounts.permissions import flag_required
+from core import antivirus
 from core.guest import NotInSample, is_guest
 from core.sample import GUEST_PIN
 from core.records import apply_values, clean_values, serialize, text_in, with_related
@@ -47,6 +48,7 @@ def status_payload(request) -> dict:
         # Guests can't set a PIN (they have no password), so the sample comes with one.
         "sample_pin": GUEST_PIN if is_guest(user) else None,
         # Files are encrypted: "ready" once this person holds the Vault key, "waiting" for a colleague.
+        "uploads_allowed": antivirus.uploads_allowed(),
         "files": "ready" if keyring.current(request) else ("waiting" if until and keyring.active_key() else "locked"),
     }
 
@@ -160,6 +162,9 @@ class VaultUploadView(APIView):
                 problems.append(str(e))
         if problems:
             raise ValidationError({"files": problems})
+        # Every file through the virus scanner before anything is stored (decision 63, S5; fails closed).
+        for f in files:
+            antivirus.check_upload(f, name=clean_name(f.name), place="vault", user=request.user)
 
         enabled = enabled_map("vault")
         prepared = []
@@ -210,6 +215,8 @@ class VaultDownloadView(APIView):
             raise
         except Exception:  # the file's tag doesn't match: changed on disk or the wrong key
             raise NotFound("This file can't be opened: it was changed outside Dealflow or needs another key.")
+        # Checked again against today's signatures (a file that was clean when uploaded may not be now).
+        antivirus.check_stored(data, name=doc.file_name, user=request.user, document_id=doc.pk)
         resp = FileResponse(io.BytesIO(data), as_attachment=not inline, filename=doc.file_name,
                             content_type=doc.content_type)
         resp["X-Content-Type-Options"] = "nosniff"

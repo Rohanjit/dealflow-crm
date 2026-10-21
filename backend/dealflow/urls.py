@@ -101,6 +101,8 @@ api = [
     path("backups/restore/", c.BackupRestoreView.as_view()),
     path("backups/key/", kv.BackupKeyView.as_view()),
     path("vault/keys/", kv.VaultKeysView.as_view()),
+    path("settings/security/scanner/", kv.ScannerStatusView.as_view()),
+    path("security/refusals/", kv.ScanRefusalAlertsView.as_view()),
     path("vault/keys/grant/", kv.VaultGrantView.as_view()),
     path("vault/keys/recovery-key/", kv.VaultRecoveryKeyView.as_view()),
     path("vault/keys/recover/", kv.VaultRecoverView.as_view()),

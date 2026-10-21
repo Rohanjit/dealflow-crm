@@ -232,3 +232,23 @@ class AlertSnooze(models.Model):
 
     class Meta:
         unique_together = [("user", "kind", "module", "record_id")]
+
+
+class ScanRefusal(models.Model):
+    """A file the virus scanner refused (decision 63, S5): on upload to the Vault, as an email
+    attachment or as an import, or when a stored Vault file matched newer signatures on opening.
+    The file itself is never kept. Admins see these in the notification bell and Settings > Security."""
+
+    PLACES = [("vault", "Vault upload"), ("email", "Email attachment"), ("import", "Import"),
+              ("vault_open", "Opening a Vault file")]
+
+    at = models.DateTimeField(auto_now_add=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    place = models.CharField(max_length=12, choices=PLACES)
+    file_name = models.CharField(max_length=255)
+    signature = models.CharField(max_length=200)
+    sha256 = models.CharField(max_length=64, blank=True)
+    document_id = models.PositiveBigIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-at", "-id"]

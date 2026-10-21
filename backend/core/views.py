@@ -531,6 +531,9 @@ class ImportUploadView(APIView):
             raise ValidationError({"file": "Choose a file to upload."})
         if f.size > 20 * 1024 * 1024:
             raise ValidationError({"file": "Files are limited to 20 MB."})
+        from core import antivirus
+
+        antivirus.check_upload(f, name=(f.name or "file")[:255], place="import", user=request.user)
         try:
             rows = importer.read_rows(f.name, f.read())
         except importer.ImportError_ as e:

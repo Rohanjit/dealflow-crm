@@ -14,6 +14,8 @@ x-app: &app
   environment:
     TZ: ${TZ:-Asia/Kolkata}
     DEALFLOW_KEYS_DIR: /keys
+    # Every upload is checked by the virus scanner first; uploads wait while it's unavailable.
+    DEALFLOW_CLAMD: clamav:3310
   volumes:
     - dealflow-data:/data
     # Keys live in their own volume, apart from the data they protect (docs/key-management.md).
@@ -32,6 +34,20 @@ services:
     depends_on:
       - app
 
+  # Virus scanner (ClamAV). Needs about 1.5 GB of memory; the first start takes a few minutes while it
+  # loads its signatures, and uploads are refused until it answers. Signatures update themselves.
+  clamav:
+    image: clamav/clamav:1.4
+    restart: unless-stopped
+    volumes:
+      - ./deploy/clamav/clamd.conf:/etc/clamav/clamd.conf:ro
+      - dealflow-clamav:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 60s
+      timeout: 10s
+      start_period: 10m
+
   db:
     image: postgres:16-alpine
     profiles: ["postgres"]
@@ -47,3 +63,4 @@ volumes:
   dealflow-data:
   dealflow-keys:
   dealflow-db:
+  dealflow-clamav:

@@ -15,6 +15,8 @@ export type VaultStatus = {
   accepted: string[];
   max_file_mb: number;
   sample_pin: string | null;
+  // False while the virus scanner isn't answering: uploads are refused until it's back (decision 63, S5).
+  uploads_allowed?: boolean;
 };
 
 export const VAULT_CODES = new Set(["vault_locked", "vault_pin_required", "vault_locked_out"]);
