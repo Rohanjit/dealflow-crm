@@ -26,6 +26,7 @@ from core.models import ChoiceOption, FirmSettings, Note
 from core.modules import BUILT_MODULES
 from core.records import filter_queryset, read_value, text_in, visible, with_related
 from core.registry import CURRENCIES, enabled_map, get_module
+from core.records import subtitle_for
 
 FORMATS = ("xlsx", "csv", "pdf")
 LAYOUTS = ("table", "pages")
@@ -511,7 +512,7 @@ def pdf_pages(mod, qs, fields, ctx: Context, meta: dict, user) -> bytes:
             story.append(PageBreak())
         story.append(_p(mod.title_of(obj), st["rec"]))
         facts = [mod.singular]
-        if mod.subtitle and (sub := mod.subtitle(obj)):
+        if sub := subtitle_for(mod, obj):
             facts.append(sub)
         if mod.pipeline:
             p = mod.pipeline
@@ -535,7 +536,9 @@ def pdf_pages(mod, qs, fields, ctx: Context, meta: dict, user) -> bytes:
                 ("LEFTPADDING", (0, 0), (-1, -1), 0),
             ]))
             story.append(KeepTogether([_p(group, st["section"]), t]))
-        if tracker_mod is not None:
+        from core import access
+
+        if tracker_mod is not None and "investor" not in access.hidden(tracker_mod, user):
             entries = visible(tracker_mod.model.objects.filter(deal=obj, archived_at__isnull=True), tracker_mod, user) \
                 .select_related("investor").order_by("investor__firm_name")
             tp = tracker_mod.pipeline

@@ -17,6 +17,7 @@ from django.contrib.auth import get_user_model
 
 from . import access, matching
 from .models import AccessRequest, Deal, DealInvestor
+from core.records import subtitle_for
 
 User = get_user_model()
 
@@ -32,17 +33,20 @@ def _visible_deal(user, pk) -> Deal:
 
 
 def _summary(d: Deal, mod) -> dict:
-    return {
+    from core import access
+
+    no = access.hidden(mod)
+    return {k: (None if k in no else v) for k, v in {
         "id": d.pk,
         "title": d.company.name,
-        "subtitle": mod.subtitle(d),
+        "subtitle": subtitle_for(mod, d),
         "stage": d.stage,
         "status": d.status,
         "target_close_date": d.target_close_date.isoformat() if d.target_close_date else None,
         "mandate_expiry": d.mandate_expiry.isoformat() if d.mandate_expiry else None,
         "lead_banker": {"id": d.lead_banker_id, "name": d.lead_banker.full_name} if d.lead_banker_id else None,
         "target_raise": read_value(d, mod.field("target_raise")),
-    }
+    }.items()}
 
 
 class DashboardView(APIView):
@@ -69,6 +73,13 @@ class DashboardView(APIView):
             live.filter(status__in=["open", "on_hold"], mandate_expiry__lte=horizon).exclude(stage=p.won)
             .select_related("company", "lead_banker", "transaction_type").order_by("mandate_expiry", "pk")
         )
+        from core import access
+
+        no = access.hidden(mod)
+        if "target_close_date" in no:
+            near_close = near_close.none()  # the list itself would tell the dates
+        if "mandate_expiry" in no:
+            expiring = expiring.none()
         return Response({
             "days": days,
             "today": today.isoformat(),
@@ -105,10 +116,25 @@ class MatchesView(APIView):
         except ValueError:
             limit = 50
         q = (request.query_params.get("q") or "").strip()
+        from core import access
+
+        # A factor drawing on a field this person's role can't see is scored but not explained.
+        blocked = {factor for factor, fields in matching.FACTOR_FIELDS.items()
+                   if any(not access.can_see(m, k) for m, k in fields)}
+        facts = {k: (None if k in matching.FACT_FACTOR and matching.FACT_FACTOR[k] in blocked else v)
+                 for k, v in matching.facts(deal).items()}
+        results = matching.suggestions(deal, limit, q)
+        imod = get_module("investors")
+        for r in results:
+            r["reasons"] = [x if x["factor"] not in blocked else {**x, "text": "Not shown to your role"}
+                            for x in r["reasons"]]
+        if any(k in access.hidden(imod) for k in imod.subtitle_fields):
+            for r in results:
+                r["investor"]["subtitle"] = ""
         return Response({
-            "facts": matching.facts(deal),
+            "facts": facts,
             "weights": [{"factor": k, "points": full} for k, full, _ in matching.FACTORS],
-            "results": matching.suggestions(deal, limit, q),
+            "results": results,
         })
 
 

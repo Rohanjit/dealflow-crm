@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from .models import FirmSettings
 from .registry import enabled_map, get_module
+from .records import subtitle_for
 
 SETTINGS = {"investors": "stale_investor_days", "contacts": "stale_contact_days"}
 SNOOZE_DAYS = 30
@@ -59,7 +60,7 @@ def _item(module: str, obj, today: dt.date) -> dict:
         "module": module,
         "id": obj.pk,
         "title": mod.title_of(obj),
-        "subtitle": mod.subtitle(obj) if mod.subtitle else "",
+        "subtitle": subtitle_for(mod, obj),
         "last_contacted": obj.last_contacted.isoformat() if obj.last_contacted else None,
         "days": (today - since).days,
         "unowned": obj.relationship_owner_id is None,
@@ -74,7 +75,9 @@ def for_user(user) -> dict:
     for module in SETTINGS:
         days = days_for(module, fs)
         out["days"][module] = days
-        if not days or not user.can(module, "view"):
+        from . import access
+
+        if not days or not user.can(module, "view") or not access.can_see(module, "last_contacted", user):
             continue
         mine = Q(relationship_owner=user)
         if user.is_admin:

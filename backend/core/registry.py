@@ -260,6 +260,7 @@ class ModuleDef:
     groups: list[str]
     title_field: str
     subtitle: Callable | None = None  # record -> short text for search results
+    subtitle_fields: list[str] = field(default_factory=list)  # fields it shows (left out when hidden)
     # Import duplicate detection: record -> list of normalised keys; rows sharing a key warn.
     duplicate_keys: Callable | None = None
     extra_filters: Callable | None = None  # (queryset, query_params, user) -> queryset
@@ -364,10 +365,16 @@ def enabled_map(module_key: str) -> dict[str, bool]:
     layout of Companies. Custom fields are only in the list while they're shown at all."""
     from . import layout
 
+    from . import access
+
     mod = get_module(module_key)
     out = {}
     hidden_by = {}
+    no_access = access.hidden(mod)  # fields the signed-in person's role can't see (S3)
     for f in mod.fields:
+        if f.key in no_access:
+            out[f.key] = False
+            continue
         if not f.can_disable or f.key == mod.title_field or f.custom_key:
             out[f.key] = True
             continue

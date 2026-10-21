@@ -106,14 +106,14 @@ class UserManagementTests(APITestBase):
 
 class RoleTests(APITestBase):
     def test_create_and_edit_role(self):
-        r = self.client.post("/api/roles/", {"name": "Analyst", "perms": {"investors": {"edit": True}},
+        r = self.client.post("/api/roles/", {"name": "Analyst", "password": self.password, "perms": {"investors": {"edit": True}},
                                              "flags": {"restore_archive": True}}, format="json")
         self.assertEqual(r.status_code, 201, r.content)
         body = r.json()
         # edit implies view
         self.assertEqual(body["perms"]["investors"], {"view": True, "create": False, "edit": True, "delete": False})
         self.assertTrue(body["flags"]["restore_archive"])
-        r = self.client.patch(f"/api/roles/{body['id']}/", {"perms": {"investors": {"view": False}}}, format="json")
+        r = self.client.patch(f"/api/roles/{body['id']}/", {"perms": {"investors": {"view": False}}, "password": self.password}, format="json")
         self.assertFalse(r.json()["perms"]["investors"]["view"])
 
     def test_admin_role_locked(self):
@@ -126,7 +126,7 @@ class RoleTests(APITestBase):
         self.assertEqual(self.client.delete(f"/api/roles/{role.pk}/").status_code, 400)
 
     def test_duplicate_role_name(self):
-        r = self.client.post("/api/roles/", {"name": "member"}, format="json")
+        r = self.client.post("/api/roles/", {"name": "member", "password": self.password}, format="json")
         self.assertEqual(r.status_code, 400)
 
 

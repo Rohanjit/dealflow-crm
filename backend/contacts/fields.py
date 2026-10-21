@@ -115,6 +115,7 @@ MODULE = register(
         groups=[B, C, D, R, P, O],
         title_field="full_name",
         subtitle=subtitle,
+        subtitle_fields=["designation", "firm"],
         duplicate_keys=duplicate_keys,
         segment_field="firm",
         timeline=True,

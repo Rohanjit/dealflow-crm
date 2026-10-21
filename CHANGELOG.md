@@ -4,6 +4,21 @@ Security-relevant changes are listed with what they mean for an install.
 
 ## Unreleased
 
+### Field access per role (phase S3 of decision 63)
+- Roles & permissions sets, per module and per field, **Can change / Read only / Hidden** (`accounts.RoleFieldAccess`).
+  Admins always see everything; the primary field, the pipeline's own fields and company details shown on
+  another module (ruled by Companies) can't be restricted.
+- **Hidden** fields never leave the server for that role: record pages and lists (`records.serialize`), the
+  schema (the field isn't sent), search and filters (a hidden link filter matches nothing), sorting, lookups and
+  search subtitles, exports, reports (incl. the PDF tracker table), imports, the dashboard (near-close and
+  expiring lists vanish with their dates), Insights breakdowns and per-banker numbers, investor matching reasons
+  and facts, related sections on record pages, mail recipient suggestions and campaign merge fields, and
+  going-cold reminders.
+- **Read only** fields are shown but refused on create, edit, bulk edit, merge and import (400, "Your role can't
+  change this field"). Changes the app makes itself (Last contacted after a confirmed email) still apply.
+- Role changes now need the admin's password (create, edit, delete) and are written to the audit log with the
+  field-access rules before and after.
+
 ### Two-step login (phase S2 of decision 63)
 - **Required for every account** before anything else works (`403 code: mfa_enrol_required`), Just-me
   installs included. Exempt: the sample firm's Guest and a public demo site, which hold no real data.

@@ -484,7 +484,53 @@ def role_payload(r: Role) -> dict:
         "perms": r.module_perms(),
         "flags": r.flags(),
         "user_count": r.users.count(),
+        "field_access": _field_access(r),
     }
+
+
+def _field_access(r: Role) -> dict:
+    out: dict = {}
+    if not r.is_admin:
+        for a in r.field_access.all():
+            out.setdefault(a.module, {})[a.field] = a.level
+    return out
+
+
+def _save_field_access(role: Role, raw):
+    """{module: {field: "read" | "hidden"}} replaces the role's rules. Only fields that can be
+    restricted: not the primary field, not the pipeline's own, not company details shown on another
+    module (those follow Companies)."""
+    from core.access import LEVELS
+    from core.registry import get_module
+
+    from .models import RoleFieldAccess
+
+    if raw is None:
+        return
+    if not isinstance(raw, dict):
+        raise ValidationError({"field_access": "The field access couldn't be read."})
+    rows = []
+    for module, fields in raw.items():
+        if module not in BUILT_MODULES or not isinstance(fields, dict):
+            raise ValidationError({"field_access": f"Unknown module {str(module)[:30]}."})
+        mod = get_module(module)
+        for key, lvl in fields.items():
+            f = mod.field_map.get(key)
+            if f is None or f.key == mod.title_field or f.pipeline_role or f.via:
+                raise ValidationError({"field_access": f"{mod.label}: “{str(key)[:40]}” can't be restricted."})
+            if lvl in (None, "", "full"):
+                continue
+            if lvl not in LEVELS:
+                raise ValidationError({"field_access": "Pick full, read or hidden."})
+            rows.append(RoleFieldAccess(role=role, module=module, field=key, level=lvl))
+    RoleFieldAccess.objects.filter(role=role).delete()
+    RoleFieldAccess.objects.bulk_create(rows)
+
+
+def _check_password(request):
+    pw = request.data.get("password")
+    if not isinstance(pw, str) or not request.user.check_password(pw):
+        raise ValidationError({"password": "Enter your password to change roles."})
 
 
 class AdminRequired(IsActiveUser):
@@ -519,6 +565,14 @@ def _save_role(role: Role, d: dict):
         if vals["can_create"] or vals["can_edit"] or vals["can_delete"]:
             vals["can_view"] = True
         RoleModulePermission.objects.update_or_create(role=role, module=module, defaults=vals)
+    before = _field_access(role)
+    _save_field_access(role, d.get("field_access"))
+    from core import current
+
+    after = _field_access(role)
+    if before != after:
+        current.add_change({"record": f"roles:{role.pk}", "title": role.name, "kind": "edited", "changes": [
+            {"field": "Field access", "from": str(before)[:2000], "to": str(after)[:2000]}]})
 
 
 class RoleListView(APIView):
@@ -528,13 +582,14 @@ class RoleListView(APIView):
         return [AdminRequired(), NotInSample()]
 
     def get(self, request):
-        return Response([role_payload(r) for r in Role.objects.prefetch_related("module_permissions")])
+        return Response([role_payload(r) for r in Role.objects.prefetch_related("module_permissions", "field_access")])
 
     @transaction.atomic
     def post(self, request):
         if not _text(request.data.get("name")):
             raise ValidationError({"name": "Enter a role name."})
         role = Role(name="__new__")
+        _check_password(request)
         role.name = f"__new__{secrets.token_hex(4)}"
         role.save()
         _save_role(role, request.data)
@@ -549,6 +604,7 @@ class RoleDetailView(APIView):
         role = get_object_or_404(Role, pk=pk)
         if role.is_admin:
             raise ValidationError({"detail": "The Admin role always has full access and can't be changed."})
+        _check_password(request)
         _save_role(role, request.data)
         return Response(role_payload(role))
 
@@ -558,6 +614,7 @@ class RoleDetailView(APIView):
             raise ValidationError({"detail": "The Admin role can't be deleted."})
         if role.users.exists():
             raise ValidationError({"detail": "Move the people in this role to another role first."})
+        _check_password(request)
         role.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 

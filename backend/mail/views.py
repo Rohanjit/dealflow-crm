@@ -459,6 +459,9 @@ def _clean_campaign(request, d, partial=False) -> dict:
             out["send_at"] = when
     if bad := cmp.unknown_fields(out.get("subject", ""), out.get("body", "")):
         raise ValidationError({"body": "Unknown merge fields: " + ", ".join("{" + b + "}" for b in bad)})
+    if blocked := cmp.blocked_fields(request.user) & cmp.all_fields(out.get("subject", ""), out.get("body", "")):
+        raise ValidationError({"body": "Your role can't see " + ", ".join("{" + b + "}" for b in sorted(blocked))
+                                       + ", so it can't be used in your emails."})
     return out
 
 

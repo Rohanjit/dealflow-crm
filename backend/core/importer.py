@@ -180,6 +180,13 @@ def money_hint(text: str) -> dict:
     return {"currency": cur, "unit": unit}
 
 
+def _no_write(mod: ModuleDef) -> set[str]:
+    """Fields the importing person's role may not change (decision 63, S3)."""
+    from . import access
+
+    return access.readonly(mod)
+
+
 def suggest_mapping(mod: ModuleDef, headers: list[str], enabled: dict) -> list[dict]:
     """One entry per column: {field, currency, unit} (field may be None = don't import).
 
@@ -188,7 +195,7 @@ def suggest_mapping(mod: ModuleDef, headers: list[str], enabled: dict) -> list[d
     column holds the whole value."""
     candidates, parts = {}, {}
     for f in mod.fields:
-        if f.readonly or not enabled.get(f.key, True):
+        if f.readonly or not enabled.get(f.key, True) or f.key in _no_write(mod):
             continue
         for name in [f.label, f.key, *f.aliases]:
             candidates.setdefault(_norm(name), f.key)
@@ -691,7 +698,8 @@ def validate_mapping(mod: ModuleDef, mapping, width: int, enabled: dict) -> list
             raise ImportError_("Column matching doesn't fit this file. Upload it again.")
         if key:
             base = key[: -len(CU_SUFFIX)] if key.endswith(CU_SUFFIX) else key
-            if base not in mod.field_map or mod.field_map[base].readonly or not enabled.get(base, True):
+            if base not in mod.field_map or mod.field_map[base].readonly or not enabled.get(base, True) \
+                    or base in _no_write(mod):
                 raise ImportError_(f"Unknown field {key}.")
             if key.endswith(CU_SUFFIX) and mod.field_map[base].type != "money":
                 raise ImportError_(f"Unknown field {key}.")
@@ -707,7 +715,7 @@ def validate_mapping(mod: ModuleDef, mapping, width: int, enabled: dict) -> list
 def importable_fields(mod: ModuleDef, enabled: dict) -> list[dict]:
     out = []
     for f in mod.fields:
-        if f.readonly or not enabled.get(f.key, True):
+        if f.readonly or not enabled.get(f.key, True) or f.key in _no_write(mod):
             continue
         out.append({"key": f.key, "label": f.label, "type": f.type, "required": f.required})
         if f.type == "money":

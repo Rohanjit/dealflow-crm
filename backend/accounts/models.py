@@ -274,3 +274,18 @@ class UserSession(models.Model):
 
     class Meta:
         ordering = ["-last_seen"]
+
+
+class RoleFieldAccess(models.Model):
+    """A field a role can only read, or can't see at all (decision 63, S3). No row = full access.
+    Applied everywhere through core/access.py; the Admin role always sees everything."""
+
+    LEVELS = [("read", "Can see, can't change"), ("hidden", "Can't see")]
+
+    role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name="field_access")
+    module = models.CharField(max_length=30)
+    field = models.CharField(max_length=80)
+    level = models.CharField(max_length=10, choices=LEVELS)
+
+    class Meta:
+        unique_together = [("role", "module", "field")]

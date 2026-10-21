@@ -130,6 +130,7 @@ MODULE = register(
         groups=[B, P, F, T, R, O],
         title_field="firm_name",
         subtitle=subtitle,
+        subtitle_fields=["investor_type", "hq_city"],
         duplicate_keys=duplicate_keys,
         timeline=True,
         extra_filters=stale.make_filter("investors", ticket_filter),

@@ -24,6 +24,7 @@ from .modules import BUILT_MODULES
 from .pagination import StandardPagination
 from .records import apply_values, can_see, clean_values, filter_queryset, serialize, text_in, to_id, visible, with_related
 from .registry import CURRENCIES, UNITS, active_targets, all_modules, enabled_map, get_module
+from .records import subtitle_for
 
 
 def _module(key: str):
@@ -80,7 +81,17 @@ def _section(s: dict, perms: dict) -> dict:
         status_ = "hidden"
     else:
         status_ = "ready"
-    return {**s, "status": status_, "available": status_ == "ready"}
+    out = {**s}
+    if status_ == "ready" and s.get("module"):
+        from . import access
+
+        tmod = get_module(s["module"])
+        no = access.hidden(tmod)
+        if s.get("link_field") in no:
+            status_ = "hidden"  # the role can't see how these records are linked
+        if s.get("columns"):
+            out["columns"] = [c for c in s["columns"] if c not in no]
+    return {**out, "status": status_, "available": status_ == "ready"}
 
 
 def _segments(mod) -> dict | None:
@@ -88,6 +99,10 @@ def _segments(mod) -> dict | None:
     if mod.segment_param:
         return {"param": mod.segment_param, "options": mod.segment_options or [], "default": mod.segment_default}
     if not mod.segment_field:
+        return None
+    from . import access
+
+    if mod.segment_field in access.hidden(mod):
         return None
     f = mod.field(mod.segment_field)
     targets = active_targets(f)
@@ -134,7 +149,7 @@ class LookupView(APIView):
                     "module": module,
                     "id": o.pk,
                     "title": mod.title_of(o),
-                    "subtitle": mod.subtitle(o) if mod.subtitle else "",
+                    "subtitle": subtitle_for(mod, o),
                     "archived": o.archived_at is not None,
                 }
                 for o in qs
@@ -154,10 +169,18 @@ class SchemaView(APIView):
             if mod.key not in BUILT_MODULES or not perms[mod.key]["view"]:
                 continue
             enabled = enabled_map(mod.key)
+            from . import access
+
             fields = []
             for f in mod.fields:
+                lvl = access.level(mod, f, user)
+                if lvl == "hidden":
+                    continue  # never sent: the screens can't show what they don't have (S3)
                 d = f.schema()
                 d["enabled"] = enabled[f.key]
+                if lvl == "read":
+                    d["readonly"] = True
+                    d["access"] = "read"
                 fields.append(d)
                 if f.choice_list:
                     list_keys.add(f.choice_list)
@@ -309,9 +332,12 @@ class BulkView(APIView):
         modes = request.data.get("modes") or {}
         if isinstance(values, dict):
             # Only fields people can actually change here: shown in Settings and not filled in by the app.
+            from . import access
+
             enabled = enabled_map(module)
+            locked = access.readonly(mod)
             values = {k: v for k, v in values.items()
-                      if k in mod.field_map and not mod.field_map[k].readonly and enabled.get(k, True)}
+                      if k in mod.field_map and not mod.field_map[k].readonly and enabled.get(k, True) and k not in locked}
         if not isinstance(values, dict) or not values:
             raise ValidationError({"detail": "Choose a field and a value."})
         if not isinstance(modes, dict) or any(m not in bulk.MULTI_MODES for m in modes.values()):
@@ -595,7 +621,7 @@ class SearchView(APIView):
                         "module_label": mod.label,
                         "id": obj.pk,
                         "title": mod.title_of(obj),
-                        "subtitle": mod.subtitle(obj) if mod.subtitle else "",
+                        "subtitle": subtitle_for(mod, obj),
                     }
                 )
             if total > 6:
@@ -628,7 +654,7 @@ class ArchiveListView(APIView):
                         "module_label": mod.label,
                         "id": obj.pk,
                         "title": mod.title_of(obj),
-                        "subtitle": mod.subtitle(obj) if mod.subtitle else "",
+                        "subtitle": subtitle_for(mod, obj),
                         "archived_at": obj.archived_at.isoformat(),
                         "archived_by": obj.archived_by.full_name if obj.archived_by else None,
                     }

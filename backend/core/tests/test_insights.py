@@ -315,7 +315,7 @@ class AnalyticsTests(InsightBase):
         self.assertEqual(set(body["stages"]), {"outreach"})
 
     def test_role_flag_round_trip(self):
-        r = self.client.post("/api/roles/", {"name": "Partner", "flags": {"see_team_performance": True}, "perms": {}}, format="json")
+        r = self.client.post("/api/roles/", {"name": "Partner", "flags": {"see_team_performance": True}, "perms": {}, "password": self.password}, format="json")
         self.assertIn(r.status_code, (200, 201), r.content)
         self.assertTrue(r.json()["flags"]["see_team_performance"])
 

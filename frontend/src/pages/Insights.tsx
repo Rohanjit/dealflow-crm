@@ -121,12 +121,15 @@ function RateCell({ row, won, lost }: { row: Breakdown; won: string; lost: strin
   );
 }
 
-function Breakdowns({ by, options, labels }: {
-  by: Record<string, Breakdown[]>; options: { value: string; label: string }[];
+function Breakdowns({ by, options: all, labels }: {
+  by: Record<string, Breakdown[] | null>; options: { value: string; label: string }[];
   labels: { started: string; won: string; lost: string; rate: string };
 }) {
-  const [dim, setDim] = useState(options[0].value);
+  // Breakdowns by a field this person's role can't see arrive empty (null) and aren't offered.
+  const options = all.filter((o) => by[o.value] != null);
+  const [dim, setDim] = useState(options[0]?.value ?? "");
   const rows = by[dim] ?? [];
+  if (!options.length) return null;
   return (
     <Stack gap="sm">
       <Choice value={dim} onChange={setDim} data={options} label="Break down by" />

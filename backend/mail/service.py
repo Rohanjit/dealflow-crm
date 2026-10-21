@@ -205,14 +205,22 @@ def suggestions(mod, obj, user) -> list[dict]:
         return []
     qs = qs.filter(archived_at__isnull=True).select_related("investor", "company", "decision_level")
     qs = qs.order_by("-primary_contact", "decision_level__order", "full_name")[:50]
+    from core import access
+    from core.registry import get_module as _gm
+
+    no = access.hidden(_gm("contacts"), user)  # fields this person's role can't see (S3)
     out = []
     for c in qs:
         firm = c.investor.firm_name if c.investor_id else (c.company.name if c.company_id else "")
-        for kind, e in (("Work", c.work_email), ("Personal", c.personal_email)):
-            e = (e or "").strip()
+        for kind, key in (("Work", "work_email"), ("Personal", "personal_email")):
+            if key in no:
+                continue
+            e = (getattr(c, key) or "").strip()
             if e and EMAIL_RE.match(e):
-                out.append({"name": c.full_name, "email": e, "contact_id": c.pk, "kind": kind, "firm": firm,
-                            "designation": c.designation, "primary": c.primary_contact,
+                out.append({"name": c.full_name, "email": e, "contact_id": c.pk, "kind": kind,
+                            "firm": "" if "firm" in no else firm,
+                            "designation": "" if "designation" in no else c.designation,
+                            "primary": False if "primary_contact" in no else c.primary_contact,
                             "opted_out": c.email_opt_out})
     return out
 

@@ -25,6 +25,7 @@ from django.utils import timezone
 from . import records, stuck
 from .models import AlertSnooze, FirmSettings, Note
 from .registry import get_module
+from .records import subtitle_for
 
 SHOWN = 20
 SNOOZE_DAYS = 7
@@ -65,7 +66,7 @@ def _snoozes(user, today) -> set[tuple[str, str, int]]:
 def _ref(module: str, obj) -> dict:
     mod = get_module(module)
     return {"module": module, "id": obj.pk, "title": mod.title_of(obj),
-            "subtitle": mod.subtitle(obj) if mod.subtitle else ""}
+            "subtitle": subtitle_for(mod, obj)}
 
 
 def for_user(user) -> dict:

@@ -259,4 +259,19 @@ def for_user(user, period: str = "12") -> dict:
     for part in (o, d):
         if part:
             part.pop("_rows", None)
+    # Breakdowns by a field this person's role can't see are left out (decision 63, S3).
+    from . import access
+
+    for part, mkey, size_key in ((o, "outreach", "expected_size"), (d, "deals", "target_raise")):
+        if not part:
+            continue
+        no = access.hidden(get_module(mkey), user)
+        for by_key, field_key in (("source", "source"), ("sector", "sector"), ("transaction_type", "transaction_type"),
+                                  ("size", size_key)):
+            if field_key in no and by_key in part["by"]:
+                part["by"][by_key] = None
+        if size_key in no:
+            part["size_currency"], part["size_other_currencies"] = None, 0
+        if "lead_banker" in no:
+            out["bankers"] = None
     return out

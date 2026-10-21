@@ -83,6 +83,7 @@ TASKS = register(
         groups=[T, W, R],
         title_field="title",
         subtitle=task_subtitle,
+        subtitle_fields=["related"],
         extra_filters=task_filters,
         segment_param="view",
         segment_options=VIEWS,

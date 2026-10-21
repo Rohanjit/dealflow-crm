@@ -70,6 +70,7 @@ VAULT = register(
         groups=[D, F],
         title_field="title",
         subtitle=subtitle,
+        subtitle_fields=["category", "file_type"],
         extra_filters=vault_filters,
         importable=False,
         gate=require_open,

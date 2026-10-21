@@ -193,8 +193,13 @@ def _user_ref(u):
 
 
 def serialize(obj, mod: ModuleDef) -> dict:
+    from . import access
+
     out = {"id": obj.pk, "_title": mod.title_of(obj)}
+    hidden = access.hidden(mod)
     for f in mod.fields:
+        if f.key in hidden:
+            continue  # this person's role can't see it (decision 63, S3)
         out[f.key] = read_value(obj, f)
     out["_stamps"] = {
         "created_at": obj.created_at.isoformat() if obj.created_at else None,
@@ -600,13 +605,21 @@ def _via_record(mod: ModuleDef, f: FieldDef, values: dict, instance):
     return holder(instance, f) if instance is not None and instance.pk else None
 
 
-def clean_values(mod: ModuleDef, data: dict, *, enabled: dict, instance=None, partial=False, importing=False):
+def clean_values(mod: ModuleDef, data: dict, *, enabled: dict, instance=None, partial=False, importing=False,
+                 check_access=True):
     """Validate incoming API data. Returns (values, errors). Disabled fields are ignored.
-    `importing` relaxes rules meant for people working in the app (e.g. reasons for exits)."""
+    `importing` relaxes rules meant for people working in the app (e.g. reasons for exits).
+    Fields the person's role may not change are refused (`check_access=False` only for changes the
+    app makes itself, like Last contacted after a confirmed email)."""
     values, errors = {}, {}
+    if check_access:
+        from . import access
+
+        for key in access.readonly(mod) & set(data):
+            errors[key] = "Your role can't change this field."
     # Own fields first, so company-level fields know which company they're being saved to.
     for f in sorted(mod.fields, key=lambda x: bool(x.via)):
-        if f.readonly or not enabled.get(f.key, True):
+        if f.readonly or not enabled.get(f.key, True) or f.key in errors:
             continue
         if f.key not in data:
             if f.required and not partial and not (instance and instance.pk):
@@ -866,6 +879,10 @@ def _order_terms(mod: ModuleDef, key: str, desc: bool) -> list:
 
 
 def filter_queryset(qs: QuerySet, mod: ModuleDef, params, user, enabled: dict) -> QuerySet:
+    from . import access
+
+    hidden = access.hidden(mod, user)
+    enabled = {k: (v and k not in hidden) for k, v in enabled.items()}
     if raw_ids := params.get("ids"):
         # Just these records (e.g. exporting a selection).
         qs = qs.filter(pk__in=_ints(raw_ids))
@@ -885,6 +902,9 @@ def filter_queryset(qs: QuerySet, mod: ModuleDef, params, user, enabled: dict) -
             continue
         if t == "link":
             # Applied even when switched off: other screens (e.g. an investor's contacts) rely on it.
+            # A role that can't see the link can't filter by it either (nothing matches).
+            if f.key in hidden and (params.get(f.key) or params.get(f"{f.key}_type")):
+                return qs.none()
             qs = _link_filter(qs, mod, f, params)
             continue
         if not f.filterable or not enabled.get(f.key, True):
@@ -943,9 +963,23 @@ def filter_queryset(qs: QuerySet, mod: ModuleDef, params, user, enabled: dict) -
     # ?ordering=-primary_contact,full_name — several keys allowed, "-" for descending.
     terms = []
     for raw_key in _csv(params.get("ordering", "")):
+        if raw_key.lstrip("-") in hidden:
+            continue
         terms += _order_terms(mod, raw_key.lstrip("-"), raw_key.startswith("-"))
     if terms:
         qs = qs.order_by(*terms, "pk")
     if distinct:
         qs = qs.distinct()
     return qs
+
+
+def subtitle_for(mod: ModuleDef, obj, user=None) -> str:
+    """The short line under a record's name in search, lookups and reminders, left out when it would
+    show a field this person's role can't see."""
+    if not mod.subtitle:
+        return ""
+    from . import access
+
+    if set(mod.subtitle_fields) & access.hidden(mod, user):
+        return ""
+    return mod.subtitle(obj) or ""

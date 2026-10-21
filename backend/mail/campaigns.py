@@ -43,6 +43,16 @@ def _split(name: str) -> tuple[str, str]:
     return parts[0], (parts[-1] if len(parts) > 1 else "")
 
 
+# Merge fields drawn from a contact field, which a role may be kept from seeing (decision 63, S3).
+MERGE_SOURCE = {"designation": "designation", "firm": "firm", "city": "city"}
+
+
+def blocked_fields(user) -> set[str]:
+    from core import access
+
+    return {k for k, f in MERGE_SOURCE.items() if not access.can_see("contacts", f, user)}
+
+
 def merge_values(contact, sender) -> dict:
     first, last = _split(contact.full_name) if contact else ("", "")
     firm = ""
@@ -50,13 +60,16 @@ def merge_values(contact, sender) -> dict:
         firm = contact.investor.firm_name
     elif contact and contact.company_id:
         firm = contact.company.name
-    return {
+    values = {
         "first_name": first, "last_name": last, "full_name": (contact.full_name if contact else ""),
         "designation": (contact.designation if contact else ""), "firm": firm,
         "city": (contact.city if contact else ""),
         "my_name": sender.full_name, "my_first_name": _split(sender.full_name)[0],
         "my_email": (service.account_payload(sender) or {}).get("email") or sender.email,
     }
+    for k in blocked_fields(sender):
+        values[k] = ""
+    return values
 
 
 def unknown_fields(*texts: str) -> list[str]:
@@ -70,6 +83,10 @@ def unknown_fields(*texts: str) -> list[str]:
 
 def used_fields(*texts: str) -> set[str]:
     return {m.group(1).lower() for t in texts for m in _FIELD.finditer(t or "") if m.group(2) is None}
+
+
+def all_fields(*texts: str) -> set[str]:
+    return {m.group(1).lower() for t in texts for m in _FIELD.finditer(t or "")}
 
 
 def render(text: str, values: dict) -> str:

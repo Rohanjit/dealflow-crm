@@ -113,6 +113,10 @@ def merge(mod: ModuleDef, keeper, losers: list, values: dict, user) -> dict:
     moved: dict[str, int] = {}
     with transaction.atomic():
         if values:
+            from . import access
+
+            # Fields this person's role can't change keep the keeper's own value.
+            values = {k: v for k, v in values.items() if k not in access.readonly(mod)}
             cleaned, errors = clean_values(mod, values, enabled=enabled_map(mod.key), instance=keeper, partial=True)
             if errors:
                 raise MergeError(errors)

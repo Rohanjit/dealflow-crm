@@ -192,3 +192,15 @@ def suggestions(deal: Deal, limit: int = 50, q: str = "") -> list[dict]:
             "reasons": reasons,
         })
     return out
+
+
+# Which fields each factor reads (for field access per role, decision 63 S3).
+FACTOR_FIELDS = {
+    "sector": [("deals", "sector"), ("investors", "sectors")],
+    "stage": [("deals", "investment_stage"), ("investors", "stages")],
+    "geography": [("deals", "geography"), ("investors", "geography_focus")],
+    "ticket": [("deals", "target_raise"), ("investors", "min_ticket"), ("investors", "max_ticket")],
+    "instrument": [("deals", "instrument"), ("investors", "instrument")],
+    "deploying": [("investors", "actively_deploying")],
+}
+FACT_FACTOR = {"sector": "sector", "stage": "stage", "geography": "geography", "raise": "ticket", "kind": "instrument"}
