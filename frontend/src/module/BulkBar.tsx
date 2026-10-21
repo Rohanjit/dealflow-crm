@@ -7,7 +7,7 @@ import {
 import { useDebouncedValue } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import {
-  IconArrowsJoin, IconDownload, IconPencil, IconPlaylistAdd, IconProgress, IconTrash, IconX,
+  IconArrowsJoin, IconDownload, IconMailFast, IconPencil, IconPlaylistAdd, IconProgress, IconTrash, IconX,
 } from "@tabler/icons-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -18,6 +18,8 @@ import { errorMessage, notifyError, notifyOk } from "../components/errors";
 import type { FieldSchema, LookupItem, ModuleSchema } from "../types";
 import { emptyValue, FieldInput } from "./fields";
 import MergeModal from "./MergeModal";
+import { useNavigate } from "react-router-dom";
+import { newCampaign } from "../pages/Campaigns";
 
 type BulkResult = { updated: number; failed: { id: number; title: string; errors: Record<string, string | string[]> }[] };
 
@@ -36,6 +38,8 @@ export default function BulkBar({
   const noun = n === 1 ? module.singular.toLowerCase() : module.label.toLowerCase();
   const canMerge = module.mergeable && module.perms.edit && module.perms.delete;
   const canTrack = module.key === "investors" && !!me.perms.deal_investors?.create;
+  const canCampaign = me.flags.send_campaigns && (module.key === "contacts" || module.key === "investors") && !!me.perms.contacts?.view;
+  const nav = useNavigate();
 
   const refresh = async () => {
     await qc.invalidateQueries({ queryKey: ["records"] });
@@ -75,6 +79,13 @@ export default function BulkBar({
           )}
           {canTrack && (
             <Button size="xs" variant="default" leftSection={<IconPlaylistAdd size={14} />} onClick={() => setDialog("deal")}>Add to a deal's tracker</Button>
+          )}
+          {canCampaign && (
+            <Button size="xs" variant="default" leftSection={<IconMailFast size={14} />}
+              onClick={() => newCampaign(nav, module.key === "contacts" ? { contacts: ids } : { investors: ids, who: "primary" },
+                `Email to ${n} ${noun}`)}>
+              Email selected
+            </Button>
           )}
           <Button size="xs" variant="default" leftSection={<IconDownload size={14} />}
             onClick={() => download(`m/${module.key}/export/?${new URLSearchParams({ ids: ids.join(","), columns: exportColumns })}`)}>

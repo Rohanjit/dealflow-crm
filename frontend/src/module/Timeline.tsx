@@ -2,12 +2,12 @@
 // stage changes. Newest first.
 
 import {
-  ActionIcon, Button, Group, Menu, Paper, SegmentedControl, Stack, Text, Textarea, ThemeIcon, Title,
+  ActionIcon, Anchor, Badge, Button, Group, Menu, Paper, SegmentedControl, Stack, Text, Textarea, ThemeIcon, Title,
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { modals } from "@mantine/modals";
 import {
-  IconArrowsRightLeft, IconDots, IconMail, IconNote, IconPhone, IconUsersGroup,
+  IconArrowsRightLeft, IconDots, IconExternalLink, IconMail, IconNote, IconPaperclip, IconPhone, IconUsersGroup,
 } from "@tabler/icons-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
@@ -20,6 +20,7 @@ import { formatDate } from "../format";
 import type { ModuleSchema, Note } from "../types";
 import { dateParser } from "./fields";
 import { Skeleton } from "../components/ui";
+import { STATUS_COLOR, STATUS_LABEL } from "../mail/api";
 
 const KINDS = [
   { value: "note", label: "Note", icon: IconNote, color: "gray" },
@@ -33,7 +34,9 @@ export default function Timeline({ module, recordId }: { module: ModuleSchema; r
   const me = useMe();
   const qc = useQueryClient();
   const key = ["notes", module.key, recordId];
-  const { data, isLoading, error } = useQuery({ queryKey: key, queryFn: () => api<Note[]>(`m/${module.key}/${recordId}/notes/`) });
+  const { data, isLoading, error } = useQuery({ queryKey: key, queryFn: () => api<Note[]>(`m/${module.key}/${recordId}/notes/`),
+    // An Outlook send can take a moment to reach Sent Items; look again until it's confirmed.
+    refetchInterval: (q) => (q.state.data?.some((n) => n.meta?.status === "pending") ? 20_000 : false) });
   const [kind, setKind] = useState("note");
   const [date, setDate] = useState<Date | null>(new Date());
   const [text, setText] = useState("");
@@ -127,11 +130,11 @@ function Entry({ note: n, queryKey }: { note: Note; queryKey: unknown[] }) {
           <Text size="xs" c="dimmed">
             {n.kind === "stage" ? "Stage" : kind?.label} · {formatDate(n.date, me)}{n.created_by ? ` · ${n.created_by.name}` : ""}
           </Text>
-          {n.can_edit && !editing && (
+          {(n.can_edit || n.can_delete) && !editing && (
             <Menu position="bottom-end">
               <Menu.Target><ActionIcon variant="subtle" color="gray" size="sm" aria-label="Entry actions"><IconDots size={14} /></ActionIcon></Menu.Target>
               <Menu.Dropdown>
-                <Menu.Item onClick={() => setEditing(true)}>Edit</Menu.Item>
+                {n.can_edit && <Menu.Item onClick={() => setEditing(true)}>Edit</Menu.Item>}
                 <Menu.Item color="red" onClick={remove}>Delete</Menu.Item>
               </Menu.Dropdown>
             </Menu>
@@ -145,6 +148,8 @@ function Entry({ note: n, queryKey }: { note: Note; queryKey: unknown[] }) {
               <Button size="xs" variant="subtle" onClick={() => { setEditing(false); setText(n.text); }}>Cancel</Button>
             </Group>
           </Stack>
+        ) : n.kind === "email" && n.meta?.email ? (
+          <SentEmail note={n} />
         ) : (
           <Text size="sm" className="df-prewrap" fw={n.kind === "stage" ? 500 : undefined}>
             {n.text}
@@ -153,5 +158,40 @@ function Entry({ note: n, queryKey }: { note: Note; queryKey: unknown[] }) {
         )}
       </div>
     </Group>
+  );
+}
+
+/** An email sent from Dealflow: subject, who it went to, whether the mailbox confirmed it. */
+function SentEmail({ note: n }: { note: Note }) {
+  const [open, setOpen] = useState(false);
+  const m = n.meta;
+  const where = m.provider === "outlook" ? "Outlook" : "Gmail";
+  const long = n.text.length > 280 || n.text.split("\n").length > 5;
+  return (
+    <Stack gap={4} mt={2}>
+      <Text size="sm" fw={600}>{m.subject || "(no subject)"}</Text>
+      <Text size="xs" c="dimmed">
+        To {(m.to ?? []).join(", ")}{m.cc?.length ? ` · Cc ${m.cc.join(", ")}` : ""}{m.bcc ? ` · ${m.bcc} Bcc` : ""}
+        {m.campaign_name ? ` · Campaign “${m.campaign_name}”` : ""}
+      </Text>
+      <Group gap={8}>
+        <Badge size="sm" variant="light" color={STATUS_COLOR[m.status] ?? "gray"}>{STATUS_LABEL[m.status] ?? m.status}</Badge>
+        {m.web_link && (
+          <Anchor href={m.web_link} target="_blank" rel="noopener noreferrer" size="xs">
+            <Group gap={2} component="span" wrap="nowrap">Open in {where} <IconExternalLink size={12} /></Group>
+          </Anchor>
+        )}
+      </Group>
+      {!!m.attachments?.length && (
+        <Group gap={4}>
+          <IconPaperclip size={12} color="var(--mantine-color-dimmed)" />
+          <Text size="xs" c="dimmed">{m.attachments.join(", ")}</Text>
+        </Group>
+      )}
+      <Text size="sm" className="df-prewrap" lineClamp={open ? undefined : 4}>{n.text}</Text>
+      {long && (
+        <Group><Button size="compact-xs" variant="subtle" onClick={() => setOpen((o) => !o)}>{open ? "Show less" : "Show the whole email"}</Button></Group>
+      )}
+    </Stack>
   );
 }

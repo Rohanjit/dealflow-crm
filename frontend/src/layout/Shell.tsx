@@ -18,6 +18,7 @@ import Logo from "../components/Logo";
 import { moduleIcon } from "../components/ui";
 import { resetSession, useApp } from "../context";
 import TaskBell from "../tasks/TaskBell";
+import { useMailboxReturn } from "../mail/MailboxCard";
 import SearchPalette, { useSearchPalette } from "./SearchPalette";
 
 // Record types shown under another menu item (companies live under Outreach).
@@ -33,6 +34,7 @@ export default function Shell() {
   const qc = useQueryClient();
   const [scroll] = useWindowScroll();
   const canSettings = me.flags.manage_settings || me.flags.manage_users || me.role.is_admin;
+  useMailboxReturn();
 
   async function signOut() {
     await api("auth/logout/", { method: "POST" });
@@ -72,6 +74,7 @@ export default function Shell() {
           {(me.perms.outreach?.view || me.perms.deals?.view) && (
             <NavItem to="/insights" icon="insights" label="Insights" active={active("/insights")} />
           )}
+          {me.flags.send_campaigns && <NavItem to="/campaigns" icon="campaigns" label="Campaigns" active={active("/campaigns")} />}
         </AppShell.Section>
 
         <AppShell.Section grow component={ScrollArea} type="scroll" mt={4}>

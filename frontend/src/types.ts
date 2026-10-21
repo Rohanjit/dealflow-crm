@@ -1,6 +1,6 @@
 export type Action = "view" | "create" | "edit" | "delete";
 export type ModulePerms = Record<Action, boolean>;
-export type Flags = { manage_users: boolean; manage_settings: boolean; restore_archive: boolean; see_team_performance: boolean };
+export type Flags = { manage_users: boolean; manage_settings: boolean; restore_archive: boolean; see_team_performance: boolean; send_campaigns: boolean };
 
 export type Me = {
   id: number;
@@ -107,11 +107,13 @@ export type Note = {
   kind: "note" | "call" | "meeting" | "email" | "stage";
   date: string;
   text: string;
-  meta: Record<string, string>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  meta: Record<string, any>;
   created_by: { id: number; name: string } | null;
   created_at: string;
   updated_at: string;
   can_edit: boolean;
+  can_delete?: boolean;
 };
 
 /** A link to one record in another module, as the API sends it. */

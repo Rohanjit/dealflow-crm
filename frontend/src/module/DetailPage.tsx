@@ -1,6 +1,6 @@
 import { Anchor, Badge, Breadcrumbs, Button, Grid, Group, Stack, Text } from "@mantine/core";
 import { modals } from "@mantine/modals";
-import { IconArrowUpRight, IconCheck, IconChevronRight, IconLock, IconPencil, IconRotate, IconTrash } from "@tabler/icons-react";
+import { IconArrowUpRight, IconCheck, IconChevronRight, IconLock, IconMail, IconPencil, IconRotate, IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
@@ -24,6 +24,8 @@ import RelatedSection from "./RelatedSection";
 import { AccessPanel, RestrictedPage, type Placeholder } from "../deals/Restricted";
 import Timeline from "./Timeline";
 import { StuckLine } from "../insights/Stuck";
+import Composer from "../mail/Composer";
+import { EMAIL_MODULES } from "../mail/api";
 
 /** The record as a list already loaded it (lists send whole records), if any list has it. */
 function fromLists(qc: QueryClient, key?: string, id?: string): RecordData | undefined {
@@ -61,6 +63,7 @@ function DetailInner() {
     // the title can grow out of the row), then refresh it from the server.
     placeholderData: () => fromLists(qc, key, id),
   });
+  const [composing, setComposing] = useState(false);
 
   if (isLoading || rec.isLoading) return <PageSkeleton />;
   if (!module) return <Navigate to="/" replace />;
@@ -125,6 +128,9 @@ function DetailInner() {
         r.status === "done"
           ? <Button variant="default" leftSection={<IconRotate size={16} />} onClick={() => complete(r, false)}>Reopen</Button>
           : <Button variant="light" color="teal" leftSection={<IconCheck size={16} />} onClick={() => complete(r, true)}>Mark as done</Button>
+      )}
+      {module.perms.edit && EMAIL_MODULES.has(module.key) && (
+        <Button variant="default" leftSection={<IconMail size={16} />} onClick={() => setComposing(true)}>Email</Button>
       )}
       {module.perms.edit && (
         <Button variant="default" leftSection={<IconPencil size={16} />} component={Link} to={`/m/${module.key}/${r.id}/edit`}>Edit</Button>
@@ -192,6 +198,7 @@ function DetailInner() {
         )}
       </Grid>
 
+      {composing && <Composer module={module} record={r} onClose={() => setComposing(false)} />}
       <Text size="xs" c="dimmed">
         Created by {st.created_by?.name ?? "—"} on {formatDateTime(st.created_at, me)} · Last edited by {st.updated_by?.name ?? "—"} on {formatDateTime(st.updated_at, me)}
       </Text>

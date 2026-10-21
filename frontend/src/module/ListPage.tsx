@@ -6,7 +6,7 @@ import { DateInput } from "@mantine/dates";
 import { useDebouncedCallback, useDebouncedValue } from "@mantine/hooks";
 import {
   IconAdjustmentsHorizontal, IconHourglassHigh, IconSnowflake, IconArrowDown, IconArrowsSort, IconArrowUp, IconArrowUpRight, IconColumns3, IconDownload, IconFileImport, IconLayoutKanban,
-  IconLock, IconPlus, IconSearch, IconTable, IconX,
+  IconLock, IconMailFast, IconPlus, IconSearch, IconTable, IconX,
 } from "@tabler/icons-react";
 import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
@@ -25,6 +25,7 @@ import VaultGate from "../vault/VaultGate";
 import BoardView from "./BoardView";
 import { RestrictedList } from "../deals/Restricted";
 import BulkBar from "./BulkBar";
+import { newCampaign } from "../pages/Campaigns";
 import { DuplicatesButton } from "./Duplicates";
 import { FieldValue } from "./fields";
 import { useModuleLabels } from "./LinkInput";
@@ -161,6 +162,16 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
               </Menu.Dropdown>
             </Menu>
             {module.key === "vault" && <LockButton />}
+            {me.flags.send_campaigns && (module.key === "contacts" || module.key === "investors") && !!me.perms.contacts?.view && !board && (
+              <Button variant="default" leftSection={<IconMailFast size={16} />} disabled={!total}
+                title={module.key === "investors" ? "Emails the primary contact at each investor shown" : "Emails everyone shown"}
+                onClick={() => {
+                  const query = Object.fromEntries([...exportParams].filter(([k]) => k !== "columns"));
+                  newCampaign(nav, { module: module.key, query, who: "primary" }, `Email to ${total} ${module.label.toLowerCase()}`);
+                }}>
+                Email these {total ? total.toLocaleString() : ""}
+              </Button>
+            )}
             <DuplicatesButton module={module} />
             {module.perms.create && (
               <Button leftSection={<IconPlus size={16} />} component={Link} to={`/m/${module.key}/new`}>

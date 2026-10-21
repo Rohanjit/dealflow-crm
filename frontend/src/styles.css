@@ -388,3 +388,20 @@ tr:hover .df-open-chip { opacity: 1; transform: none; }
   font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; color: #fff; background: var(--mantine-color-orange-6);
   box-shadow: 0 0 0 2px #fff; font-variant-numeric: tabular-nums; pointer-events: none; }
 .df-bell-count[data-tone="red"] { background: var(--mantine-color-red-6); }
+
+/* ---------------------------------------------------------------- email */
+/* A person to add (composer) or a merge field to insert (campaigns): a small bordered pill. */
+.df-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; min-height: 26px;
+  border: 1px solid var(--df-line); border-radius: 999px; font-size: 13px; color: var(--mantine-color-text);
+  background: var(--mantine-color-body); cursor: pointer;
+}
+.df-chip:hover { background: var(--df-hover); }
+.df-attachment { padding: 2px 6px; border-radius: 6px; }
+.df-attachment:hover { background: var(--df-hover); }
+.df-picker { border: 1px solid var(--df-line); border-radius: 8px; padding: 8px; }
+.df-pick-row { display: block; width: 100%; padding: 5px 8px; border-radius: 6px; }
+.df-pick-row:hover:not(:disabled) { background: var(--df-hover); }
+.df-pick-row:disabled { opacity: 0.6; cursor: default; }
+.df-mail-preview { border: 1px solid var(--df-line); border-radius: 8px; padding: 14px 16px; background: var(--mantine-color-body); }
+.df-title-input input { font-size: 34px; line-height: 1.2; font-weight: 700; letter-spacing: -0.01em; height: auto; padding: 0; }

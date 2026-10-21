@@ -398,7 +398,8 @@ def campaign_payload(c: Campaign, user, full=False) -> dict:
         out.update({"body": c.body, "attachments": c.attachments, "problems": cmp.problems(c),
                     "opt_out_text": cmp.opt_out_line(), "editable": c.status in ("draft", "scheduled", "paused")
                     and c.owner_id == user.pk, "source": c.source,
-                    "confirmed": CampaignRecipient.objects.filter(campaign=c, sent_email__status="confirmed").count()})
+                    "confirmed": CampaignRecipient.objects.filter(campaign=c, sent_email__status="confirmed").count(),
+                    "per_minute": MailSettings.load().per_minute, "mailbox": service.account_payload(c.owner)})
     return out
 
 

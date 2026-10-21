@@ -8,6 +8,7 @@ import { formatDate, groupDigits } from "../format";
 import { useVaultStatus } from "../vault/api";
 import { SetPinForm } from "../vault/VaultGate";
 import ChangePassword from "./ChangePassword";
+import MailboxCard from "../mail/MailboxCard";
 
 export default function Preferences() {
   const { info, me, refresh } = useApp();
@@ -54,6 +55,7 @@ export default function Preferences() {
           <Group><Button onClick={save} loading={busy}>Save preferences</Button></Group>
         </Stack>
       </Paper>
+      <MailboxCard />
       {!info.is_guest && <ChangePassword />}
       {me.perms.vault?.view && !info.is_guest && <VaultPin />}
     </Stack>

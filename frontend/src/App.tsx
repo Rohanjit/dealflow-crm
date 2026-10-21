@@ -10,6 +10,7 @@ import ImportPage from "./module/ImportPage";
 import ListPage from "./module/ListPage";
 import AcceptInvite from "./pages/AcceptInvite";
 import Insights from "./pages/Insights";
+import CampaignsPage from "./pages/Campaigns";
 import ArchivePage from "./pages/Archive";
 import ChangePassword from "./pages/ChangePassword";
 import Home from "./pages/Home";
@@ -69,6 +70,7 @@ export default function App() {
           <Route path="m/:module/:id" element={<DetailPage />} />
           <Route path="m/:module/:id/edit" element={<FormPage />} />
           <Route path="insights" element={<Insights />} />
+          <Route path="campaigns/*" element={<CampaignsPage />} />
           <Route path="archive" element={<ArchivePage />} />
           <Route path="settings/*" element={<SettingsPage />} />
           <Route path="preferences" element={<Navigate to="/settings/preferences" replace />} />

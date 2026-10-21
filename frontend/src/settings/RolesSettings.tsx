@@ -18,6 +18,7 @@ const FLAGS: { key: keyof Flags; label: string; help: string }[] = [
   { key: "manage_settings", label: "Manage settings", help: "Firm name, field switches and dropdown lists." },
   { key: "restore_archive", label: "Restore from archive", help: "See deleted records and restore them. Permanent deletion stays with Admins." },
   { key: "see_team_performance", label: "See team performance", help: "On the Insights page, see win rates broken down by banker. Firm-wide numbers are shown to everyone who can view Outreach or Active Deals." },
+  { key: "send_campaigns", label: "Send campaigns", help: "Send one email to many people at once (a mail merge) from their own mailbox. Single emails from a record page don't need this." },
 ];
 
 export default function RolesSettings() {
@@ -39,7 +40,7 @@ export default function RolesSettings() {
       setDraft({
         name: "",
         perms: Object.fromEntries(info.modules.map((m) => [m.key, { view: false, create: false, edit: false, delete: false }])),
-        flags: { manage_users: false, manage_settings: false, restore_archive: false, see_team_performance: false },
+        flags: { manage_users: false, manage_settings: false, restore_archive: false, see_team_performance: false, send_campaigns: false },
       });
     } else if (current) {
       setDraft({ name: current.name, perms: structuredClone(current.perms), flags: { ...current.flags } });

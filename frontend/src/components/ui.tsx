@@ -5,7 +5,7 @@ import { Box, Group, Stack } from "@mantine/core";
 import {
   IconAlignLeft, IconArchive, IconArrowUpRight, IconAt, IconBriefcase, IconBuildingBank, IconBuildingSkyscraper,
   IconCake, IconCalendar, IconCash, IconChecklist, IconCircleDot, IconClock, IconFile, IconHash, IconChartBar, IconHome, IconLink,
-  IconList, IconLock, IconPercentage, IconPhone, IconSelector, IconSettings, IconSquareCheck, IconTag, IconTargetArrow,
+  IconList, IconLock, IconMailFast, IconPercentage, IconPhone, IconSelector, IconSettings, IconSquareCheck, IconTag, IconTargetArrow,
   IconUser, IconUserCircle, IconUsers, IconUsersGroup, type Icon,
 } from "@tabler/icons-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -23,6 +23,7 @@ export const MODULE_ICONS: Record<string, Icon> = {
   vault: IconLock,
   home: IconHome,
   insights: IconChartBar,
+  campaigns: IconMailFast,
   archive: IconArchive,
   settings: IconSettings,
   preferences: IconUserCircle,
