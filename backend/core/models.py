@@ -16,6 +16,8 @@ class FirmSettings(models.Model):
     last_backup_error = models.TextField(blank=True)
     # Home page: how far ahead "near target close" and "mandate nearing expiry" look.
     dashboard_days = models.PositiveSmallIntegerField(default=30)
+    # Signed out after this many minutes without activity (accounts/sessions.py); 15 to 480.
+    idle_minutes = models.PositiveSmallIntegerField(default=30)
     # Relationships "going cold": not contacted for this many days (0 = no alerts). See core/stale.py.
     stale_investor_days = models.PositiveSmallIntegerField(default=90)
     stale_contact_days = models.PositiveSmallIntegerField(default=60)

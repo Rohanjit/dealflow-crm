@@ -26,7 +26,7 @@ export function useInsightAlerts() {
   const { me } = useApp();
   return useQuery({
     queryKey: ["insight-alerts"],
-    queryFn: () => api<Alerts>("insights/alerts/"),
+    queryFn: () => api<Alerts>("insights/alerts/", { background: true }),
     refetchInterval: 5 * 60_000,
     enabled: !!(me.perms.outreach?.view || me.perms.deals?.view),
   });

@@ -19,6 +19,14 @@ export async function resetSession(qc: QueryClient) {
   await qc.refetchQueries({ queryKey: ["app"] });
 }
 
+// Why the person was signed out (idle or the 12-hour limit), shown once on the sign-in page.
+let signedOutReason = "";
+export function takeSignedOutReason(): string {
+  const r = signedOutReason;
+  signedOutReason = "";
+  return r;
+}
+
 export function useAppInfo() {
   return useQuery({ queryKey: ["app"], queryFn: () => api<AppInfo>("app/"), staleTime: 60_000 });
 }
@@ -29,12 +37,18 @@ export function AppProvider({ info, children }: { info: AppInfo; children: React
     await qc.invalidateQueries({ queryKey: ["app"] });
   };
   useEffect(() => {
-    const onOut = () => qc.invalidateQueries({ queryKey: ["app"] });
+    const onPassword = () => qc.invalidateQueries({ queryKey: ["app"] });
+    // Signed out (idle, 12 hours, or elsewhere): drop every cached record from memory too.
+    const onOut = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail;
+      if (typeof detail === "string" && detail) signedOutReason = detail;
+      resetSession(qc);
+    };
     window.addEventListener("dealflow:signed-out", onOut);
-    window.addEventListener("dealflow:password-change", onOut);
+    window.addEventListener("dealflow:password-change", onPassword);
     return () => {
       window.removeEventListener("dealflow:signed-out", onOut);
-      window.removeEventListener("dealflow:password-change", onOut);
+      window.removeEventListener("dealflow:password-change", onPassword);
     };
   }, [qc]);
   if (!info.user) return null;

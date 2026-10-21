@@ -19,6 +19,7 @@ import { moduleIcon } from "../components/ui";
 import { resetSession, useApp } from "../context";
 import TaskBell from "../tasks/TaskBell";
 import { useMailboxReturn } from "../mail/MailboxCard";
+import SessionGuard from "./SessionGuard";
 import SearchPalette, { useSearchPalette } from "./SearchPalette";
 
 // Record types shown under another menu item (companies live under Outreach).
@@ -154,6 +155,7 @@ export default function Shell() {
         </div>
       </AppShell.Main>
       <SearchPalette opened={search.opened} onClose={search.close} />
+      <SessionGuard />
     </AppShell>
   );
 }

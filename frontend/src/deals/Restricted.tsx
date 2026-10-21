@@ -265,7 +265,7 @@ export type AccessRequests = { to_decide: AccessRequest[]; mine: AccessRequest[]
 export function useAccessRequests(enabled: boolean) {
   return useQuery({
     queryKey: ["access-requests"],
-    queryFn: () => api<AccessRequests>("access-requests/"),
+    queryFn: () => api<AccessRequests>("access-requests/", { background: true }),
     refetchInterval: 60_000,
     enabled,
   });

@@ -55,7 +55,7 @@ export default function AcceptInvite() {
           {error && <Alert color="red">{error}</Alert>}
           <TextInput label="Your name" required autoFocus value={v.full_name} onChange={set("full_name")} error={errors.full_name} />
           <TextInput label="Work email" type="email" required value={v.email} onChange={set("email")} error={errors.email} />
-          <PasswordInput label="Choose a password" required value={v.password} onChange={set("password")} error={errors.password} description="At least 8 characters, not all numbers." />
+          <PasswordInput label="Choose a password" required value={v.password} onChange={set("password")} error={errors.password} description="At least 12 characters. A few words strung together works well." />
           <Button type="submit" loading={busy}>Create my account</Button>
         </Stack>
       </form>

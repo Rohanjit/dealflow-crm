@@ -92,6 +92,57 @@ def _temp_password():
 # ---------------------------------------------------------------- app bootstrap and setup
 
 
+def _session_info(request) -> dict:
+    from . import sessions
+
+    return sessions.remaining(request)
+
+
+class SessionView(APIView):
+    """GET: time left before idle and absolute sign-out. POST: "Stay signed in" (counts as activity)."""
+
+    def get(self, request):
+        return Response(_session_info(request))
+
+    def post(self, request):
+        return Response(_session_info(request))
+
+
+class SecuritySettingsView(APIView):
+    """Settings > Security (admins): how long a session may sit idle."""
+
+    permission_classes = [IsActiveUser]
+
+    def _check(self, request):
+        if not request.user.is_admin:
+            raise PermissionDenied("Only admins can change security settings.")
+
+    def get(self, request):
+        self._check(request)
+        return Response({"idle_minutes": FirmSettings.load().idle_minutes, "absolute_hours": 12})
+
+    def put(self, request):
+        self._check(request)
+        from django.conf import settings as dj_settings
+
+        if dj_settings.DEMO:
+            raise PermissionDenied("Not available on the demo site.")
+        v = request.data.get("idle_minutes")
+        if not isinstance(v, int) or isinstance(v, bool) or not 15 <= v <= 480:
+            raise ValidationError({"idle_minutes": "Pick between 15 minutes and 8 hours."})
+        pw = request.data.get("password")
+        if not isinstance(pw, str) or not request.user.check_password(pw):
+            raise ValidationError({"password": "Enter your password to change security settings."})
+        fs = FirmSettings.load()
+        from core import current
+
+        current.add_change({"record": "settings:security", "kind": "edited", "changes": [
+            {"field": "Sign out after idle (minutes)", "from": str(fs.idle_minutes), "to": str(v)}]})
+        fs.idle_minutes = v
+        fs.save(update_fields=["idle_minutes"])
+        return Response({"idle_minutes": v, "absolute_hours": 12})
+
+
 @method_decorator(ensure_csrf_cookie, name="dispatch")
 class AppView(APIView):
     """First call the frontend makes: is setup needed, who am I."""
@@ -115,6 +166,7 @@ class AppView(APIView):
                 "workspace_kind": fs.workspace_kind,
                 "firm_name": fs.firm_name,
                 "user": me_payload(user) if user else None,
+                "session": _session_info(request) if user else None,
                 "built_modules": BUILT_MODULES,
                 "modules": [{"key": k, "label": lbl} for k, lbl in MODULES],
                 "date_formats": [v for v, _ in DATE_FORMATS],
@@ -173,16 +225,31 @@ class SetupView(APIView):
 
 
 class LoginView(APIView):
+    # Open by necessity. Guessing is stopped by the database-backed lock-out (accounts/lockout.py),
+    # which holds across server processes, rather than a per-process rate limit.
     permission_classes = [AllowAny]
-    throttle_classes = [LoginThrottle]
 
     def post(self, request):
-        email = _text(request.data.get("email")).lower()
+        from core import current
+
+        from . import lockout, sessions
+
+        email = _text(request.data.get("email")).lower()[:254]
         password = _secret(request.data.get("password"))
+        ip = lockout.client_ip(request)
+        if lockout.locked(email, ip):
+            current.note("Sign-in refused: locked after too many attempts")
+            raise PermissionDenied({"detail": lockout.MESSAGE, "code": "signin_locked"})
         user = authenticate(request, username=email, password=password)
         if not user or not user.is_active:
+            if lockout.failed(email, ip):
+                current.note("Sign-in locked after too many attempts")
+            else:
+                current.note("Sign-in failed")
             raise ValidationError({"detail": "That email and password don't match."})
-        login(request, user)
+        lockout.succeeded(email)
+        login(request, user)  # a new session id, so one planted before sign-in is useless
+        sessions.start(request)
         return Response(me_payload(user))
 
 
@@ -374,6 +441,9 @@ class UserResetPasswordView(APIView):
         if msg := _password_errors(temp, u):
             raise ValidationError({"temp_password": msg})
         u.set_password(temp)
+        from . import lockout
+
+        lockout.clear_account(u.email)
         u.must_change_password = True
         u.save()
         _end_sessions(u)
@@ -480,10 +550,11 @@ class RoleDetailView(APIView):
 # ---------------------------------------------------------------- invites
 
 
-def invite_payload(i: Invite) -> dict:
+def invite_payload(i: Invite, raw: str | None = None) -> dict:
     return {
         "id": i.pk,
-        "token": i.token,
+        # The link's secret exists only in this answer to the person who made it.
+        **({"token": raw} if raw else {}),
         "role": {"id": i.role_id, "name": i.role.name},
         "note": i.note,
         "created_by": i.created_by.full_name if i.created_by else None,
@@ -508,10 +579,8 @@ class InviteListView(APIView):
         if not role:
             raise ValidationError({"role": "Pick a role."})
         _guard_admin_changes(request.user, None, role)
-        i = Invite.objects.create(
-            role=role, note=_text(request.data.get("note"))[:150], created_by=request.user
-        )
-        return Response(invite_payload(i), status=status.HTTP_201_CREATED)
+        i, raw = Invite.issue(role=role, note=_text(request.data.get("note"))[:150], created_by=request.user)
+        return Response(invite_payload(i, raw), status=status.HTTP_201_CREATED)
 
 
 class InviteRevokeView(APIView):
@@ -529,7 +598,8 @@ class InviteAcceptView(APIView):
     throttle_classes = [LoginThrottle]
 
     def _invite(self, token):
-        i = Invite.objects.select_related("role").filter(token=token).first()
+        qs = Invite.find(token)
+        i = qs.select_related("role").first() if qs is not None else None
         if not i or not i.is_usable:
             raise ValidationError({"detail": "This invite link has expired or was already used. Ask your admin for a new one."})
         return i
@@ -559,7 +629,8 @@ class InviteAcceptView(APIView):
         if errors:
             raise ValidationError(errors)
         with transaction.atomic():
-            i = Invite.objects.select_for_update().select_related("role").filter(token=token).first()
+            qs = Invite.find(token)
+            i = qs.select_for_update().select_related("role").first() if qs is not None else None
             if not i or not i.is_usable:
                 raise ValidationError({"detail": "This invite link has expired or was already used."})
             u = User.objects.create_user(email=email, password=password, full_name=name, role=i.role)

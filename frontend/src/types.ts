@@ -14,7 +14,10 @@ export type Me = {
   must_change_password: boolean;
 };
 
+export type SessionInfo = { idle_seconds: number; idle_left: number; absolute_left: number };
+
 export type AppInfo = {
+  session: SessionInfo | null;
   needs_setup: boolean;
   demo: boolean;
   sample: boolean;

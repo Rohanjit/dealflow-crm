@@ -149,15 +149,25 @@ def _invite_token():
     return secrets.token_urlsafe(32)
 
 
+def hash_invite_token(raw: str) -> str:
+    """Only this hash is stored, so a copy of the database can't be used to join the firm."""
+    import hashlib
+
+    return hashlib.sha256(("dealflow-invite:" + (raw or "")).encode()).hexdigest()
+
+
+INVITE_HOURS = 72
+
+
 def _invite_expiry():
-    return timezone.now() + timedelta(days=7)
+    return timezone.now() + timedelta(hours=INVITE_HOURS)
 
 
 class Invite(models.Model):
     """One-time link an admin shares by any channel. The person sets their own
     password; the role is fixed by the admin."""
 
-    token = models.CharField(max_length=64, unique=True, default=_invite_token)
+    token = models.CharField(max_length=64, unique=True)  # SHA-256 of the link's secret, never the secret
     role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name="invites")
     note = models.CharField(max_length=150, blank=True, help_text="Who it is for, for the admin's reference")
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="+")
@@ -170,6 +180,39 @@ class Invite(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
+    @classmethod
+    def issue(cls, **fields) -> tuple["Invite", str]:
+        """A new invite and its link secret, which is shown once and never stored."""
+        raw = _invite_token()
+        return cls.objects.create(token=hash_invite_token(raw), **fields), raw
+
+    @classmethod
+    def find(cls, raw: str):
+        if not isinstance(raw, str) or not 20 <= len(raw) <= 100:
+            return None
+        return cls.objects.filter(token=hash_invite_token(raw))
+
     @property
     def is_usable(self) -> bool:
         return not self.revoked and self.used_at is None and self.expires_at > timezone.now()
+
+
+class PasswordHistory(models.Model):
+    """Hashes of a person's recent passwords, so they aren't reused (accounts/validators.py)."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
+    hash = models.CharField(max_length=256)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["user", "-created_at"])]
+
+
+class SignInFailure(models.Model):
+    """Failed sign-ins counted per account (by a hash of the email, so unknown addresses count the
+    same way and nothing reveals which accounts exist) and per address (accounts/lockout.py)."""
+
+    key = models.CharField(max_length=80, unique=True)
+    count = models.PositiveIntegerField(default=0)
+    first_at = models.DateTimeField()
+    locked_until = models.DateTimeField(null=True, blank=True)

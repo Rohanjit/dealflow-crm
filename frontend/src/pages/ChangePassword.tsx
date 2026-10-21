@@ -47,7 +47,7 @@ export default function ChangePassword({ forced = false }: { forced?: boolean })
       <Stack>
         {error && <Alert color="red">{error}</Alert>}
         <PasswordInput label={forced ? "Temporary password" : "Current password"} required value={v.current_password} onChange={set("current_password")} error={errors.current_password} />
-        <PasswordInput label="New password" required value={v.new_password} onChange={set("new_password")} error={errors.new_password} description="At least 8 characters, not all numbers." />
+        <PasswordInput label="New password" required value={v.new_password} onChange={set("new_password")} error={errors.new_password} description="At least 12 characters. A few words strung together works well." />
         <PasswordInput label="Repeat new password" required value={v.confirm} onChange={set("confirm")} error={errors.confirm} />
         <Group>
           <Button type="submit" loading={busy}>Change password</Button>

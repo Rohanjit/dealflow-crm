@@ -43,16 +43,25 @@ function parseErrorBody(body: unknown): { message: string; fields: Record<string
 }
 
 function csrfToken(): string {
-  const m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+  // Over https the cookie carries the __Host- prefix (locked to this site, secure only).
+  const m = document.cookie.match(/(?:^|;\s*)(?:__Host-)?csrftoken=([^;]+)/);
   return m ? decodeURIComponent(m[1]) : "";
 }
 
-type Options = { method?: string; body?: unknown; form?: FormData; signal?: AbortSignal };
+// When the person last did something (any request they caused). Requests the app makes on its own
+// are sent with `background` and don't count, here or on the server (accounts/sessions.py).
+let lastActivity = Date.now();
+export const lastActive = () => lastActivity;
+export const markActive = () => { lastActivity = Date.now(); };
+
+type Options = { method?: string; body?: unknown; form?: FormData; signal?: AbortSignal; background?: boolean };
 
 export async function api<T = unknown>(path: string, opts: Options = {}): Promise<T> {
   const method = opts.method ?? (opts.body !== undefined || opts.form ? "POST" : "GET");
   const headers: Record<string, string> = { Accept: "application/json" };
   if (method !== "GET") headers["X-CSRFToken"] = csrfToken();
+  if (opts.background) headers["X-Dealflow-Background"] = "1";
+  else markActive();
   let body: BodyInit | undefined;
   if (opts.form) body = opts.form;
   else if (opts.body !== undefined) {
@@ -78,7 +87,9 @@ export async function api<T = unknown>(path: string, opts: Options = {}): Promis
     const err = new ApiError(res.status, data);
     if (err.code === "password_change_required") window.dispatchEvent(new Event("dealflow:password-change"));
     if (err.code?.startsWith("vault_")) window.dispatchEvent(new Event("dealflow:vault-locked"));
-    if (res.status === 403 && /credentials were not provided|not authenticated/i.test(err.message)) {
+    if (err.code === "session_expired") {
+      window.dispatchEvent(new CustomEvent("dealflow:signed-out", { detail: err.message }));
+    } else if (res.status === 403 && /credentials were not provided|not authenticated/i.test(err.message)) {
       window.dispatchEvent(new Event("dealflow:signed-out"));
     }
     throw err;

@@ -32,7 +32,7 @@ export type Cold = { items: ColdItem[]; count: number; more: Partial<Record<"inv
 export function useCold() {
   return useQuery({
     queryKey: ["stale"],
-    queryFn: () => api<Cold>("stale/"),
+    queryFn: () => api<Cold>("stale/", { background: true }),
     refetchInterval: 5 * 60_000,
   });
 }
@@ -57,7 +57,7 @@ export function useReminders() {
   const { info, me } = useApp();
   return useQuery({
     queryKey: ["task-alerts"],
-    queryFn: () => api<Reminders>("tasks/alerts/"),
+    queryFn: () => api<Reminders>("tasks/alerts/", { background: true }),
     refetchInterval: 60_000,
     refetchIntervalInBackground: true,
     enabled: info.built_modules.includes("tasks") && !!me.perms.tasks?.view,

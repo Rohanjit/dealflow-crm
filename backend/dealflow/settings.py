@@ -53,7 +53,9 @@ SECRET_KEY = _secret_key()
 # data reset every day (core/guest.py).
 DEMO = os.environ.get("DEALFLOW_DEMO", "0") == "1"
 DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
-ALLOWED_HOSTS = [h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "*").split(",") if h.strip()]
+# The names people reach this install by. Anything else is refused (Host-header attacks). Set
+# DJANGO_ALLOWED_HOSTS=crm.yourfirm.com (comma-separated) for a server.
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]").split(",") if h.strip()]
 CSRF_TRUSTED_ORIGINS = [
     o.strip() for o in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()
 ]
@@ -79,12 +81,14 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "dealflow.security.SecurityHeadersMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "dealflow.middleware.StripNulMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "accounts.sessions.SessionTimeoutMiddleware",
     "core.current.CurrentRequestMiddleware",
     "core.audit_middleware.AuditMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -117,11 +121,20 @@ if DATABASES["default"]["ENGINE"] == "django.db.backends.sqlite3":
     DATABASES["default"]["CONN_MAX_AGE"] = 0
 
 AUTH_USER_MODEL = "accounts.User"
+# Argon2id only (decision 63). There are no installs with older hashes to carry over.
+PASSWORD_HASHERS = ["django.contrib.auth.hashers.Argon2PasswordHasher"]
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 12}},
+    {"NAME": "accounts.validators.MaximumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+     "OPTIONS": {"user_attributes": ["email", "full_name"]}},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+    {"NAME": "accounts.validators.PasswordHistoryValidator"},
 ]
+if len(sys.argv) > 1 and sys.argv[1] == "test":
+    # Same algorithm, lighter settings, so the test suite doesn't spend minutes hashing.
+    PASSWORD_HASHERS = ["accounts.validators.TestArgon2Hasher"]
 
 LANGUAGE_CODE = "en"
 TIME_ZONE = os.environ.get("TZ", "Asia/Kolkata")
@@ -140,17 +153,48 @@ STORAGES = {
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-SESSION_COOKIE_AGE = 60 * 60 * 24 * 14
+# Sessions (decision 63): signed out after the firm's idle time (Settings > Security, default 30
+# minutes) and after 12 hours whatever happens (accounts/sessions.py), and when the browser closes.
+SESSION_ENGINE = "django.contrib.sessions.backends.db"
+SESSION_ABSOLUTE_SECONDS = 12 * 60 * 60
+SESSION_COOKIE_AGE = SESSION_ABSOLUTE_SECONDS
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
-# Firms may run behind their own HTTPS proxy; turn these on there.
-SESSION_COOKIE_SECURE = os.environ.get("DEALFLOW_SECURE_COOKIES", "0") == "1"
-CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
+X_FRAME_OPTIONS = "DENY"
 
-DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024
+# HTTPS. DEALFLOW_HTTPS=1 when people reach the install over https (the bundled Caddy proxy sets
+# it): cookies only travel over https and carry the __Host- prefix, plain http is redirected,
+# and browsers are told to use https for a year (HSTS). DEALFLOW_BEHIND_PROXY=1 trusts the
+# proxy's X-Forwarded-Proto; never set it when the app is reachable without the proxy.
+HTTPS = os.environ.get("DEALFLOW_HTTPS", os.environ.get("DEALFLOW_SECURE_COOKIES", "0")) == "1"
+if HTTPS:
+    SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_NAME = "__Host-dealflow_session"
+    CSRF_COOKIE_NAME = "__Host-csrftoken"
+    SECURE_SSL_REDIRECT = os.environ.get("DEALFLOW_SSL_REDIRECT", "1") == "1"
+    SECURE_REDIRECT_EXEMPT = [r"^api/health/$"]
+    SECURE_HSTS_SECONDS = int(os.environ.get("DEALFLOW_HSTS_SECONDS", str(365 * 24 * 60 * 60)))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = os.environ.get("DEALFLOW_HSTS_SUBDOMAINS", "1") == "1"
+    # Preloading commits the whole domain to https in browsers for good: the firm's choice.
+    # Off by default on purpose: anyone may submit a domain that sends "preload" to the browsers'
+    # list, which would force https on every subdomain of the firm (intranet sites included).
+    SECURE_HSTS_PRELOAD = os.environ.get("DEALFLOW_HSTS_PRELOAD", "0") == "1"
+    if not SECURE_HSTS_PRELOAD:
+        SILENCED_SYSTEM_CHECKS = ["security.W021"]
+else:
+    SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = False
+if os.environ.get("DEALFLOW_BEHIND_PROXY", "0") == "1":
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Plain request bodies (JSON, forms) up to 5 MB; files are streamed to disk and checked per feature.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 VAULT_MAX_FILE_MB = int(os.environ.get("DEALFLOW_VAULT_MAX_FILE_MB", "50"))
-FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],

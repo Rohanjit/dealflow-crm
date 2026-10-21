@@ -18,7 +18,7 @@ type User = {
   last_login: string | null; date_joined: string; has_vault_pin: boolean;
 };
 type Invite = {
-  id: number; token: string; role: { id: number; name: string }; note: string; created_by: string | null;
+  id: number; token?: string; role: { id: number; name: string }; note: string; created_by: string | null;
   created_at: string; expires_at: string; used_at: string | null; used_by: string | null; revoked: boolean; usable: boolean;
 };
 
@@ -146,7 +146,8 @@ export default function UsersSettings() {
 
       {openInvites.length > 0 && (
         <Paper withBorder p="lg">
-          <Title order={5} mb="sm">Open invite links</Title>
+          <Title order={5} mb={4}>Open invite links</Title>
+          <Text size="xs" c="dimmed" mb="sm">For safety, a link is shown only when it's made. If one was lost, revoke it and make a new one.</Text>
           <Table.ScrollContainer minWidth={420} type="native">
           <Table className="df-table" verticalSpacing="xs">
             <Table.Thead><Table.Tr><Table.Th>For</Table.Th><Table.Th>Role</Table.Th><Table.Th>Expires</Table.Th><Table.Th /></Table.Tr></Table.Thead>
@@ -158,7 +159,6 @@ export default function UsersSettings() {
                   <Table.Td><Text size="sm">{formatDate(i.expires_at.slice(0, 10), me)}</Text></Table.Td>
                   <Table.Td>
                     <Group gap="xs" justify="flex-end">
-                      <CopyLink token={i.token} />
                       <Button size="xs" variant="subtle" color="red" onClick={() => revoke(i)}>Revoke</Button>
                     </Group>
                   </Table.Td>
@@ -296,11 +296,12 @@ function InviteModal({ roleOptions, onClose }: { roleOptions: { value: string; l
     <Modal opened onClose={onClose} title="Invite link" size="lg">
       {invite ? (
         <Stack>
-          <Text size="sm">Send this link by email, WhatsApp or any channel. It works once and expires in 7 days. The person sets their own password and joins as <b>{invite.role.name}</b>.</Text>
+          <Text size="sm">Send this link by email, WhatsApp or any channel. It works once and expires in 72 hours. The person sets their own password and joins as <b>{invite.role.name}</b>.</Text>
           <Group gap="xs" wrap="nowrap">
-            <TextInput readOnly value={inviteUrl(invite.token)} style={{ flex: 1 }} onFocus={(e) => e.currentTarget.select()} />
-            <CopyLink token={invite.token} />
+            <TextInput readOnly value={inviteUrl(invite.token ?? "")} style={{ flex: 1 }} onFocus={(e) => e.currentTarget.select()} />
+            <CopyLink token={invite.token ?? ""} />
           </Group>
+          <Text size="xs" c="orange">Copy it now: Dealflow keeps only a scrambled form of the link and can't show it again.</Text>
           <Group justify="flex-end"><Button onClick={onClose}>Done</Button></Group>
         </Stack>
       ) : (

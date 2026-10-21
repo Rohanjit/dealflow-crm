@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api } from "../api";
-import { resetSession } from "../context";
+import { resetSession, takeSignedOutReason } from "../context";
 import AuthCard from "../components/AuthCard";
 import { errorMessage } from "../components/errors";
 import { startGuest } from "../components/guest";
@@ -14,6 +14,7 @@ export default function Login({ firmName, guest = false }: { firmName: string; g
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [notice] = useState(takeSignedOutReason);
   const [busy, setBusy] = useState(false);
   const [guestBusy, setGuestBusy] = useState(false);
 
@@ -50,6 +51,7 @@ export default function Login({ firmName, guest = false }: { firmName: string; g
   return (
     <AuthCard title={firmName ? `Sign in to ${firmName}` : "Sign in"}>
       <form onSubmit={submit}>
+        {notice && !error && <Alert color="blue" mb="md">{notice}</Alert>}
         <Stack>
           {error && <Alert color="red">{error}</Alert>}
           <TextInput label="Email" type="email" required autoFocus value={email} onChange={(e) => setEmail(e.currentTarget.value)} />

@@ -1,11 +1,12 @@
 import { Group, Select, Stack, Text, UnstyledButton } from "@mantine/core";
-import { IconBell, IconBuilding, IconFileExport, IconDatabase, IconShieldCheck, IconList, IconMail, IconShieldLock, IconToggleRight, IconUserCircle, IconUsers } from "@tabler/icons-react";
+import { IconBell, IconBuilding, IconFileExport, IconDatabase, IconShieldCheck, IconList, IconLockSquareRounded, IconMail, IconShieldLock, IconToggleRight, IconUserCircle, IconUsers } from "@tabler/icons-react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import { useMe } from "../context";
 import AlertSettings from "./AlertSettings";
 import ExportSettings from "./ExportSettings";
 import EmailSettings from "./EmailSettings";
+import SecuritySettings from "./SecuritySettings";
 import AuditSettings from "./AuditSettings";
 import BackupsSettings from "./BackupsSettings";
 import DropdownSettings from "./DropdownSettings";
@@ -26,6 +27,7 @@ export default function SettingsPage() {
     { path: "export", label: "Export", icon: IconFileExport, show: true, el: <ExportSettings />, group: "You" },
     { path: "firm", label: "Firm", icon: IconBuilding, show: me.flags.manage_settings, el: <FirmSettings /> },
     { path: "users", label: "Users", icon: IconUsers, show: me.flags.manage_users, el: <UsersSettings /> },
+    { path: "security", label: "Security", icon: IconLockSquareRounded, show: me.role.is_admin, el: <SecuritySettings /> },
     { path: "roles", label: "Roles & permissions", icon: IconShieldLock, show: me.role.is_admin, el: <RolesSettings /> },
     { path: "alerts", label: "Alerts", icon: IconBell, show: me.flags.manage_settings, el: <AlertSettings /> },
     { path: "email", label: "Email", icon: IconMail, show: me.role.is_admin, el: <EmailSettings /> },

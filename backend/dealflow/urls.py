@@ -23,6 +23,8 @@ api = [
     path("auth/login/", a.LoginView.as_view()),
     path("auth/logout/", a.LogoutView.as_view()),
     path("auth/me/", a.MeView.as_view()),
+    path("auth/session/", a.SessionView.as_view()),
+    path("settings/security/", a.SecuritySettingsView.as_view()),
     path("notifications/cleared/", a.ClearedAlertsView.as_view()),
     path("mail/settings/", m.MailSettingsView.as_view()),
     path("mail/account/", m.MailAccountView.as_view()),

@@ -67,6 +67,15 @@ class Command(BaseCommand):
                         mail_service.remove_old_uploads()
                     except Exception:
                         log.exception("Removing old email attachments failed")
+                    try:
+                        from django.contrib.sessions.models import Session
+
+                        from accounts import lockout
+
+                        lockout.tidy()
+                        Session.objects.filter(expire_date__lt=timezone.now()).delete()
+                    except Exception:
+                        log.exception("Tidying sign-in records failed")
                     for done in audit.housekeeping(today):
                         system(done)
                     housekept = today
