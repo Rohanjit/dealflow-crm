@@ -398,7 +398,8 @@ def note_payload(n: Note, user) -> dict:
         "created_by": {"id": n.created_by_id, "name": n.created_by.full_name} if n.created_by else None,
         "created_at": n.created_at.isoformat(),
         "updated_at": n.updated_at.isoformat(),
-        "can_edit": n.kind != "stage" and (n.created_by_id == user.pk or user.is_admin),
+        "can_edit": n.kind != "stage" and not (n.meta or {}).get("email") and (n.created_by_id == user.pk or user.is_admin),
+        "can_delete": n.kind != "stage" and (n.created_by_id == user.pk or user.is_admin),
     }
 
 
@@ -465,6 +466,8 @@ class NoteDetailView(APIView):
 
     def patch(self, request, pk):
         n = self._note(request, pk)
+        if (n.meta or {}).get("email"):
+            raise PermissionDenied("Emails sent from Dealflow are recorded as they were sent and can't be changed.")
         before = n.text
         for k, v in _clean_note(request.data, partial=True).items():
             setattr(n, k, v)

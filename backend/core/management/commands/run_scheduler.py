@@ -50,8 +50,23 @@ class Command(BaseCommand):
             except Exception:
                 log.exception("Daily backup failed")
             try:
+                from mail import campaigns as mail_campaigns
+                from mail import service as mail_service
+
+                if n := mail_campaigns.tick():
+                    log.info("Campaigns: sent %s emails", n)
+                mail_service.recheck_pending()
+            except Exception:
+                log.exception("Sending campaign emails failed")
+            try:
                 today = timezone.localdate()
                 if housekept != today:
+                    try:
+                        from mail import service as mail_service
+
+                        mail_service.remove_old_uploads()
+                    except Exception:
+                        log.exception("Removing old email attachments failed")
                     for done in audit.housekeeping(today):
                         system(done)
                     housekept = today

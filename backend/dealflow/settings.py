@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     "tasks",
     "vault",
     "reports",
+    "mail",
 ]
 
 MIDDLEWARE = [

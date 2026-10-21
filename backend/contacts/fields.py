@@ -29,6 +29,9 @@ FIELDS = [
                       "business email", "email id"]),
     FieldDef("personal_email", "Personal email", "email", C, searchable=True,
              aliases=["e-mail 2 address", "email 2", "personal e-mail", "other email", "secondary email"]),
+    FieldDef("email_opt_out", "No campaign emails", "boolean", C, filterable=True,
+             help="Campaigns skip this person. One-to-one emails can still be sent.",
+             aliases=["unsubscribed", "opt out", "opted out", "email opt out", "do not email"]),
     FieldDef("mobile", "Mobile", "phone", C, list_default=True, searchable=True,
              aliases=["mobile phone", "mobile number", "mobile no", "cell", "cell phone", "phone", "phone number",
                       "whatsapp", "whatsapp number", "contact number"]),
@@ -114,6 +117,7 @@ MODULE = register(
         subtitle=subtitle,
         duplicate_keys=duplicate_keys,
         segment_field="firm",
+        timeline=True,
         extra_filters=stale.make_filter("contacts"),
         quick_filters=[stale.QUICK_FILTER],
         sections=[

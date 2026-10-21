@@ -52,6 +52,8 @@ class Contact(Record):
     assistant_name = models.CharField(max_length=255, blank=True)
     assistant_contact = models.CharField(max_length=255, blank=True)
     preferred_channel = models.CharField(max_length=10, choices=CHANNEL_CHOICES, blank=True)
+    # Asked not to get campaign emails: campaigns skip them (one-to-one emails still allowed).
+    email_opt_out = models.BooleanField(default=False)
 
     # Other
     tags = models.ManyToManyField(Tag, blank=True, related_name="+")

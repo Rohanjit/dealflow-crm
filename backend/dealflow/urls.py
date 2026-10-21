@@ -7,6 +7,7 @@ from accounts import views as a
 from core import audit_views as av
 from core import guest as g
 from core import insight_views as iv
+from mail import views as m
 from reports import views as rv
 from core import layout_views as lv
 from core import views as c
@@ -23,6 +24,21 @@ api = [
     path("auth/logout/", a.LogoutView.as_view()),
     path("auth/me/", a.MeView.as_view()),
     path("notifications/cleared/", a.ClearedAlertsView.as_view()),
+    path("mail/settings/", m.MailSettingsView.as_view()),
+    path("mail/account/", m.MailAccountView.as_view()),
+    path("mail/connect/<str:provider>/", m.MailConnectView.as_view()),
+    path("mail/callback/<str:provider>/", m.mail_callback),
+    path("mail/attachments/", m.AttachmentUploadView.as_view()),
+    path("mail/recipients/", m.RecipientSuggestionsView.as_view()),
+    path("mail/send/", m.SendView.as_view()),
+    path("mail/templates/", m.TemplateListView.as_view()),
+    path("mail/templates/<int:pk>/", m.TemplateDetailView.as_view()),
+    path("mail/campaigns/", m.CampaignListView.as_view()),
+    path("mail/campaigns/<int:pk>/", m.CampaignDetailView.as_view()),
+    path("mail/campaigns/<int:pk>/people/", m.CampaignRecipientsView.as_view()),
+    path("mail/campaigns/<int:pk>/preview/", m.CampaignPreviewView.as_view()),
+    path("mail/campaigns/<int:pk>/test/", m.CampaignTestView.as_view()),
+    path("mail/campaigns/<int:pk>/<str:action>/", m.CampaignActionView.as_view()),
     path("reports/", rv.SavedReportListView.as_view()),
     path("reports/run/", rv.ReportRunView.as_view()),
     path("reports/<int:pk>/", rv.SavedReportDetailView.as_view()),

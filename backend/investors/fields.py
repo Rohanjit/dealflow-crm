@@ -131,6 +131,7 @@ MODULE = register(
         title_field="firm_name",
         subtitle=subtitle,
         duplicate_keys=duplicate_keys,
+        timeline=True,
         extra_filters=stale.make_filter("investors", ticket_filter),
         quick_filters=[stale.QUICK_FILTER],
         name_key=_norm_name,
