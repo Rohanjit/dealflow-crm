@@ -215,8 +215,11 @@ def _back(path: str, **params) -> HttpResponseRedirect:
 @require_GET
 def mail_callback(request, provider):
     """Google or Microsoft sends the person back here after they agree (or decline)."""
-    if not request.user.is_authenticated or not request.user.is_active:
-        return HttpResponseRedirect("/login")
+    from accounts.mfa import needs_enrolment
+
+    if not request.user.is_authenticated or not request.user.is_active or request.user.must_change_password \
+            or needs_enrolment(request.user):
+        return HttpResponseRedirect("/")
     pending = request.session.pop(SESSION_KEY, None) or {}
     back = pending.get("next") or "/settings"
     if provider not in PROVIDERS or pending.get("provider") != provider:

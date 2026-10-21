@@ -9,6 +9,7 @@ import { useVaultStatus } from "../vault/api";
 import { SetPinForm } from "../vault/VaultGate";
 import ChangePassword from "./ChangePassword";
 import MailboxCard from "../mail/MailboxCard";
+import { DevicesCard, TwoStepCard } from "../security/TwoStep";
 
 export default function Preferences() {
   const { info, me, refresh } = useApp();
@@ -55,8 +56,10 @@ export default function Preferences() {
           <Group><Button onClick={save} loading={busy}>Save preferences</Button></Group>
         </Stack>
       </Paper>
-      <MailboxCard />
+      {!info.is_guest && <TwoStepCard />}
+      {!info.is_guest && <DevicesCard />}
       {!info.is_guest && <ChangePassword />}
+      <MailboxCard />
       {me.perms.vault?.view && !info.is_guest && <VaultPin />}
     </Stack>
   );

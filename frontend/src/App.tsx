@@ -17,6 +17,7 @@ import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Setup from "./pages/Setup";
 import SettingsPage from "./settings/SettingsPage";
+import { MfaSetup } from "./security/TwoStep";
 
 export default function App() {
   const { data: info, isLoading, error } = useAppInfo();
@@ -56,6 +57,10 @@ export default function App() {
 
   if (info.user.must_change_password) {
     return <ChangePassword forced />;
+  }
+
+  if (info.user.mfa_enrol_required) {
+    return <AppProvider info={info}><MfaSetup /></AppProvider>;
   }
 
   return (

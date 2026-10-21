@@ -132,7 +132,11 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
     {"NAME": "accounts.validators.PasswordHistoryValidator"},
 ]
+# Two-step login for everyone (decision 63). Only the test suite turns it off, for tests that are
+# about something else; tests of sign-in turn it back on.
+MFA_REQUIRED = True
 if len(sys.argv) > 1 and sys.argv[1] == "test":
+    MFA_REQUIRED = False
     # Same algorithm, lighter settings, so the test suite doesn't spend minutes hashing.
     PASSWORD_HASHERS = ["accounts.validators.TestArgon2Hasher"]
 

@@ -1,4 +1,5 @@
 import secrets
+import time
 
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.password_validation import validate_password
@@ -62,7 +63,10 @@ class LoginThrottle(AnonRateThrottle):
 
 
 def me_payload(user: User) -> dict:
+    from . import mfa
+
     return {
+        "mfa_enrol_required": mfa.needs_enrolment(user),
         "id": user.pk,
         "email": user.email,
         "full_name": user.full_name,
@@ -100,6 +104,8 @@ def _session_info(request) -> dict:
 
 class SessionView(APIView):
     """GET: time left before idle and absolute sign-out. POST: "Stay signed in" (counts as activity)."""
+
+    mfa_enrolment = True
 
     def get(self, request):
         return Response(_session_info(request))
@@ -247,9 +253,17 @@ class LoginView(APIView):
             else:
                 current.note("Sign-in failed")
             raise ValidationError({"detail": "That email and password don't match."})
+        from . import mfa
+
+        if mfa.has_mfa(user) and not mfa.exempt(user):
+            # Password right; the second step decides. Nothing is signed in until then.
+            request.session.cycle_key()
+            request.session[mfa.PENDING] = {"uid": user.pk, "at": int(time.time())}
+            current.note("Password accepted; waiting for the second step")
+            return Response({"mfa_required": True, "methods": mfa.methods(user)})
         lockout.succeeded(email)
         login(request, user)  # a new session id, so one planted before sign-in is useless
-        sessions.start(request)
+        sessions.start(request, "password")
         return Response(me_payload(user))
 
 
@@ -323,6 +337,7 @@ def user_payload(u: User) -> dict:
         "last_login": u.last_login.isoformat() if u.last_login else None,
         "date_joined": u.date_joined.isoformat(),
         "has_vault_pin": bool(u.vault_pin),
+        "has_mfa": __import__("accounts.mfa", fromlist=["has_mfa"]).has_mfa(u),
     }
 
 
@@ -648,8 +663,6 @@ class ClearedAlertsView(APIView):
     """The notification bell's "Clear all", per person and across devices. The app sends the keys of
     every item it was showing ("task:12:overdue", "stuck:deals:5:term_sheet", ...); they stay hidden
     until something new arrives. An empty list brings everything back."""
-
-    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         return Response({"keys": request.user.cleared_alerts or []})

@@ -18,6 +18,7 @@ import { useCold, useColdAction, useReminders, type ColdItem, type Reminder } fr
 import { useAccessRequests, useDecide, type AccessRequest } from "../deals/Restricted";
 import { useInsightAlerts, useSnooze, type Alerts } from "../insights/api";
 import { dueText } from "./TaskRow";
+import { formatDateTime } from "../format";
 
 export default function TaskBell() {
   const me = useMe();
@@ -30,6 +31,11 @@ export default function TaskBell() {
   const decide = useDecide();
   const alerts = useInsightAlerts().data;
   const snooze = useSnooze();
+  // Sign-ins from a browser not used in the last 90 days (accounts: new_device).
+  const signins = useQuery({
+    queryKey: ["security-alerts"], refetchInterval: 5 * 60_000,
+    queryFn: () => api<{ id: number; device: string; ip: string; created_at: string; current: boolean }[]>("auth/security-alerts/", { background: true }),
+  }).data;
   const qc = useQueryClient();
   const clearedQ = useQuery({ queryKey: ["cleared-alerts"], queryFn: () => api<{ keys: string[] }>("notifications/cleared/") });
   const cleared = useMemo(() => new Set(clearedQ.data?.keys ?? []), [clearedQ.data]);
@@ -38,6 +44,7 @@ export default function TaskBell() {
   // (a task going from today to overdue, a deal stuck at a later stage, another investor idling).
   const keys = useMemo(() => {
     const k: string[] = [];
+    for (const s of signins ?? []) k.push(`signin:${s.id}`);
     for (const r of asks?.to_decide ?? []) k.push(`ask:${r.id}`);
     for (const t of data?.overdue ?? []) k.push(`task:${t.id}:overdue`);
     for (const t of data?.today ?? []) k.push(`task:${t.id}:today`);
@@ -49,7 +56,7 @@ export default function TaskBell() {
     for (const c of cold?.items ?? []) k.push(`cold:${c.module}:${c.id}`);
     for (const [m, n] of Object.entries(cold?.more ?? {})) if (n) k.push(`more:cold:${m}:${n}`);
     return k;
-  }, [asks, data, alerts, cold]);
+  }, [asks, data, alerts, cold, signins]);
   const show = (key: string) => !cleared.has(key);
   const moreCount = (key: string) => Number(key.split(":").pop()) || 0;
   const total = keys.filter(show).reduce((sum, k) => sum + (k.startsWith("more:") ? moreCount(k) : 1), 0);
@@ -75,12 +82,12 @@ export default function TaskBell() {
   const lastCount = useRef<number | null>(null);
   const mountedAt = useRef(Date.now());
   useEffect(() => {
-    if (!data && !cold && !asks && !alerts) return;
+    if (!data && !cold && !asks && !alerts && !signins) return;
     // The first few seconds are the lists arriving one by one, not new notifications.
     const settling = Date.now() - mountedAt.current < 4000;
     if (!settling && lastCount.current !== null && total > lastCount.current) setRing((r) => r + 1);
     lastCount.current = total;
-  }, [data, cold, asks, alerts, total]);
+  }, [data, cold, asks, alerts, signins, total]);
 
   useEffect(() => {
     // Wait for the cleared list too, so the "overdue" notice on opening leaves out what was cleared.
@@ -117,8 +124,9 @@ export default function TaskBell() {
     seen.current = current;
   }, [data, nav, clearedQ.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!data && !cold && !asks && !alerts) return null;
+  if (!data && !cold && !asks && !alerts && !signins) return null;
   const toDecide = (asks?.to_decide ?? []).filter((r) => show(`ask:${r.id}`));
+  const newSignins = (signins ?? []).filter((x) => show(`signin:${x.id}`));
   const askRow = (r: AccessRequest) => (
     <div key={`ask-${r.id}`}>
       <Anchor component={Link} to={`/m/deals/${r.deal}`} size="sm" fw={500} onClick={() => setOpened(false)}>{r.deal_title}</Anchor>
@@ -240,6 +248,17 @@ export default function TaskBell() {
         ) : (
           <ScrollArea.Autosize mah={420}>
             <Stack gap="sm">
+              {newSignins.length > 0 && <Text size="xs" fw={600} c="red.8" tt="uppercase">Security</Text>}
+              {newSignins.map((x) => (
+                <div key={`signin-${x.id}`}>
+                  <Text size="sm" fw={500}>New sign-in: {x.device}</Text>
+                  <Text size="xs" c="dimmed">{formatDateTime(x.created_at, me)} · {x.ip}{x.current ? " · this browser" : ""}</Text>
+                  <Group gap={6} mt={4}>
+                    <Button size="compact-xs" variant="light" onClick={() => saveCleared([...cleared, `signin:${x.id}`], "Thanks. Marked as you.")}>It was me</Button>
+                    <Button size="compact-xs" variant="subtle" color="red" component={Link} to="/settings/preferences" onClick={close}>Not me: review devices</Button>
+                  </Group>
+                </div>
+              ))}
               {toDecide.length > 0 && <Text size="xs" fw={600} c="navy.7" tt="uppercase">Access requests</Text>}
               {toDecide.map(askRow)}
               {overdue.length > 0 && <Text size="xs" fw={600} c="red.8" tt="uppercase">Overdue</Text>}

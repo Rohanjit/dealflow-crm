@@ -216,3 +216,61 @@ class SignInFailure(models.Model):
     count = models.PositiveIntegerField(default=0)
     first_at = models.DateTimeField()
     locked_until = models.DateTimeField(null=True, blank=True)
+
+
+# ---------------------------------------------------------------- two-step login (decision 63, S2)
+
+
+class TotpDevice(models.Model):
+    """An authenticator app (Google Authenticator, Microsoft Authenticator, 1Password...). The
+    secret is stored encrypted; `last_step` stops a code being used twice."""
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="totp")
+    secret = models.TextField()  # sealed (accounts/mfa.py)
+    confirmed = models.BooleanField(default=False)
+    last_step = models.BigIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class Passkey(models.Model):
+    """A passkey or security key (WebAuthn). Only the public key is stored."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="passkeys")
+    credential_id = models.CharField(max_length=1400, unique=True)  # base64url
+    public_key = models.TextField()  # base64url COSE key
+    sign_count = models.BigIntegerField(default=0)
+    name = models.CharField(max_length=80)
+    transports = models.JSONField(default=list, blank=True)
+    backed_up = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+
+class RecoveryCode(models.Model):
+    """One-time codes for when the phone or key is lost. Hashed like passwords."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="recovery_codes")
+    hash = models.CharField(max_length=256)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+
+class UserSession(models.Model):
+    """A signed-in browser, for "Signed-in devices" and new-device alerts. Kept 90 days after it ends."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
+    session_key = models.CharField(max_length=40, db_index=True)
+    ip = models.CharField(max_length=70, blank=True)
+    user_agent = models.CharField(max_length=300, blank=True)
+    device = models.CharField(max_length=80, blank=True)  # "Chrome on macOS"
+    device_hash = models.CharField(max_length=64, blank=True)
+    method = models.CharField(max_length=20, blank=True)  # passkey / app / recovery / password
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_seen = models.DateTimeField(auto_now_add=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    new_device = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-last_seen"]

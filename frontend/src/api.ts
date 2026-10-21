@@ -85,7 +85,9 @@ export async function api<T = unknown>(path: string, opts: Options = {}): Promis
   }
   if (!res.ok) {
     const err = new ApiError(res.status, data);
-    if (err.code === "password_change_required") window.dispatchEvent(new Event("dealflow:password-change"));
+    if (err.code === "password_change_required" || err.code === "mfa_enrol_required") {
+      window.dispatchEvent(new Event("dealflow:password-change"));
+    }
     if (err.code?.startsWith("vault_")) window.dispatchEvent(new Event("dealflow:vault-locked"));
     if (err.code === "session_expired") {
       window.dispatchEvent(new CustomEvent("dealflow:signed-out", { detail: err.message }));

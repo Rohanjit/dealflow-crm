@@ -12,6 +12,7 @@ export type Me = {
   date_format: "DD/MM/YYYY" | "MM/DD/YYYY" | "YYYY-MM-DD";
   number_grouping: "indian" | "international";
   must_change_password: boolean;
+  mfa_enrol_required: boolean;
 };
 
 export type SessionInfo = { idle_seconds: number; idle_left: number; absolute_left: number };

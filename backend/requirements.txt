@@ -8,3 +8,7 @@ dj-database-url>=2.2,<4
 psycopg[binary]>=3.2,<4
 cryptography>=43,<47
 reportlab>=4.2,<6
+argon2-cffi==25.1.0
+webauthn==2.7.0
+pyotp==2.9.0
+segno==1.6.6

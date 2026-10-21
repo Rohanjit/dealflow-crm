@@ -14,6 +14,12 @@ class IsActiveUser(BasePermission):
             raise PermissionDenied(
                 detail={"detail": "Change your password to continue.", "code": "password_change_required"}
             )
+        if not getattr(view, "mfa_enrolment", False):
+            from .mfa import needs_enrolment
+
+            if needs_enrolment(user):
+                raise PermissionDenied(
+                    detail={"detail": "Set up two-step login to continue.", "code": "mfa_enrol_required"})
         return True
 
 

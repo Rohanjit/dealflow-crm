@@ -3,6 +3,7 @@ from django.http import HttpResponse, JsonResponse
 from django.urls import include, path, re_path
 from django.views.decorators.csrf import ensure_csrf_cookie
 
+from accounts import mfa_views as mv
 from accounts import views as a
 from core import audit_views as av
 from core import guest as g
@@ -24,6 +25,22 @@ api = [
     path("auth/logout/", a.LogoutView.as_view()),
     path("auth/me/", a.MeView.as_view()),
     path("auth/session/", a.SessionView.as_view()),
+    path("auth/mfa/verify/", mv.MfaVerifyView.as_view()),
+    path("auth/passkey/options/", mv.PasskeyOptionsView.as_view()),
+    path("auth/passkey/sign-in/", mv.PasskeySignInView.as_view()),
+    path("auth/mfa/", mv.MfaStatusView.as_view()),
+    path("auth/mfa/app/start/", mv.TotpStartView.as_view()),
+    path("auth/mfa/app/confirm/", mv.TotpConfirmView.as_view()),
+    path("auth/mfa/app/remove/", mv.TotpRemoveView.as_view()),
+    path("auth/mfa/passkeys/options/", mv.PasskeyRegisterOptionsView.as_view()),
+    path("auth/mfa/passkeys/", mv.PasskeyListView.as_view()),
+    path("auth/mfa/passkeys/<int:pk>/", mv.PasskeyDetailView.as_view()),
+    path("auth/mfa/recovery-codes/", mv.RecoveryCodesView.as_view()),
+    path("auth/sessions/", mv.SessionsView.as_view()),
+    path("auth/sessions/<int:pk>/", mv.SessionEndView.as_view()),
+    path("auth/sessions/end-others/", mv.SessionEndOthersView.as_view()),
+    path("auth/security-alerts/", mv.SecurityAlertsView.as_view()),
+    path("users/<int:pk>/reset-mfa/", mv.UserResetMfaView.as_view()),
     path("settings/security/", a.SecuritySettingsView.as_view()),
     path("notifications/cleared/", a.ClearedAlertsView.as_view()),
     path("mail/settings/", m.MailSettingsView.as_view()),

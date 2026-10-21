@@ -5,6 +5,7 @@ Requests the app makes on its own (the notification bell and other polling) carr
 X-Dealflow-Background: 1 and don't count as activity, so leaving a tab open doesn't keep a
 session alive."""
 
+import re
 import time
 
 from django.conf import settings
@@ -20,10 +21,57 @@ def idle_seconds() -> int:
     return max(15, min(480, FirmSettings.load().idle_minutes or 30)) * 60
 
 
-def start(request):
+def start(request, method: str = ""):
     now = int(time.time())
     request.session[STARTED] = now
     request.session[SEEN] = now
+    if method and getattr(request, "user", None) is not None and request.user.is_authenticated:
+        record(request, method)
+
+
+def device_name(ua: str) -> str:
+    """"Chrome on macOS" from a browser's user-agent text."""
+    ua = ua or ""
+    browser = next((name for pat, name in (
+        (r"Edg/", "Edge"), (r"OPR/|Opera", "Opera"), (r"Firefox/", "Firefox"), (r"Chrome/|CriOS/", "Chrome"),
+        (r"Safari/", "Safari")) if re.search(pat, ua)), "A browser")
+    system = next((name for pat, name in (
+        (r"iPhone|iPad|iPod", "iOS"), (r"Android", "Android"), (r"Mac OS X|Macintosh", "macOS"),
+        (r"Windows", "Windows"), (r"CrOS", "ChromeOS"), (r"Linux", "Linux")) if re.search(pat, ua)), "")
+    return f"{browser} on {system}" if system else browser
+
+
+def record(request, method: str):
+    """Note this sign-in for "Signed-in devices", and flag it if the browser is new for this person."""
+    import hashlib
+
+    from django.utils import timezone
+
+    from .lockout import client_ip
+    from .models import UserSession
+
+    if not request.session.session_key:
+        request.session.save()
+    ua = (request.META.get("HTTP_USER_AGENT") or "")[:300]
+    device = device_name(ua)
+    dh = hashlib.sha256(device.encode()).hexdigest()
+    user = request.user
+    seen_before = UserSession.objects.filter(user=user)
+    new = seen_before.exists() and not seen_before.filter(
+        device_hash=dh, created_at__gte=timezone.now() - timezone.timedelta(days=90)).exists()
+    UserSession.objects.create(user=user, session_key=request.session.session_key, ip=client_ip(request)[:70],
+                               user_agent=ua, device=device, device_hash=dh, method=method[:20], new_device=new)
+    UserSession.objects.filter(ended_at__lt=timezone.now() - timezone.timedelta(days=90)).delete()
+
+
+def end(session_key: str):
+    from django.contrib.sessions.models import Session
+    from django.utils import timezone
+
+    from .models import UserSession
+
+    Session.objects.filter(session_key=session_key).delete()
+    UserSession.objects.filter(session_key=session_key, ended_at__isnull=True).update(ended_at=timezone.now())
 
 
 def remaining(request) -> dict:
@@ -61,4 +109,24 @@ class SessionTimeoutMiddleware:
                         return JsonResponse({"detail": expired, "code": "session_expired"}, status=401)
                 elif request.headers.get("X-Dealflow-Background") != "1" and now - seen >= 15:
                     request.session[SEEN] = now
+                    if now - seen >= 60:
+                        from django.utils import timezone
+
+                        from .models import UserSession
+
+                        UserSession.objects.filter(session_key=request.session.session_key).update(
+                            last_seen=timezone.now())
         return self.get_response(request)
+
+
+def end_all_for(user, keep: str | None = None) -> int:
+    """Sign a person out everywhere (except `keep`): every stored session that belongs to them."""
+    from django.contrib.sessions.models import Session
+    from django.utils import timezone
+
+    n = 0
+    for sess in Session.objects.filter(expire_date__gt=timezone.now()).iterator():
+        if sess.session_key != keep and str(sess.get_decoded().get("_auth_user_id")) == str(user.pk):
+            end(sess.session_key)
+            n += 1
+    return n

@@ -15,7 +15,7 @@ import { formatDate, formatDateTime } from "../format";
 type Role = { id: number; name: string; is_admin: boolean };
 type User = {
   id: number; email: string; full_name: string; role: Role; is_active: boolean; must_change_password: boolean;
-  last_login: string | null; date_joined: string; has_vault_pin: boolean;
+  last_login: string | null; date_joined: string; has_vault_pin: boolean; has_mfa: boolean;
 };
 type Invite = {
   id: number; token?: string; role: { id: number; name: string }; note: string; created_by: string | null;
@@ -53,6 +53,22 @@ export default function UsersSettings() {
         }
       },
     });
+  }
+
+  const [mfaReset, setMfaReset] = useState<User | null>(null);
+  const [mfaPw, setMfaPw] = useState("");
+  const [mfaErr, setMfaErr] = useState("");
+  async function doMfaReset() {
+    setMfaErr("");
+    try {
+      await api(`users/${mfaReset!.id}/reset-mfa/`, { body: { password: mfaPw } });
+      notifyOk(`${mfaReset!.full_name} is signed out everywhere and sets up two-step login again at next sign-in.`);
+      setMfaReset(null);
+      setMfaPw("");
+      refresh();
+    } catch (e) {
+      setMfaErr(errorMessage(e));
+    }
   }
 
   function resetPin(u: User) {
@@ -129,6 +145,7 @@ export default function UsersSettings() {
                           <Menu.Item onClick={() => setEditing(u)}>Edit</Menu.Item>
                           <Menu.Item onClick={() => reset(u)}>Reset password</Menu.Item>
                           {u.has_vault_pin && <Menu.Item onClick={() => resetPin(u)}>Reset Vault PIN</Menu.Item>}
+                          {u.has_mfa && <Menu.Item onClick={() => setMfaReset(u)}>Reset two-step login</Menu.Item>}
                           {u.id !== me.id && (u.is_active
                             ? <Menu.Item color="red" onClick={() => setActive(u, false)}>Deactivate</Menu.Item>
                             : <Menu.Item onClick={() => setActive(u, true)}>Reactivate</Menu.Item>)}
@@ -169,6 +186,15 @@ export default function UsersSettings() {
           </Table.ScrollContainer>
         </Paper>
       )}
+
+      <Modal opened={!!mfaReset} onClose={() => { setMfaReset(null); setMfaPw(""); }} title={`Reset ${mfaReset?.full_name}'s two-step login?`}>
+        <Stack>
+          <Text size="sm">Use this when they've lost their phone or passkey and their recovery codes. Make sure it's really them first.
+            They're signed out everywhere and set two-step login up again when they next sign in.</Text>
+          <PasswordInput label="Your password" value={mfaPw} onChange={(e) => setMfaPw(e.currentTarget.value)} error={mfaErr || undefined} />
+          <Group justify="flex-end"><Button color="red" disabled={!mfaPw} onClick={doMfaReset}>Reset two-step login</Button></Group>
+        </Stack>
+      </Modal>
 
       {editing && (
         <UserModal user={editing === "new" ? null : editing} roleOptions={roleOptions} onClose={() => setEditing(null)}

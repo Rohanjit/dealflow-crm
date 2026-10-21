@@ -4,6 +4,25 @@ Security-relevant changes are listed with what they mean for an install.
 
 ## Unreleased
 
+### Two-step login (phase S2 of decision 63)
+- **Required for every account** before anything else works (`403 code: mfa_enrol_required`), Just-me
+  installs included. Exempt: the sample firm's Guest and a public demo site, which hold no real data.
+- **Passkeys** (WebAuthn via py_webauthn): user verification required, resident keys, only public keys
+  stored, sign counts checked, relying party = the install's own host (one of `ALLOWED_HOSTS`). A passkey
+  can be the second step or the whole sign-in ("Sign in with a passkey"): it is possession plus biometric
+  or device PIN, and can't be phished.
+- **Authenticator apps** (TOTP, 6 digits, 30 s, ±1 step): 160-bit secret sealed with a key derived from
+  `SECRET_KEY`; a code can't be used twice; replacing the app keeps the old one until the new one is confirmed.
+- **Recovery codes:** 10 one-time codes (≈50 bits each) hashed with Argon2id, shown once.
+- **Sign-in flow:** the password alone signs nothing in; the second step must follow within 5 minutes in
+  the same browser; wrong codes and refused passkeys count towards the account lock-out.
+- **Changes need the password** once set up (adding or removing a passkey or app, new recovery codes); the
+  last way in can't be removed. Admins (and people who manage users, not for admins) can reset someone's
+  two-step login with their own password; that person is signed out everywhere and sets it up again.
+- **Signed-in devices** in My preferences, with "Sign out" per device and "Sign out everywhere else"; a
+  sign-in from a browser not used in 90 days shows in the notification bell ("It was me" / "Not me").
+- Libraries added, pinned: `argon2-cffi`, `webauthn`, `pyotp`, `segno` (QR as SVG, made on the server).
+
 ### Security baseline (phase S1 of decision 63)
 - **Passwords:** Argon2id is the only hasher. At least 12 characters, at most 256, not similar to the
   person's name or email, not common, not all numbers, and not one of their last 12 (only hashes are kept).
