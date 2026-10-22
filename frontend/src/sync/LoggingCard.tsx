@@ -162,6 +162,12 @@ export default function LoggingCard() {
                 </Text>
               )}
             </div>
+            {data.connections.some((c) => c.mail) && (
+              <Text size="sm">
+                People you email who aren't in Dealflow yet are listed, just for you, in{" "}
+                <Anchor component={Link} to="/capture" size="sm">Add people</Anchor>.
+              </Text>
+            )}
             <Select label="Remind me before meetings" description="The bell reminds you before each meeting with someone in Dealflow."
               data={REMINDERS} value={data.reminder_minutes ? String(data.reminder_minutes) : "off"} onChange={reminder}
               allowDeselect={false} w={280} />

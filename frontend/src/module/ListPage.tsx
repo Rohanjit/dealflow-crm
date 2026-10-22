@@ -6,8 +6,7 @@ import { DateInput } from "@mantine/dates";
 import { useDebouncedCallback, useDebouncedValue } from "@mantine/hooks";
 import {
   IconAdjustmentsHorizontal, IconHourglassHigh, IconSnowflake, IconArrowDown, IconArrowsSort, IconArrowUp, IconArrowUpRight, IconColumns3, IconDownload, IconFileImport, IconLayoutKanban,
-  IconLock, IconMailFast, IconPlus, IconSearch, IconTable, IconX,
-} from "@tabler/icons-react";
+  IconLock, IconMailFast, IconPlus, IconSearch, IconTable, IconX, IconUserPlus } from "@tabler/icons-react";
 import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { useMemo, useState } from "react";
@@ -171,6 +170,9 @@ function ListInner({ module, schema }: { module: ModuleSchema; schema: Schema })
                 }}>
                 Email these {total ? total.toLocaleString() : ""}
               </Button>
+            )}
+            {module.key === "contacts" && module.perms.create && (
+              <Button variant="default" leftSection={<IconUserPlus size={16} />} component={Link} to="/capture">Add from email or LinkedIn</Button>
             )}
             <DuplicatesButton module={module} />
             {module.perms.create && (

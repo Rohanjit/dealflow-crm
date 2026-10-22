@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Dealflow</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <header><span class="logo">D</span><strong>Add to Dealflow</strong></header>
+    <section id="setup" hidden>
+      <p>Which Dealflow should people be added to? Enter the address you open it at.</p>
+      <label for="base">Dealflow address</label>
+      <input id="base" type="url" placeholder="https://crm.yourfirm.com" autocomplete="url">
+      <p id="setup-error" class="error" hidden></p>
+      <button id="save" class="primary">Save</button>
+    </section>
+    <section id="capture" hidden>
+      <div id="found"></div>
+      <p id="capture-error" class="error" hidden></p>
+      <button id="open" class="primary" hidden>Check and save in Dealflow</button>
+      <p class="hint">Only this page is read, and only now. Nothing is sent anywhere except your Dealflow, where you check it before saving.</p>
+      <p class="small">Adding to <span id="where"></span> · <a href="#" id="change">Change</a></p>
+    </section>
+  </main>
+  <script src="extract.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

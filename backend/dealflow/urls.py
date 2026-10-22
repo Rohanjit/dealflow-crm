@@ -11,6 +11,7 @@ from core import insight_views as iv
 from core import key_views as kv
 from mail import views as m
 from sync import views as sv
+from capture import views as cv
 from reports import views as rv
 from core import layout_views as lv
 from core import views as c
@@ -71,6 +72,12 @@ api = [
     path("sync/meetings/", sv.MeetingsView.as_view()),
     path("sync/schedule/", sv.ScheduleView.as_view()),
     path("settings/email/logging/", sv.SyncOverviewView.as_view()),
+    path("capture/suggestions/", cv.SuggestionsView.as_view()),
+    path("capture/suggestions/<int:pk>/dismiss/", cv.SuggestionDismissView.as_view()),
+    path("capture/suggestions/<int:pk>/prefill/", cv.SuggestionPrefillView.as_view()),
+    path("capture/check/", cv.CheckView.as_view()),
+    path("capture/parse/", cv.ParseView.as_view()),
+    path("capture/firm/", cv.AddFirmView.as_view()),
     path("reports/", rv.SavedReportListView.as_view()),
     path("reports/run/", rv.ReportRunView.as_view()),
     path("reports/<int:pk>/", rv.SavedReportDetailView.as_view()),

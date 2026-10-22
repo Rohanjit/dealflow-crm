@@ -186,6 +186,9 @@ def ingest_message(conn: Connection, m: RemoteMessage, firm=None) -> Item | None
     if not outside:
         return None  # colleagues only
     matched = contacts_for(outside)
+    from capture.service import note_strangers
+
+    note_strangers(conn, m, [e for e in dict.fromkeys(outside) if e not in matched])  # suggestions (decision 64)
     if not matched:
         return None  # nobody in Dealflow
     key = ("e:" + m.message_id.strip("<> ").lower()) if m.message_id else f"e:{conn.pk}:{m.remote_id}"

@@ -105,6 +105,7 @@ INSTALLED_APPS = [
     "reports",
     "mail",
     "sync",
+    "capture",
 ]
 
 MIDDLEWARE = [

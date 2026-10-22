@@ -10,6 +10,7 @@ import ImportPage from "./module/ImportPage";
 import ListPage from "./module/ListPage";
 import AcceptInvite from "./pages/AcceptInvite";
 import Insights from "./pages/Insights";
+import CapturePage from "./capture/CapturePage";
 import CampaignsPage from "./pages/Campaigns";
 import ArchivePage from "./pages/Archive";
 import ChangePassword from "./pages/ChangePassword";
@@ -75,6 +76,7 @@ export default function App() {
           <Route path="m/:module/:id" element={<DetailPage />} />
           <Route path="m/:module/:id/edit" element={<FormPage />} />
           <Route path="insights" element={<Insights />} />
+          <Route path="capture" element={<CapturePage />} />
           <Route path="campaigns/*" element={<CampaignsPage />} />
           <Route path="archive" element={<ArchivePage />} />
           <Route path="settings/*" element={<SettingsPage />} />

@@ -50,6 +50,16 @@ class RemoteMessage:
     cc: list[tuple[str, str]] = field(default_factory=list)
     attachments: list[dict] = field(default_factory=list)  # {"name", "size", "type"}
     extra: dict = field(default_factory=dict)
+    bulk: bool = False  # a newsletter or automated email (List-Unsubscribe, Precedence: bulk, ...)
+
+
+def is_bulk(headers: dict) -> bool:
+    """headers: lower-case name -> value."""
+    if headers.get("list-unsubscribe") or headers.get("list-id"):
+        return True
+    if (headers.get("precedence") or "").strip().lower() in ("bulk", "list", "junk"):
+        return True
+    return (headers.get("auto-submitted") or "no").strip().lower() not in ("", "no")
 
 
 @dataclass
@@ -298,7 +308,8 @@ class GoogleSource(Source):
                 remote_id=m["id"], message_id=h.get("message-id", "").strip(), subject=header_text(h.get("subject"))[:300],
                 at=at, sender=sender[0] if sender else ("", ""), to=addresses(h.get("to")), cc=addresses(h.get("cc")),
                 attachments=[{k: a[k] for k in ("name", "size", "type")} for a in atts],
-                extra={"parts": [a["part"] for a in atts]},
+                extra={"parts": [a["part"] for a in atts]}, bulk=is_bulk(h) or "CATEGORY_PROMOTIONS" in (m.get("labelIds") or [])
+                or "CATEGORY_UPDATES" in (m.get("labelIds") or []),
             ))
         self.conn.mail_cursor = {"history": latest}
         return out
@@ -417,7 +428,7 @@ class MicrosoftSource(Source):
         since, skip = cur["since"], set(cur.get("skip") or [])
         q = {"$filter": f"receivedDateTime ge {since}", "$orderby": "receivedDateTime asc", "$top": "50",
              "$select": "id,internetMessageId,subject,from,toRecipients,ccRecipients,receivedDateTime,"
-                        "hasAttachments,isDraft,parentFolderId"}
+                        "hasAttachments,isDraft,parentFolderId,internetMessageHeaders,inferenceClassification"}
         url, out, latest = f"{self.GRAPH}/me/messages?" + urllib.parse.urlencode(q), [], since
         while url and len(out) < BATCH:
             status, body = self._get(url)
@@ -448,6 +459,8 @@ class MicrosoftSource(Source):
                     cc=[who(x) for x in m.get("ccRecipients") or []],
                     attachments=[{k: a[k] for k in ("name", "size", "type")} for a in atts],
                     extra={"att_ids": [a["id"] for a in atts]},
+                    bulk=is_bulk({(x.get("name") or "").lower(): x.get("value") or ""
+                                  for x in m.get("internetMessageHeaders") or []}),
                 ))
             url = body.get("@odata.nextLink")
         self.conn.mail_cursor = {**cur, "since": latest}
@@ -650,7 +663,8 @@ class PasswordSource(Source):
                 if not uids:
                     continue
                 typ, data = M.uid("FETCH", ",".join(map(str, uids)),
-                                  "(UID BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (FROM TO CC SUBJECT DATE MESSAGE-ID)])")
+                                  "(UID BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (FROM TO CC SUBJECT DATE MESSAGE-ID "
+                                  "LIST-UNSUBSCRIBE LIST-ID PRECEDENCE AUTO-SUBMITTED)])")
                 for part in data or []:
                     if not isinstance(part, tuple):
                         continue
@@ -674,6 +688,7 @@ class PasswordSource(Source):
                         subject=header_text(h.get("Subject"))[:300], at=at,
                         sender=sender[0] if sender else ("", ""), to=addresses(h.get("To")), cc=addresses(h.get("Cc")),
                         attachments=[{"name": n[:255], "size": 0, "type": ""} for n in names],
+                        bulk=is_bulk({k.lower(): v for k, v in h.items()}),
                     ))
                 cur[folder] = {"v": v, "last": max(uids)}
         finally:

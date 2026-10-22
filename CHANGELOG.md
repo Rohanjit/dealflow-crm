@@ -4,6 +4,20 @@ Security-relevant changes are listed with what they mean for an install.
 
 ## Unreleased
 
+### Contact capture (decision 64)
+- "Add from email or LinkedIn" (Contacts) lists people the person has emailed who aren't in Dealflow, from
+  their own connected mailbox, visible only to them; newsletters (List-Unsubscribe, List-Id, Precedence,
+  Auto-Submitted, Gmail promotions/updates), no-reply style addresses and colleagues are left out. Only the
+  address, name, count and last subject are kept; the signature is read live from the mailbox when they
+  choose to add someone.
+- A browser add-on (Chrome, Edge, Firefox) with only `activeTab`, `scripting` and `storage`: it reads the
+  LinkedIn profile, webmail email or selection the person clicks on, and hands it to Dealflow's check
+  screen in the URL fragment (never sent to a server, removed from the address bar at once). It never
+  calls the API or holds credentials.
+- Before saving, Dealflow checks for the same person (email, mobile, LinkedIn, name at the firm) and shows
+  what changed instead of creating a duplicate; firms are matched by website domain and name, or added in
+  the same step through the normal create (permissions, stamps, audit).
+
 ### Email and calendar logging (decision 64)
 - Each person can connect Google (Gmail + Calendar), Microsoft 365, Apple iCloud or any IMAP + CalDAV
   account. Google asks only for `gmail.readonly` and `calendar.events`, Microsoft for `Mail.Read` and
