@@ -81,8 +81,25 @@ class RestoreTestTests(APITestBase):
 
         self.client.post("/api/m/investors/", {"firm_name": "Blume", "tags": ["a"]}, format="json")
         backups.create_backup("manual")
-        r = self.client.post("/api/settings/security/restore-test/").json()
+        import subprocess
+        from pathlib import Path
+        from unittest import mock
+
+        real, seen = subprocess.Popen, {}
+
+        def popen(*a, **kw):  # look at the checking database before it's removed
+            proc = real(*a, **kw)
+            seen.update(kw["env"])
+            return proc
+
+        with mock.patch("core.restore_test.subprocess.Popen", popen):
+            r = self.client.post("/api/settings/security/restore-test/").json()
         self.assertTrue(r["ok"], r)
+        # The checking process gets no backup key, and its database's key isn't in the data folder.
+        self.assertEqual(seen["DEALFLOW_DB_ENCRYPTION"], "1")
+        self.assertFalse(Path(seen["DEALFLOW_KEYS_DIR"]).is_relative_to(settings.DATA_DIR))
+        self.assertFalse(Path(seen["DEALFLOW_KEYS_DIR"]).exists())  # thrown away
+        self.assertNotIn(".dealflow-restore-test-", " ".join(p.name for p in settings.DATA_DIR.iterdir()))
         self.assertGreater(r["rows"], 0)
         self.assertEqual(Investor.objects.count(), 1)  # live data untouched
         c = {x["key"]: x for x in self.client.get("/api/settings/security/overview/").json()["checks"]}
@@ -96,6 +113,12 @@ class RestoreTestTests(APITestBase):
         r = self.client.post("/api/settings/security/restore-test/").json()
         self.assertFalse(r["ok"])
         self.assertIn("couldn't be opened", r["problems"][0])
+
+    def test_restore_check_only_touches_its_own_database(self):
+        from django.core.management import CommandError, call_command
+
+        with self.assertRaises(CommandError):
+            call_command("restore_check", "-")
 
 
 class AdminAlertTests(APITestBase):

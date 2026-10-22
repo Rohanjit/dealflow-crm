@@ -2,12 +2,13 @@
 
 | | |
 |---|---|
-| **What a backup holds** | Every record (Django `dumpdata`, so it restores on SQLite or Postgres), every uploaded file (Vault files stay encrypted inside), and an encrypted copy of the audit log. |
-| **Encryption** | AES-256-GCM in 1 MiB pieces, with a backup key kept in the keys volume, never next to the backups ([key management](key-management.md)). |
+| **What a backup holds** | Every record (Django's database-neutral format, one record per line, so it restores on SQLite or Postgres), every uploaded file (Vault files stay encrypted inside), and an encrypted copy of the audit log. |
+| **Encryption** | AES-256-GCM in 1 MiB pieces, with a backup key kept in the keys volume, never next to the backups ([key management](key-management.md)). Encrypted as it's written and read back in place, so no readable copy ever touches the disk, during a backup, a restore or a restore test. |
+| **Size and memory** | Streamed: memory stays flat whatever the firm's size. Allow free disk in the data volume of about the backup's size plus the Vault's files for a restore. |
 | **Schedule** | Daily at the hour you choose; **hourly** on top when switched on (Settings → Backups), keeping the newest 24. Manual backups any time. A "pre-restore" backup is always taken before a restore. |
 | **Recovery point (RPO)** | 1 hour with hourly backups on (24 hours with daily only). |
 | **Recovery time (RTO)** | Under 1 hour for a typical firm: install, restore from the file, open the Vault with the recovery key. Target ≤ 4 hours including a new server. |
-| **Proof it works** | Every week the scheduler restores the newest backup into a separate, temporary database (memory-backed space, separate process, live data untouched), reads back every file's checksum and compares the rows of every kind. Admins can run it any time: Settings → Security → *Test the latest backup now*. A failure shows in the checklist and as a security alert. |
+| **Proof it works** | Every week the scheduler restores the newest backup into a separate, temporary database (separate process that never sees the backup key, records sent through a pipe, live data untouched), reads back every file's checksum and compares the rows of every kind. Admins can run it any time: Settings → Security → *Test the latest backup now*. A failure shows in the checklist and as a security alert. |
 
 ## Keep copies off the server
 

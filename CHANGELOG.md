@@ -4,6 +4,22 @@ Security-relevant changes are listed with what they mean for an install.
 
 ## Unreleased
 
+### Backups streamed, no readable copy on disk (23 Oct 2026)
+- **Security:** a backup used to be written as a plain zip first and encrypted afterwards, so for the
+  length of the backup a readable copy of every record sat in the backups folder; a restore and the weekly
+  restore test decrypted the whole file to a temporary folder. Now records are compressed and encrypted as
+  they're written, and restores and restore tests read the encrypted file in place, one 1 MiB piece at a
+  time (each piece still authenticated with its position, and the end checked first, so a changed,
+  reordered, cut or extended backup is refused). The restore test's process never sees the backup key, gets
+  the records through a pipe, and its temporary database is encrypted with a throwaway key kept in memory.
+- **Availability:** memory no longer grows with the firm. The load test's extreme firm (584 MB database)
+  needed 4.2 GB to back up, more than the container's 2 GB, so it couldn't be backed up at all; restores
+  read the whole data file into memory too. Restore uploads and work folders now use the data volume, not
+  `/tmp` (memory in Docker).
+- A backup that was killed no longer blocks the next one for an hour (the lock is now an operating-system
+  lock that ends with its process).
+- Backups made before this (format 1) still restore.
+
 ### Django REST Framework 3.18.3 (23 Oct 2026)
 - Fixes three advisories published on 22 Oct: an unauthenticated request could make a worker allocate
   huge amounts of memory through a compression codec named in the Content-Type charset

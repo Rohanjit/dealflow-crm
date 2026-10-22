@@ -976,6 +976,12 @@ class BackupRestoreView(APIView):
     permission_classes = [AdminOnly, NotInSample]
     parser_classes = [MultiPartParser]
 
+    def initialize_request(self, request, *args, **kwargs):
+        # Before anything reads the upload (the CSRF check does): large backups go to the data
+        # folder, not to memory-backed /tmp.
+        request.upload_handlers = [backups.DiskUploadHandler(request)]
+        return super().initialize_request(request, *args, **kwargs)
+
     def post(self, request):
         f = request.FILES.get("file")
         if not f:
