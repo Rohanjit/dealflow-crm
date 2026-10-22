@@ -4,6 +4,23 @@ Security-relevant changes are listed with what they mean for an install.
 
 ## Unreleased
 
+### Security checklist, proof of recovery, evidence (phase S7 of decision 63)
+- **Settings → Security opens with a checklist** of every protection (two-step coverage, HTTPS,
+  encryption, keys, backups, restore test, scheduler, virus scanner, audit log) with the fix for
+  anything that isn't right, plus sign-in activity.
+- **Backups are proven to restore:** every week (and on demand) the newest backup is decrypted in
+  memory and loaded into a separate temporary database; row counts and file checksums must match.
+- **Hourly backups** (newest 24 kept): at most an hour of work can be lost.
+- **The audit log's chain is checked every night** (without the passphrase); a break is an alert.
+- **Security alerts for admins** in the bell: lock-outs, failed or missing backups, failed restore
+  tests, a changed audit log, the virus scanner down.
+- **Sign everyone else out** (Settings → Security, or `manage.py end_all_sessions` on the server).
+- No page or API answer is cached anywhere, nothing is indexed by search engines, and the app's files
+  no longer allow cross-origin reads. The health check now also checks the database.
+- Documents: `SECURITY.md`, `INCIDENT_RESPONSE.md`, backup/restore, data flow, monitoring, threat
+  model, penetration-test brief, and `compliance/` (controls mapped to OWASP ASVS 5.0, ISO 27001:2022
+  and SOC 2; SBOM; dependency, image and ZAP scan results; access-review template).
+
 ### HTTPS by default, hardened containers, locked and scanned dependencies (phase S6 of decision 63)
 - **No plain http on a network.** Without a domain the app answers only on its own computer (127.0.0.1).
   `DEALFLOW_DOMAIN` + `docker compose --profile https` puts Caddy in front: automatic certificates (or its

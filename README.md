@@ -57,6 +57,12 @@ Optional settings go in a `.env` file next to `docker-compose.yml`; see [`.env.e
 
 **Updating:** `git pull && docker compose up -d --build`. Database changes are applied automatically on start.
 
+## Security
+
+See [`SECURITY.md`](SECURITY.md) for how to report a vulnerability and how Dealflow is protected,
+[`INCIDENT_RESPONSE.md`](INCIDENT_RESPONSE.md) for what to do if something goes wrong, and
+[`compliance/`](compliance/) for the evidence.
+
 ## Development
 
 ```sh

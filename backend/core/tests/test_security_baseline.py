@@ -42,7 +42,7 @@ class HeaderTests(APITestBase):
             self.assertEqual(r["Referrer-Policy"], "same-origin")
             self.assertEqual(r["Cross-Origin-Opener-Policy"], "same-origin")
             self.assertIn("camera=()", r["Permissions-Policy"])
-        self.assertEqual(APIClient().get("/api/app/")["Cache-Control"], "no-store")
+        self.assertEqual(APIClient().get("/api/app/")["Cache-Control"], "no-store, no-cache, must-revalidate, private")
 
     @override_settings(ALLOWED_HOSTS=["crm.firm.com"])
     def test_unknown_host_is_refused(self):
@@ -238,3 +238,10 @@ class ClientAddressTests(APITestBase):
             self.assertEqual(self.ip("203.0.113.9"), "203.0.113.9")
         with override_settings(SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https"), PROXY_HOPS=2):
             self.assertEqual(self.ip("6.6.6.6, 203.0.113.9, 10.0.0.2"), "203.0.113.9")
+
+
+class PublicSurfaceTests(APITestBase):
+    def test_robots_and_no_indexing(self):
+        r = APIClient().get("/robots.txt")
+        self.assertEqual(r.content, b"User-agent: *\nDisallow: /\n")
+        self.assertIn("noindex", r["X-Robots-Tag"])

@@ -158,11 +158,17 @@ def spa(request, rest=""):
             content_type="text/plain",
             status=503,
         )
-    return HttpResponse(index.read_text(), content_type="text/html")
+    resp = HttpResponse(index.read_text(), content_type="text/html")
+    return resp
+
+
+def robots(request):
+    return HttpResponse("User-agent: *\nDisallow: /\n", content_type="text/plain")
 
 
 urlpatterns = [
     path("api/", include(api)),
     re_path(r"^api/(?P<rest>.*)$", api_not_found),
+    path("robots.txt", robots),
     re_path(r"^(?P<rest>.*)$", spa),
 ]

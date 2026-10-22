@@ -32,6 +32,9 @@ PERMISSIONS = ", ".join([
 ])
 
 
+NO_CACHE = "no-store, no-cache, must-revalidate, private"
+
+
 class SecurityHeadersMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
@@ -43,8 +46,11 @@ class SecurityHeadersMiddleware:
         response.headers.setdefault("Permissions-Policy", PERMISSIONS)
         response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
         response.headers.setdefault("X-Permitted-Cross-Domain-Policies", "none")
+        # A firm's CRM never belongs in a search engine.
+        response.headers.setdefault("X-Robots-Tag", "noindex, nofollow, noarchive")
+        # Deal data (and the app page) never sits in a browser or proxy cache. The app's hashed asset
+        # files are served by WhiteNoise before this runs and keep their own caching.
+        response.headers.setdefault("Cache-Control", NO_CACHE)
         if request.path.startswith("/api/"):
-            # Deal data never sits in a browser or proxy cache.
-            response.headers.setdefault("Cache-Control", "no-store")
             response.headers.setdefault("Pragma", "no-cache")
         return response
