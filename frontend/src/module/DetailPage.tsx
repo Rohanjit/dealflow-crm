@@ -28,6 +28,7 @@ import Composer from "../mail/Composer";
 import { EMAIL_MODULES } from "../mail/api";
 import { SYNC_PAGES } from "../sync/api";
 import { ScheduleModal, UpcomingMeetings } from "../sync/Meetings";
+import DataRoomPanel from "../rooms/DataRoomPanel";
 
 /** The record as a list already loaded it (lists send whole records), if any list has it. */
 function fromLists(qc: QueryClient, key?: string, id?: string): RecordData | undefined {
@@ -183,6 +184,7 @@ function DetailInner() {
               <div key={s.key} className="df-fade">
                 {s.panel === "access" ? <AccessPanel dealId={r.id} />
                   : s.panel === "tracker" ? <DealTracker section={s} deal={r} />
+                  : s.panel === "room" ? <DataRoomPanel deal={r} />
                   : s.panel === "tasks" ? <TasksPanel section={s} parent={module} record={r} />
                     : s.panel === "documents" ? <DocumentsPanel section={s} parent={module} record={r} />
                       : <RelatedSection section={s} parent={module} record={r} />}

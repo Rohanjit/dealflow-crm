@@ -1,6 +1,6 @@
 export type Action = "view" | "create" | "edit" | "delete";
 export type ModulePerms = Record<Action, boolean>;
-export type Flags = { manage_users: boolean; manage_settings: boolean; restore_archive: boolean; see_team_performance: boolean; send_campaigns: boolean };
+export type Flags = { manage_users: boolean; manage_settings: boolean; restore_archive: boolean; see_team_performance: boolean; send_campaigns: boolean; share_with_investors: boolean };
 
 export type Me = {
   id: number;

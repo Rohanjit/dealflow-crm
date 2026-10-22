@@ -1,0 +1,33 @@
+{% extends "rooms/base.html" %}
+{% block title %}{{ file.title }}{% endblock %}
+{% block head %}<meta name="df-ping" content="/r/{{ token }}/f/{{ file.pk }}/ping/"><meta name="df-csrf" content="{{ csrf_token }}"><script src="/rooms/viewer.js" defer></script>{% endblock %}
+{% block bodyclass %}reading{% endblock %}
+{% block content %}
+<nav class="crumbs"><a href="/r/{{ token }}/">Back to all documents</a></nav>
+<header class="viewer-head">
+  <h1>{{ file.title }}</h1>
+  <div class="viewer-actions">
+    {% if file.mode == "download" %}<a class="button quiet" href="/r/{{ token }}/f/{{ file.pk }}/download/">Download</a>{% endif %}
+    <span class="pageno" aria-live="polite" data-pageno>Page 1 of {{ file.pages }}</span>
+  </div>
+</header>
+<div class="pages">
+  {% for n in pages %}
+  <figure class="sheet" data-page="{{ n }}">
+    <img src="/r/{{ token }}/f/{{ file.pk }}/p/{{ n }}/" alt="Page {{ n }} of {{ file.title }}" loading="{% if n < 3 %}eager{% else %}lazy{% endif %}" draggable="false">
+  </figure>
+  {% endfor %}
+</div>
+<section class="ask inline" aria-labelledby="ask-h">
+  <h2 id="ask-h">Ask about this document</h2>
+  {% if request.GET.asked == "1" %}<p class="notice ok" role="status">Sent to the deal team. The answer will appear on the room's main page.</p>{% endif %}
+  <form method="post" action="/r/{{ token }}/ask/">{% csrf_token %}
+    <input type="hidden" name="file" value="{{ file.pk }}"><input type="hidden" name="from" value="viewer">
+    <label for="ask-page">Page (if it's about one)</label>
+    <input id="ask-page" name="page" inputmode="numeric" maxlength="5" data-pagefield>
+    <label for="ask-text">Your question</label>
+    <textarea id="ask-text" name="text" rows="3" maxlength="5000" required></textarea>
+    <button type="submit" class="primary">Send question</button>
+  </form>
+</section>
+{% endblock %}

@@ -22,6 +22,7 @@ import LinkInput from "../module/LinkInput";
 import { exitOf, resumeVerb, stageLabel, stageOf, usePipelineMove } from "../module/pipeline";
 import type { LinkValue, Page, RecordData, Section } from "../types";
 import Suggestions from "./Suggestions";
+import { readingTime, roomKey, useRoom } from "../rooms/api";
 import { Skeleton } from "../components/ui";
 
 export default function DealTracker({ section, deal }: { section: Section; deal: RecordData }) {
@@ -38,6 +39,15 @@ export default function DealTracker({ section, deal }: { section: Section; deal:
     queryFn: () => api<Page<RecordData>>(`m/deal_investors/${qs({ deal: dealLink, ordering: "status,-stage,investor", page_size: 500 })}`),
   });
   const { move, modal } = usePipelineMove(tracker ?? ({ key: "deal_investors" } as never));
+  const { data: room } = useRoom(deal.id);
+  const roomRows = room?.exists && Object.keys(room.by_entry).length > 0 ? room.by_entry : null;
+  async function setAside(share: number, stage: string) {
+    try {
+      qc.setQueryData(roomKey(deal.id), await api(`rooms/shares/${share}/`, { method: "PATCH", body: { action: "set_aside", stage } }));
+    } catch (e) {
+      notifyError(e, "Couldn't do that");
+    }
+  }
   if (!tracker?.pipeline) return null;
   const p = tracker.pipeline;
   const rows = data?.results ?? [];
@@ -169,9 +179,32 @@ export default function DealTracker({ section, deal }: { section: Section; deal:
                               : <Text size="sm" fw={600}>{inv.title}</Text>}
                             {inv.archived && <Badge size="xs" variant="light" color="gray">Archived</Badge>}
                           </Group>
+                          {roomRows && (() => {
+                            const a = roomRows[String(r.id)];
+                            if (!a) return null;
+                            return (
+                              <Stack gap={4} align="flex-start" mt={4}>
+                                <Text size="xs" c="dimmed">Data room: {a.opens ? `opened ${a.opens}×, read ${readingTime(a.seconds)}` : "shared, not opened yet"}</Text>
+                                {a.suggestion && tracker.perms.edit && (
+                                  <Group gap={4} wrap="nowrap">
+                                    <Tooltip label={a.suggestion.why}>
+                                      <Button size="compact-xs" variant="light" color="teal"
+                                        onClick={() => move(r, { kind: "stage", stage: a.suggestion!.stage })}>
+                                        Move to {a.suggestion.label}
+                                      </Button>
+                                    </Tooltip>
+                                    {room?.can.share && (
+                                      <Button size="compact-xs" variant="subtle" color="gray"
+                                        onClick={() => setAside(a.suggestion!.share, a.suggestion!.stage)}>Not now</Button>
+                                    )}
+                                  </Group>
+                                )}
+                              </Stack>
+                            );
+                          })()}
                         </Table.Td>
                         <Table.Td>
-                          <Select size="xs" data={p.stages} value={stage} allowDeselect={false} disabled={!tracker.perms.edit}
+                          <Select size="xs" miw={190} data={p.stages} value={stage} allowDeselect={false} disabled={!tracker.perms.edit}
                             aria-label={`Stage for ${inv.title}`} comboboxProps={{ withinPortal: true }}
                             onChange={(v) => v && v !== stage && move(r, { kind: "stage", stage: v })}
                             styles={{ input: { color: isOpen ? undefined : "var(--mantine-color-dimmed)" } }} />

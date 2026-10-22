@@ -26,3 +26,16 @@ docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt dealflow-root
 Set `DEALFLOW_DOMAIN` without the https profile and forward to the app's port. Your proxy must set
 `X-Forwarded-Proto: https` and add the client's address to `X-Forwarded-For`; with more than one proxy in
 front, set `DEALFLOW_PROXY_HOPS` to how many. Passkeys need https (or localhost).
+
+## A separate address for investors' data rooms
+
+Data rooms (decision 64) can have their own name, so investors never see Dealflow itself and Dealflow can
+stay inside your network:
+
+1. Point a second name at the server (`rooms.yourfirm.com`).
+2. In `.env`: `DEALFLOW_ROOMS_DOMAIN=rooms.yourfirm.com`, then `docker compose --profile https up -d` again.
+
+Caddy gets a certificate for it too and passes on only data room pages (`/r/…`, `/rooms/…`, `robots.txt`);
+the app checks the same, and refuses data room pages on the main name. To keep Dealflow itself to the
+office or VPN while investors reach their rooms from anywhere, add the firm's addresses:
+`DEALFLOW_STAFF_NETWORKS=10.0.0.0/8,203.0.113.7/32` (your proxy must pass the client's address, see above).

@@ -50,6 +50,12 @@ export default function TaskBell() {
   }).data;
   // Meetings about to start (reminder time chosen in My preferences) and emails waiting for a deal.
   const agenda = useAgenda().data;
+  // Investors' questions in data rooms this person can answer (rooms/, decision 64).
+  const roomQs = useQuery({
+    queryKey: ["room-alerts"], refetchInterval: 2 * 60_000, enabled: !!me.flags.share_with_investors,
+    queryFn: () => api<{ questions: { key: string; id: number; deal: number; deal_title: string; who: string; text: string; file: string; at: string }[] }>(
+      "rooms/alerts/", { background: true }),
+  }).data?.questions;
   const qc = useQueryClient();
   const clearedQ = useQuery({ queryKey: ["cleared-alerts"], queryFn: () => api<{ keys: string[] }>("notifications/cleared/") });
   const cleared = useMemo(() => new Set(clearedQ.data?.keys ?? []), [clearedQ.data]);
@@ -64,6 +70,7 @@ export default function TaskBell() {
     for (const id of agenda?.soon ?? []) k.push(`meet:${id}:soon`);
     for (const it of agenda?.to_file ?? []) k.push(`file:${it.id}`);
     for (const r of asks?.to_decide ?? []) k.push(`ask:${r.id}`);
+    for (const q of roomQs ?? []) k.push(q.key);
     for (const t of data?.overdue ?? []) k.push(`task:${t.id}:overdue`);
     for (const t of data?.today ?? []) k.push(`task:${t.id}:today`);
     for (const st of alerts?.stuck ?? []) k.push(`stuck:${st.module}:${st.id}:${st.stage}`);
@@ -74,7 +81,7 @@ export default function TaskBell() {
     for (const c of cold?.items ?? []) k.push(`cold:${c.module}:${c.id}`);
     for (const [m, n] of Object.entries(cold?.more ?? {})) if (n) k.push(`more:cold:${m}:${n}`);
     return k;
-  }, [asks, data, alerts, cold, signins, refusals, secAlerts, agenda]);
+  }, [asks, data, alerts, cold, signins, refusals, secAlerts, agenda, roomQs]);
   const show = (key: string) => !cleared.has(key);
   const moreCount = (key: string) => Number(key.split(":").pop()) || 0;
   const total = keys.filter(show).reduce((sum, k) => sum + (k.startsWith("more:") ? moreCount(k) : 1), 0);
@@ -176,6 +183,7 @@ export default function TaskBell() {
   );
   const soonMeetings = (agenda?.meetings ?? []).filter((m) => agenda!.soon.includes(m.id) && show(`meet:${m.id}:soon`));
   const toFile = (agenda?.to_file ?? []).filter((it) => show(`file:${it.id}`));
+  const questions = (roomQs ?? []).filter((q) => show(q.key));
   const overdue = (data?.overdue ?? []).filter((t) => show(`task:${t.id}:overdue`));
   const today = (data?.today ?? []).filter((t) => show(`task:${t.id}:today`));
   const coldItems = (cold?.items ?? []).filter((c) => show(`cold:${c.module}:${c.id}`));
@@ -316,6 +324,13 @@ export default function TaskBell() {
               ))}
               {toDecide.length > 0 && <Text size="xs" fw={600} c="navy.7" tt="uppercase">Access requests</Text>}
               {toDecide.map(askRow)}
+              {questions.length > 0 && <Text size="xs" fw={600} c="teal.8" tt="uppercase">Investors' questions</Text>}
+              {questions.map((q) => (
+                <div key={q.key}>
+                  <Anchor component={Link} to={`/m/deals/${q.deal}`} size="sm" fw={500} onClick={close}>{q.who}: {q.deal_title}</Anchor>
+                  <Text size="xs" c="dimmed" lineClamp={2}>{q.file ? `${q.file}: ` : ""}{q.text}</Text>
+                </div>
+              ))}
               {soonMeetings.length > 0 && <Text size="xs" fw={600} c="grape.8" tt="uppercase">Meetings</Text>}
               {soonMeetings.map((m) => (
                 <div key={`meet-${m.id}`}>

@@ -17,3 +17,6 @@ pyotp==2.9.0
 segno==1.6.6
 sqlcipher3-binary==0.5.4
 defusedxml==0.7.1
+pillow>=13
+pypdf>=6.21,<7
+pypdfium2>=5.14,<6

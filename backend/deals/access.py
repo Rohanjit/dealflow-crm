@@ -140,9 +140,11 @@ def _describe(r: AccessRequest, done=True) -> str:
     who = r.person.full_name if r.person_id else "someone"
     if done:
         return {"restrict": "Restricted the deal", "unrestrict": "Lifted the restriction",
-                "add": f"Gave {who} access", "join": f"Gave {who} access (they asked for it)"}[r.kind]
+                "add": f"Gave {who} access", "join": f"Gave {who} access (they asked for it)",
+                "room": "Approved sharing the data room with investors"}[r.kind]
     return {"restrict": "Restrict the deal", "unrestrict": "Lift the restriction",
-            "add": f"Give {who} access", "join": f"{who} asks for access"}[r.kind]
+            "add": f"Give {who} access", "join": f"{who} asks for access",
+            "room": "Share the data room with investors"}[r.kind]
 
 
 def _apply(r: AccessRequest, approver):
@@ -153,6 +155,10 @@ def _apply(r: AccessRequest, approver):
     elif r.kind == "unrestrict":
         deal.restricted = False
         deal.save(update_fields=["restricted"])
+    elif r.kind == "room":
+        from rooms import service as rooms
+
+        rooms.approved(deal, approver)
     elif r.person_id:
         deal.access.add(r.person)
     r.status = "approved"
@@ -163,7 +169,10 @@ def _apply(r: AccessRequest, approver):
     by = f" (asked by {who})" if r.requested_by_id != approver.pk else ""
     _log(deal, approver, f"Access: {_describe(r)}{by}.")
     # Anything else waiting that this settles goes too.
-    if r.kind in ("restrict", "unrestrict"):
+    if r.kind == "room":
+        AccessRequest.objects.filter(deal=deal, kind="room", status="pending").update(
+            status="withdrawn", decided_at=timezone.now())
+    elif r.kind in ("restrict", "unrestrict"):
         AccessRequest.objects.filter(deal=deal, kind__in=("restrict", "unrestrict"), status="pending").update(
             status="withdrawn", decided_at=timezone.now())
     elif r.person_id:
@@ -197,6 +206,17 @@ def ask(deal: Deal, user, kind: str, person=None) -> AccessRequest:
         return same
     r = AccessRequest.objects.create(deal=deal, kind=kind, person=person, requested_by=user)
     if kind != "join" and can_approve(user, deal):
+        _apply(r, user)
+    return r
+
+
+@transaction.atomic
+def ask_room(deal: Deal, user) -> AccessRequest:
+    """The first share of a deal's data room: approvers' own shares apply at once, others wait."""
+    r = AccessRequest.objects.filter(deal=deal, kind="room", status="pending").first()
+    if r is None:
+        r = AccessRequest.objects.create(deal=deal, kind="room", requested_by=user)
+    if can_approve(user, deal):
         _apply(r, user)
     return r
 

@@ -90,4 +90,7 @@ Method: STRIDE per trust boundary, for the shipped Docker install. Reviewed with
 - **Base image OS packages:** the Debian-based Python image carries CVEs that Debian hasn't fixed yet
   (none critical; CI blocks any fixable HIGH or CRITICAL). Distroless and Wolfi bases were evaluated on
   22 Oct 2026: no fewer open CVEs, or no wheels for their Python version. Re-check each quarter.
+- **Data room copies are readable by the running server** without a PIN (they must be, to watermark each
+  page). They're encrypted at rest with a key from the master key, so the data volume alone is not enough.
+  Watermarks deter and trace leaks; they can't stop someone photographing a screen.
 - **Role changes** need one admin with a password re-check (Shobhit's decision), not two.

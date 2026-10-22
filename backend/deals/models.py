@@ -159,7 +159,8 @@ class AccessRequest(models.Model):
     restrict or lift the restriction, give someone access, or someone asking for access themselves."""
 
     KINDS = [("restrict", "Restrict the deal"), ("unrestrict", "Lift the restriction"),
-             ("add", "Give access"), ("join", "Asked for access")]
+             ("add", "Give access"), ("join", "Asked for access"),
+             ("room", "Share the data room")]
     STATUSES = [("pending", "Waiting"), ("approved", "Approved"), ("declined", "Declined"), ("withdrawn", "Withdrawn")]
 
     deal = models.ForeignKey(Deal, on_delete=models.CASCADE, related_name="access_requests")

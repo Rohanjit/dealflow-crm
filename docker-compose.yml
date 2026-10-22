@@ -111,6 +111,10 @@ services:
     command:
       - >-
         [ -n "$$DEALFLOW_DOMAIN" ] || { echo "Set DEALFLOW_DOMAIN in .env to the name people will open"; exit 1; };
+        mkdir -p /tmp/sites;
+        if [ -n "$$DEALFLOW_ROOMS_DOMAIN" ]; then
+        printf '%s {\n\t@other not path /r/* /rooms/* /robots.txt\n\trespond @other 404\n\timport dealflow\n}\n' "$$DEALFLOW_ROOMS_DOMAIN" > /tmp/sites/rooms.caddy;
+        fi;
         exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
     ports:
       - "80:80"
@@ -118,6 +122,8 @@ services:
       - "443:443/udp"
     environment:
       DEALFLOW_DOMAIN: ${DEALFLOW_DOMAIN:-}
+      # The investor address for data rooms (rooms.yourfirm.com), optional.
+      DEALFLOW_ROOMS_DOMAIN: ${DEALFLOW_ROOMS_DOMAIN:-}
       # "internal" (Caddy's own authority, for names only your network knows) or an email address
       # for Let's Encrypt notices; empty is fine.
       CADDY_TLS_ISSUER: ${DEALFLOW_TLS:-${DEALFLOW_ACME_EMAIL:-}}

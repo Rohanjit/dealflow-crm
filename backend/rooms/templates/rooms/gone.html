@@ -1,0 +1,9 @@
+{% extends "rooms/base.html" %}
+{% block title %}Data room{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>{{ heading|default:"This link doesn't work" }}</h1>
+  <p>{{ message|default:"It may have run out or been stopped, or the address may be incomplete. Ask the banker who sent it to you for a new link." }}</p>
+  {% if back %}<p><a class="button" href="{{ back }}">Back to the room</a></p>{% endif %}
+</section>
+{% endblock %}

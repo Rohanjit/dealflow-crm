@@ -13,7 +13,8 @@
 	}
 }
 
-{$DEALFLOW_DOMAIN} {
+# Everything both addresses share.
+(dealflow) {
 	# CADDY_TLS_ISSUER is "internal", an email address for Let's Encrypt notices, or empty.
 	tls {$CADDY_TLS_ISSUER} {
 		protocols tls1.2 tls1.3
@@ -41,6 +42,22 @@
 
 	log {
 		output stdout
-		format json
+		# Investors' data room links are secrets: the part after /r/ never reaches the log.
+		format filter {
+			wrap json
+			fields {
+				request>uri regexp "^/r/[^/?]+" "/r/-"
+				request>headers>Cookie delete
+				request>headers>Referer delete
+			}
+		}
 	}
 }
+
+{$DEALFLOW_DOMAIN} {
+	import dealflow
+}
+
+# The investor address for data rooms (DEALFLOW_ROOMS_DOMAIN), written at start-up only when it's set
+# (see docker-compose.yml). It answers data room pages only; the app checks the same.
+import /tmp/sites/*.caddy

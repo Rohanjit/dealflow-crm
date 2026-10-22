@@ -196,6 +196,8 @@ DEALS = register(
                 "order": "-primary_contact,decision_level,full_name",
             },
             {"key": "documents", "label": "Documents", "module": "vault", "panel": "documents"},
+            # Investor data room (rooms/, decision 64).
+            {"key": "room", "label": "Data room", "module": "deals", "panel": "room"},
             # Who can see the deal (restricted deals, deals/access.py).
             {"key": "access", "label": "Access", "module": "deals", "panel": "access"},
         ],

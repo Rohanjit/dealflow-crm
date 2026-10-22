@@ -21,6 +21,8 @@ class Role(models.Model):
     see_team_performance = models.BooleanField(default=False)
     # Mail-merge campaigns from one's own mailbox (decision 62); one-to-one emails need no flag.
     send_campaigns = models.BooleanField(default=False)
+    # Share deal documents with investors through data rooms (decision 64), on deals they're on.
+    share_with_investors = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -47,13 +49,14 @@ class Role(models.Model):
     def flags(self) -> dict:
         if self.is_admin:
             return {"manage_users": True, "manage_settings": True, "restore_archive": True, "see_team_performance": True,
-                    "send_campaigns": True}
+                    "send_campaigns": True, "share_with_investors": True}
         return {
             "manage_users": self.manage_users,
             "manage_settings": self.manage_settings,
             "restore_archive": self.restore_archive,
             "see_team_performance": self.see_team_performance,
             "send_campaigns": self.send_campaigns,
+            "share_with_investors": self.share_with_investors,
         }
 
 

@@ -86,6 +86,18 @@ DOMAIN = os.environ.get("DEALFLOW_DOMAIN", "").strip().lower().rstrip(".")
 if DOMAIN:
     ALLOWED_HOSTS.append(DOMAIN)
     CSRF_TRUSTED_ORIGINS.append(f"https://{DOMAIN}")
+# Investor data rooms (decision 64): DEALFLOW_ROOMS_DOMAIN=rooms.yourfirm.com serves only data room
+# pages (rooms/hosts.py). DEALFLOW_STAFF_NETWORKS limits everything else to the firm's networks.
+ROOMS_DOMAIN = os.environ.get("DEALFLOW_ROOMS_DOMAIN", "").strip().lower().rstrip(".")
+if ROOMS_DOMAIN:
+    ALLOWED_HOSTS.append(ROOMS_DOMAIN)
+    CSRF_TRUSTED_ORIGINS.append(f"https://{ROOMS_DOMAIN}")
+STAFF_NETWORKS = os.environ.get("DEALFLOW_STAFF_NETWORKS", "").strip()
+# Investors' one-time codes go through this SMTP server when set (smtps://user:pass@host:465 or
+# smtp://user:pass@host:587 with STARTTLS), else from the sharing banker's own mailbox.
+ROOMS_SMTP_URL = os.environ.get("DEALFLOW_SMTP_URL", "").strip()
+ROOMS_SMTP_FROM = os.environ.get("DEALFLOW_SMTP_FROM", "").strip()
+CSRF_FAILURE_VIEW = "rooms.portal.csrf_failure"
 
 INSTALLED_APPS = [
     "django.contrib.auth",
@@ -106,11 +118,13 @@ INSTALLED_APPS = [
     "mail",
     "sync",
     "capture",
+    "rooms",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "dealflow.security.SecurityHeadersMiddleware",
+    "rooms.hosts.RoomHostMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -280,7 +294,8 @@ REST_FRAMEWORK = {
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "filters": {"room_links": {"()": "dealflow.logredact.RedactRoomLinks"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "filters": ["room_links"]}},
     "root": {"handlers": ["console"], "level": os.environ.get("LOG_LEVEL", "INFO")},
     "loggers": {"django.request": {"level": "ERROR"}},
 }

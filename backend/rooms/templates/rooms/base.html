@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="same-origin">
+<title>{% block title %}{{ room.name|default:"Data room" }}{% endblock %}</title>
+<link rel="stylesheet" href="/rooms/room.css">
+{% block head %}{% endblock %}
+</head>
+<body class="{% block bodyclass %}{% endblock %}">
+<header class="top">
+  <div class="top-inner">
+    <span class="firm">{{ firm }}</span>
+    {% if room %}<span class="room-name">{{ room.name }}</span>{% endif %}
+  </div>
+</header>
+<main class="page">
+{% block content %}{% endblock %}
+</main>
+<footer class="foot">
+  <p>Confidential. Everything you open here is marked with your name and recorded.</p>
+</footer>
+</body>
+</html>

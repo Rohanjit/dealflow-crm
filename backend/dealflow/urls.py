@@ -12,6 +12,8 @@ from core import key_views as kv
 from mail import views as m
 from sync import views as sv
 from capture import views as cv
+from rooms import portal as rp
+from rooms import views as rmv
 from reports import views as rv
 from core import layout_views as lv
 from core import views as c
@@ -136,6 +138,15 @@ api = [
     path("deals/<int:pk>/matches/", d.MatchesView.as_view()),
     path("deals/<int:pk>/tracker/add/", d.TrackerAddView.as_view()),
     path("deals/<int:pk>/access/", d.DealAccessView.as_view()),
+    path("deals/<int:pk>/room/", rmv.RoomView.as_view()),
+    path("deals/<int:pk>/room/files/", rmv.RoomFilesView.as_view()),
+    path("deals/<int:pk>/room/shares/", rmv.RoomSharesView.as_view()),
+    path("deals/<int:pk>/room/trace/", rmv.RoomTraceView.as_view()),
+    path("rooms/files/<int:pk>/", rmv.RoomFileView.as_view()),
+    path("rooms/shares/<int:pk>/", rmv.RoomShareView.as_view()),
+    path("rooms/shares/<int:pk>/link/", rmv.RoomShareLinkView.as_view()),
+    path("rooms/questions/<int:pk>/answer/", rmv.QuestionAnswerView.as_view()),
+    path("rooms/alerts/", rmv.RoomAlertsView.as_view()),
     path("deals/<int:pk>/access/ask/", d.DealAccessAskView.as_view()),
     path("access-requests/", d.AccessRequestsView.as_view()),
     path("access-requests/<int:pk>/", d.AccessRequestDecideView.as_view()),
@@ -189,5 +200,16 @@ urlpatterns = [
     path("api/", include(api)),
     re_path(r"^api/(?P<rest>.*)$", api_not_found),
     path("robots.txt", robots),
+    path("r/<str:token>/", rp.room),
+    path("r/<str:token>/code/", rp.send_code),
+    path("r/<str:token>/verify/", rp.verify),
+    path("r/<str:token>/nda/", rp.nda),
+    path("r/<str:token>/ask/", rp.ask),
+    path("r/<str:token>/leave/", rp.leave),
+    path("r/<str:token>/f/<int:fid>/", rp.viewer),
+    path("r/<str:token>/f/<int:fid>/p/<int:n>/", rp.page),
+    path("r/<str:token>/f/<int:fid>/ping/", rp.ping),
+    path("r/<str:token>/f/<int:fid>/download/", rp.download),
+    re_path(r"^r/", lambda request: rp._gone(request)),
     re_path(r"^(?P<rest>.*)$", spa),
 ]

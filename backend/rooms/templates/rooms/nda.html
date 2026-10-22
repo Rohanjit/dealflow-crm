@@ -1,0 +1,20 @@
+{% extends "rooms/base.html" %}
+{% block content %}
+<section class="card">
+  <p class="for">Prepared for {{ share.name }}, {{ share.entry.investor.firm_name }}</p>
+  <h1>Before you open the room</h1>
+  <div class="nda-text">{{ room.nda_text|linebreaks }}</div>
+  {% if room.nda_mode == "signed" %}
+    <p class="notice">This room opens once we've received your signed NDA. Please sign it and send it to {{ share.created_by.full_name|default:"the banker who shared this room" }}. We'll open the room for you as soon as it arrives; use this same link.</p>
+  {% else %}
+    {% if error %}<p class="notice warn" role="alert">{{ error }}</p>{% endif %}
+    <form method="post" action="/r/{{ token }}/nda/" class="nda-form">{% csrf_token %}
+      <label for="name">Your full name</label>
+      <input id="name" name="name" autocomplete="name" value="{{ name|default:share.name }}" required maxlength="200">
+      <label class="tick"><input type="checkbox" name="agree" value="yes" required> I agree to these terms on behalf of {{ share.entry.investor.firm_name }}</label>
+      <button type="submit" class="primary">Agree and open the room</button>
+    </form>
+  {% endif %}
+  <form method="post" action="/r/{{ token }}/leave/" class="again">{% csrf_token %}<button type="submit" class="plain">Close the room</button></form>
+</section>
+{% endblock %}

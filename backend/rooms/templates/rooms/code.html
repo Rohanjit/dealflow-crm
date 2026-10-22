@@ -1,0 +1,29 @@
+{% extends "rooms/base.html" %}
+{% block content %}
+<section class="card narrow">
+  <p class="for">Prepared for {{ share.name }}, {{ share.entry.investor.firm_name }}</p>
+  <h1>Open the data room</h1>
+  {% if locked %}
+    <p class="notice warn">Too many wrong codes were entered. This link is paused for an hour.</p>
+  {% else %}
+    {% if not sent %}
+      <p>For your security, we email a one-time code to <strong>{{ masked }}</strong> each time you open this room.</p>
+      {% if error %}<p class="notice warn" role="alert">{{ error }}</p>{% endif %}
+      <form method="post" action="/r/{{ token }}/code/">{% csrf_token %}
+        <button type="submit" class="primary">Email me a code</button>
+      </form>
+    {% else %}
+      <p>We've emailed a 6-digit code to <strong>{{ masked }}</strong>. It works for 10 minutes.</p>
+      {% if error %}<p class="notice warn" role="alert">{{ error }}</p>{% endif %}
+      <form method="post" action="/r/{{ token }}/verify/" class="code-form">{% csrf_token %}
+        <label for="code">Code from the email</label>
+        <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="7" required autofocus>
+        <button type="submit" class="primary">Open the room</button>
+      </form>
+      <form method="post" action="/r/{{ token }}/code/" class="again">{% csrf_token %}
+        <button type="submit" class="plain">Email me a new code</button>
+      </form>
+    {% endif %}
+  {% endif %}
+</section>
+{% endblock %}

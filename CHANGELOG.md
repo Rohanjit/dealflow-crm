@@ -4,6 +4,38 @@ Security-relevant changes are listed with what they mean for an install.
 
 ## Unreleased
 
+### Investor data rooms (decision 64)
+- Each deal can have a data room. Files are copies of Vault documents, encrypted (AES-256-GCM) with a key
+  made from the install's master key: unlike the Vault, the server can read them without a PIN, because it
+  has to watermark each page for the investor reading it. Removing a file, or deleting its document or deal
+  for good, deletes the copy.
+- **Per-investor links, a code every time:** each investor on the tracker gets their own link (a 256-bit
+  token; only its hash is looked up, a sealed copy kept for "Copy link"). Every opening needs a 6-digit code
+  emailed to that investor (10 minutes, 5 tries, one at a time; 5 codes an hour; 10 wrong codes in an hour
+  pause the link for an hour). Investors' sessions are their own random cookie per link (HttpOnly,
+  SameSite=Strict, `__Host-` on https), 30 minutes idle and 12 hours at most, separate from Dealflow's sign-in.
+- **Watermarks and traces:** view-only files are drawn page by page on the server (PDFium; no JavaScript or
+  forms run) with the investor's name, email, time and a trace code across every page; the file itself
+  never reaches the browser and printing is blocked. Downloads get the same on PDFs and pictures, Excel's
+  printed header and footer, and a hidden trace property in Office files. "Trace a file" on the deal reads
+  the code back from a file (or a code typed from a screenshot) and names whose copy it was.
+- **NDA per room:** none, agree on screen (name, time and address kept) or signed NDA (room shut until the
+  banker marks it received). Links stop when stopped, run out (7–90 days), when the room is closed, or when
+  the deal is withdrawn, dropped or deleted.
+- **Who can share:** the new role flag "Share with investors", on deals the person is on (admins always);
+  the first share on a deal needs the deal's MD (else lead banker, else an admin) through the access
+  request route. Links go from the banker's own mailbox (logged on the tracker entry); codes from
+  `DEALFLOW_SMTP_URL` if set (TLS 1.2+ required), else the banker's mailbox, never logged.
+- **Separate investor address:** `DEALFLOW_ROOMS_DOMAIN` serves only `/r/` pages, their stylesheet and
+  script, `robots.txt` and health; everything else there is 404, and `/r/` is 404 on the bankers' address
+  (`rooms/hosts.py`, before WhiteNoise; Caddy refuses other paths too). `DEALFLOW_STAFF_NETWORKS` can keep
+  Dealflow itself to the firm's networks. Room pages send a strict CSP (`default-src 'none'`, own script and
+  style only), `Referrer-Policy: same-origin`, `no-store`, `noindex`.
+- **Links stay out of logs:** the token is replaced in gunicorn's access log (`--logger-class`), Django's
+  log lines and Caddy's JSON log; the audit log records investor actions as "Investor: name (firm)" with the
+  path after the token only.
+- Dependencies added (pinned with hashes): `pypdf`, `pypdfium2`; `pillow` is now listed directly.
+
 ### Contact capture (decision 64)
 - "Add from email or LinkedIn" (Contacts) lists people the person has emailed who aren't in Dealflow, from
   their own connected mailbox, visible only to them; newsletters (List-Unsubscribe, List-Id, Precedence,
