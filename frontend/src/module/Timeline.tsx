@@ -21,6 +21,7 @@ import type { ModuleSchema, Note } from "../types";
 import { dateParser } from "./fields";
 import { Skeleton } from "../components/ui";
 import { STATUS_COLOR, STATUS_LABEL } from "../mail/api";
+import LoggedEntry from "../sync/LoggedEntry";
 
 const KINDS = [
   { value: "note", label: "Note", icon: IconNote, color: "gray" },
@@ -148,6 +149,8 @@ function Entry({ note: n, queryKey }: { note: Note; queryKey: unknown[] }) {
               <Button size="xs" variant="subtle" onClick={() => { setEditing(false); setText(n.text); }}>Cancel</Button>
             </Group>
           </Stack>
+        ) : n.meta?.synced ? (
+          <LoggedEntry note={n} queryKey={queryKey} />
         ) : n.kind === "email" && n.meta?.email ? (
           <SentEmail note={n} />
         ) : (

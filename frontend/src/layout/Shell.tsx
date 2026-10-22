@@ -19,6 +19,7 @@ import { moduleIcon } from "../components/ui";
 import { resetSession, useApp } from "../context";
 import TaskBell from "../tasks/TaskBell";
 import { useMailboxReturn } from "../mail/MailboxCard";
+import { useLoggingReturn } from "../sync/LoggingCard";
 import SessionGuard from "./SessionGuard";
 import SearchPalette, { useSearchPalette } from "./SearchPalette";
 
@@ -36,6 +37,7 @@ export default function Shell() {
   const [scroll] = useWindowScroll();
   const canSettings = me.flags.manage_settings || me.flags.manage_users || me.role.is_admin;
   useMailboxReturn();
+  useLoggingReturn();
 
   async function signOut() {
     await api("auth/logout/", { method: "POST" });

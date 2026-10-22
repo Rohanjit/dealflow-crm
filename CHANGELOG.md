@@ -4,6 +4,21 @@ Security-relevant changes are listed with what they mean for an install.
 
 ## Unreleased
 
+### Email and calendar logging (decision 64)
+- Each person can connect Google (Gmail + Calendar), Microsoft 365, Apple iCloud or any IMAP + CalDAV
+  account. Google asks only for `gmail.readonly` and `calendar.events`, Microsoft for `Mail.Read` and
+  `Calendars.ReadWrite`, and only for what the person ticks; tokens and app passwords are sealed.
+- **Least data:** only emails and meetings with people already in Dealflow are logged, never mail among
+  colleagues, never anything from before connecting. Dealflow stores the subject, time, participants and
+  attachment names; the email text, meeting notes and attachments stay in the mailbox and are fetched live
+  for the mailbox owner only (others get 403). Saving an attachment to the Vault goes through the file
+  allowlist, the virus scanner and Vault encryption.
+- Subjects of emails about a restricted deal are withheld from people who can't see the deal; participants'
+  addresses follow field access on contacts' email fields.
+- IMAP and CalDAV servers typed in by people are reached only at public addresses (checked, then pinned for
+  the connection; `DEALFLOW_SYNC_ALLOW_PRIVATE=1` for a firm's own server), TLS 1.2+ with certificate checks;
+  calendar XML is parsed with `defusedxml` (added, pinned) and documents with a DTD are refused.
+
 ### Security checklist, proof of recovery, evidence (phase S7 of decision 63)
 - **Settings → Security opens with a checklist** of every protection (two-step coverage, HTTPS,
   encryption, keys, backups, restore test, scheduler, virus scanner, audit log) with the fix for

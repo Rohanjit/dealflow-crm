@@ -128,7 +128,10 @@ def place(contacts: list, user) -> tuple[list[str], list[str]]:
 def _participants(pairs: list[tuple[str, str, str]], matched: dict, firm) -> list[dict]:
     from accounts.models import User
 
-    users = {u.email.lower(): u for u in User.objects.filter(email__in=[e for _, e, _ in pairs])}
+    addrs = [e for _, e, _ in pairs]
+    users = {u.email.lower(): u for u in User.objects.filter(email__in=addrs)}
+    for c in Connection.objects.filter(email__in=addrs).select_related("user"):  # people's own mailboxes
+        users.setdefault(c.email.lower(), c.user)
     out, seen = [], set()
     for name, addr, role in pairs:
         if not addr or addr in seen:

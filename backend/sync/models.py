@@ -10,7 +10,7 @@ from django.utils import timezone
 
 class Connection(models.Model):
     KINDS = [("google", "Google"), ("microsoft", "Microsoft 365"), ("icloud", "Apple iCloud"),
-             ("other", "Other (IMAP / CalDAV)")]
+             ("other", "Another provider (IMAP / CalDAV)")]
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sync_connections")
     kind = models.CharField(max_length=10, choices=KINDS)

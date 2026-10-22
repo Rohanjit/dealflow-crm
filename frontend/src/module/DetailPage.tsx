@@ -1,6 +1,6 @@
 import { Anchor, Badge, Breadcrumbs, Button, Grid, Group, Stack, Text } from "@mantine/core";
 import { modals } from "@mantine/modals";
-import { IconArrowUpRight, IconCheck, IconChevronRight, IconLock, IconMail, IconPencil, IconRotate, IconTrash } from "@tabler/icons-react";
+import { IconArrowUpRight, IconCalendarPlus, IconCheck, IconChevronRight, IconLock, IconMail, IconPencil, IconRotate, IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
@@ -26,6 +26,8 @@ import Timeline from "./Timeline";
 import { StuckLine } from "../insights/Stuck";
 import Composer from "../mail/Composer";
 import { EMAIL_MODULES } from "../mail/api";
+import { SYNC_PAGES } from "../sync/api";
+import { ScheduleModal, UpcomingMeetings } from "../sync/Meetings";
 
 /** The record as a list already loaded it (lists send whole records), if any list has it. */
 function fromLists(qc: QueryClient, key?: string, id?: string): RecordData | undefined {
@@ -64,6 +66,7 @@ function DetailInner() {
     placeholderData: () => fromLists(qc, key, id),
   });
   const [composing, setComposing] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
 
   if (isLoading || rec.isLoading) return <PageSkeleton />;
   if (!module) return <Navigate to="/" replace />;
@@ -132,6 +135,9 @@ function DetailInner() {
       {module.perms.edit && EMAIL_MODULES.has(module.key) && (
         <Button variant="default" leftSection={<IconMail size={16} />} onClick={() => setComposing(true)}>Email</Button>
       )}
+      {module.perms.edit && SYNC_PAGES.has(module.key) && (
+        <Button variant="default" leftSection={<IconCalendarPlus size={16} />} onClick={() => setScheduling(true)}>Schedule meeting</Button>
+      )}
       {module.perms.edit && (
         <Button variant="default" leftSection={<IconPencil size={16} />} component={Link} to={`/m/${module.key}/${r.id}/edit`}>Edit</Button>
       )}
@@ -171,6 +177,7 @@ function DetailInner() {
       <Grid gutter={{ base: "md", lg: 48 }} align="flex-start">
         <Grid.Col span={{ base: 12, lg: module.timeline ? 7 : 12 }}>
           <Stack gap="xl">
+            {SYNC_PAGES.has(module.key) && <UpcomingMeetings module={module} record={r} />}
             <Properties module={module} record={r} fields={fields} />
             {module.sections.filter((s) => s.status === "ready" && s.module).map((s) => (
               <div key={s.key} className="df-fade">
@@ -199,6 +206,7 @@ function DetailInner() {
       </Grid>
 
       {composing && <Composer module={module} record={r} onClose={() => setComposing(false)} />}
+      {scheduling && <ScheduleModal module={module} record={r} onClose={() => setScheduling(false)} />}
       <Text size="xs" c="dimmed">
         Created by {st.created_by?.name ?? "—"} on {formatDateTime(st.created_at, me)} · Last edited by {st.updated_by?.name ?? "—"} on {formatDateTime(st.updated_at, me)}
       </Text>

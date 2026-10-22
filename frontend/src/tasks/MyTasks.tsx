@@ -17,6 +17,8 @@ import type { ModuleSchema, Page, RecordData } from "../types";
 import { useReminders } from "./api";
 import { dueState, localNow, type DueState } from "./due";
 import TaskRow from "./TaskRow";
+import { MeetingRow } from "../sync/MeetingRow";
+import { useAgenda } from "../sync/api";
 
 const GROUPS: { state: DueState; label: string; color: string }[] = [
   { state: "overdue", label: "Overdue", color: "red" },
@@ -63,7 +65,13 @@ export default function MyTasks({ module, params }: { module: ModuleSchema; para
   }
 
   const rows = data?.results ?? [];
-  const grouped = GROUPS.map((g) => ({ ...g, rows: rows.filter((r) => dueState(r.due as string | null, now) === g.state) }));
+  const { data: agenda } = useAgenda();
+  const today = dayjs(now).format("YYYY-MM-DD");
+  const meetings = (agenda?.meetings ?? []);
+  const meetingsIn = (state: DueState) => meetings.filter((m) =>
+    state === "today" ? dayjs(m.at).format("YYYY-MM-DD") <= today : state === "upcoming" ? dayjs(m.at).format("YYYY-MM-DD") > today : false);
+  const grouped = GROUPS.map((g) => ({ ...g, rows: rows.filter((r) => dueState(r.due as string | null, now) === g.state),
+    meetings: meetingsIn(g.state) }));
 
   return (
     <Stack gap="md" maw={980}>
@@ -76,26 +84,27 @@ export default function MyTasks({ module, params }: { module: ModuleSchema; para
               dateParser={dateParser(me.date_format)} value={due} onChange={setDue} />
             <Button type="submit" leftSection={<IconPlus size={16} />} loading={busy} disabled={!title.trim()}>Add task</Button>
           </Group>
-          <Text size="xs" c="dimmed" mt={6}>Tick the circle next to a task when it's done. Click a task's name to see or change its details.</Text>
+          <Text size="xs" c="dimmed" mt={6}>Tick the circle next to a task when it's done. Click a task's name to see or change its details. Meetings from your calendar show here too.</Text>
         </form>
       )}
       {isLoading ? (
         <Stack gap={10}>{[0, 1, 2, 3].map((i) => <Skeleton key={i} h={34} />)}</Stack>
       ) : error ? (
         <Text c="red" size="sm">{errorMessage(error)}</Text>
-      ) : rows.length === 0 ? (
+      ) : rows.length === 0 && meetings.length === 0 ? (
         <Paper withBorder radius="md" p="xl">
           <Text fw={600} ta="center">Nothing on your list</Text>
           <Text size="sm" c="dimmed" ta="center">Tasks assigned to you show here until they're done.</Text>
         </Paper>
       ) : (
-        grouped.filter((g) => g.rows.length).map((g) => (
+        grouped.filter((g) => g.rows.length || g.meetings.length).map((g) => (
           <Paper key={g.state} withBorder radius="md" className="df-fade">
             <Group gap="xs" px="md" pt="sm" pb={6}>
               <Text fw={600} size="sm" c={g.state === "overdue" ? "red.8" : undefined}>{g.label}</Text>
-              <Badge size="sm" variant="light" color={g.color}>{g.rows.length}</Badge>
+              <Badge size="sm" variant="light" color={g.color}>{g.rows.length + g.meetings.length}</Badge>
             </Group>
             <div>
+              {g.meetings.map((m) => <MeetingRow key={`m${m.id}`} meeting={m} />)}
               {g.rows.map((r) => <TaskRow key={r.id} task={r} now={now} canEdit={module.perms.edit} />)}
             </div>
           </Paper>

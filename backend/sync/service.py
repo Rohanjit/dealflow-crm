@@ -210,9 +210,32 @@ def choices_payload(item: Item, user) -> list[dict]:
     return out
 
 
+def links_for(item: Item, user, limit=3) -> list[dict]:
+    """The records it's logged on that this person can open (deals first), for links in lists."""
+    order = {"deals": 0, "outreach": 1, "deal_investors": 2, "contacts": 3, "investors": 4, "companies": 5}
+    out = []
+    for ref in sorted(item.records, key=lambda r: order.get(r.split(":")[0], 9)):
+        mkey, _, rid = ref.partition(":")
+        if not user.can(mkey, "view"):
+            continue
+        mod = get_module(mkey)
+        obj = visible(mod.model.objects.filter(pk=int(rid), archived_at__isnull=True), mod, user).first()
+        if obj is None:
+            continue
+        if out and out[0]["module"] in engine.DEAL_KEYS and mkey not in engine.DEAL_KEYS:
+            break  # the deal says it all; its company and people are on its page
+        title = mod.title_of(obj)
+        if all(o["title"] != title for o in out):
+            out.append({"module": mkey, "id": obj.pk, "title": title})
+        if len(out) >= limit:
+            break
+    return out
+
+
 def item_payload(item: Item, user) -> dict:
     restricted = restricted_for(item, user)
     return {
+        "links": [] if restricted else links_for(item, user),
         "id": item.pk, "kind": item.kind, "subject": "About a restricted deal" if restricted else item.subject,
         "at": item.at.isoformat(), "end": item.end.isoformat() if item.end else None, "all_day": item.all_day,
         "participants": participants_for(item.participants, user), "cancelled": item.cancelled,
@@ -376,7 +399,8 @@ def meetings_about(user, mkey: str, pk: int, now=None) -> list[dict]:
 
         refs += [f"deal_investors:{i}" for i in DealInvestor.objects.filter(deal_id=pk).values_list("pk", flat=True)]
     qs = Item.objects.filter(kind="meeting", cancelled=False, end__gt=now).order_by("at")
-    items = [i for i in qs[:500] if set(refs) & set(i.records)][:20]
+    # Meetings waiting for the owner to pick between deals show on each deal they could be about.
+    items = [i for i in qs[:500] if set(refs) & (set(i.records) | set(i.choices))][:20]
     return [item_payload(i, user) for i in items if not restricted_for(i, user)]
 
 

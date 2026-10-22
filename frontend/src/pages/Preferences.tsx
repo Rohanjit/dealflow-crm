@@ -9,6 +9,7 @@ import { useVaultStatus } from "../vault/api";
 import { SetPinForm } from "../vault/VaultGate";
 import ChangePassword from "./ChangePassword";
 import MailboxCard from "../mail/MailboxCard";
+import LoggingCard from "../sync/LoggingCard";
 import { DevicesCard, TwoStepCard } from "../security/TwoStep";
 
 export default function Preferences() {
@@ -60,6 +61,7 @@ export default function Preferences() {
       {!info.is_guest && <DevicesCard />}
       {!info.is_guest && <ChangePassword />}
       <MailboxCard />
+      <LoggingCard />
       {me.perms.vault?.view && !info.is_guest && <VaultPin />}
     </Stack>
   );

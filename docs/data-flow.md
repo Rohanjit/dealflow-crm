@@ -26,6 +26,7 @@ flowchart LR
   Google["Gmail API"]:::ext
   MS["Microsoft Graph"]:::ext
   LE["Let's Encrypt"]:::ext
+  Other["iCloud / other IMAP + CalDAV<br/>(public addresses only)"]:::ext
   ClamDB["ClamAV signature updates"]:::ext
 
   UI -- "HTTPS (session + CSRF cookies, __Host-)" --> Caddy
@@ -42,6 +43,8 @@ flowchart LR
   Sched -- "OAuth tokens sealed in DB" --> Google
   Sched --> MS
   App -- "send (gmail.send / Mail.Send)" --> Google
+  Sched -- "logging: read new mail headers, calendar window" --> Other
+  App -- "owner opens an email: fetched live, not kept" --> Other
   App --> MS
   Caddy -. certificates .- LE
   Clam -. updates .- ClamDB
@@ -55,7 +58,8 @@ flowchart LR
 | Vault files | AES-256-GCM per file, firm Vault key sealed to each person's PIN-derived key | HTTPS, `no-store` | People with Vault access and an open Vault (PIN) |
 | Uploads in flight | Memory-only `/tmp` until scanned and encrypted | HTTPS | Nobody else |
 | Email attachments waiting to send | AES-256-GCM with a key from `master.key` | HTTPS to Google/Microsoft | The sender (and the scheduler for campaigns) |
-| Mailbox tokens, authenticator secrets | Sealed with a key from the Django secret | — | The app only |
+| Mailbox tokens, app passwords (logging), authenticator secrets | Sealed with a key from the Django secret | — | The app only |
+| Logged emails and meetings | Subject, time, participants and attachment names in the database; the email text, meeting notes and attachments are never copied | TLS to the provider (certificates verified, IMAP/CalDAV only to public addresses) | Subject etc.: anyone who can see the record (hidden for restricted deals, addresses hidden by field access); text: only the mailbox owner, fetched live |
 | Passwords, recovery codes, PINs | Argon2id hashes | HTTPS | Nobody (one-way) |
 | Backups | AES-256-GCM, backup key in the keys volume | Download over HTTPS (admins, password) | Admins with the key file |
 | Audit log | Each entry sealed to the audit public key; private key under the audit passphrase | — | Admins who know the passphrase |

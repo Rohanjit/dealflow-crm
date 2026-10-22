@@ -19,6 +19,9 @@ import { useAccessRequests, useDecide, type AccessRequest } from "../deals/Restr
 import { useInsightAlerts, useSnooze, type Alerts } from "../insights/api";
 import { dueText } from "./TaskRow";
 import { formatDateTime } from "../format";
+import dayjs from "dayjs";
+import { useAgenda, withLine } from "../sync/api";
+import { PickDeal } from "../sync/LoggedEntry";
 
 export default function TaskBell() {
   const me = useMe();
@@ -45,6 +48,8 @@ export default function TaskBell() {
     queryKey: ["admin-security-alerts"], refetchInterval: 5 * 60_000, enabled: !!me.role.is_admin,
     queryFn: () => api<{ key: string; title: string; detail: string }[]>("security/admin-alerts/", { background: true }),
   }).data;
+  // Meetings about to start (reminder time chosen in My preferences) and emails waiting for a deal.
+  const agenda = useAgenda().data;
   const qc = useQueryClient();
   const clearedQ = useQuery({ queryKey: ["cleared-alerts"], queryFn: () => api<{ keys: string[] }>("notifications/cleared/") });
   const cleared = useMemo(() => new Set(clearedQ.data?.keys ?? []), [clearedQ.data]);
@@ -56,6 +61,8 @@ export default function TaskBell() {
     for (const s of signins ?? []) k.push(`signin:${s.id}`);
     for (const r of refusals ?? []) k.push(`virus:${r.id}`);
     for (const a of secAlerts ?? []) k.push(a.key);
+    for (const id of agenda?.soon ?? []) k.push(`meet:${id}:soon`);
+    for (const it of agenda?.to_file ?? []) k.push(`file:${it.id}`);
     for (const r of asks?.to_decide ?? []) k.push(`ask:${r.id}`);
     for (const t of data?.overdue ?? []) k.push(`task:${t.id}:overdue`);
     for (const t of data?.today ?? []) k.push(`task:${t.id}:today`);
@@ -67,7 +74,7 @@ export default function TaskBell() {
     for (const c of cold?.items ?? []) k.push(`cold:${c.module}:${c.id}`);
     for (const [m, n] of Object.entries(cold?.more ?? {})) if (n) k.push(`more:cold:${m}:${n}`);
     return k;
-  }, [asks, data, alerts, cold, signins, refusals, secAlerts]);
+  }, [asks, data, alerts, cold, signins, refusals, secAlerts, agenda]);
   const show = (key: string) => !cleared.has(key);
   const moreCount = (key: string) => Number(key.split(":").pop()) || 0;
   const total = keys.filter(show).reduce((sum, k) => sum + (k.startsWith("more:") ? moreCount(k) : 1), 0);
@@ -135,6 +142,21 @@ export default function TaskBell() {
     seen.current = current;
   }, [data, nav, clearedQ.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const soonSeen = useRef<Set<number> | null>(null);
+  useEffect(() => {
+    if (!agenda) return;
+    const now = new Set(agenda.soon);
+    if (soonSeen.current) {
+      for (const m of agenda.meetings) {
+        if (now.has(m.id) && !soonSeen.current.has(m.id)) {
+          notifications.show({ color: "grape", title: `Meeting at ${dayjs(m.at).format("HH:mm")}`, autoClose: false,
+            message: <Text size="sm">{m.subject || "(no title)"} · with {withLine(m.participants)}</Text> });
+        }
+      }
+    }
+    soonSeen.current = now;
+  }, [agenda]);
+
   if (!data && !cold && !asks && !alerts && !signins) return null;
   const toDecide = (asks?.to_decide ?? []).filter((r) => show(`ask:${r.id}`));
   const newSignins = (signins ?? []).filter((x) => show(`signin:${x.id}`));
@@ -152,6 +174,8 @@ export default function TaskBell() {
       </Group>
     </div>
   );
+  const soonMeetings = (agenda?.meetings ?? []).filter((m) => agenda!.soon.includes(m.id) && show(`meet:${m.id}:soon`));
+  const toFile = (agenda?.to_file ?? []).filter((it) => show(`file:${it.id}`));
   const overdue = (data?.overdue ?? []).filter((t) => show(`task:${t.id}:overdue`));
   const today = (data?.today ?? []).filter((t) => show(`task:${t.id}:today`));
   const coldItems = (cold?.items ?? []).filter((c) => show(`cold:${c.module}:${c.id}`));
@@ -292,6 +316,24 @@ export default function TaskBell() {
               ))}
               {toDecide.length > 0 && <Text size="xs" fw={600} c="navy.7" tt="uppercase">Access requests</Text>}
               {toDecide.map(askRow)}
+              {soonMeetings.length > 0 && <Text size="xs" fw={600} c="grape.8" tt="uppercase">Meetings</Text>}
+              {soonMeetings.map((m) => (
+                <div key={`meet-${m.id}`}>
+                  <Text size="sm" fw={500}>{dayjs(m.at).format("HH:mm")} · {m.subject || "(no title)"}</Text>
+                  <Text size="xs" c="dimmed">
+                    With {withLine(m.participants)}
+                    {m.links[0] && <> · <Anchor component={Link} to={`/m/${m.links[0].module}/${m.links[0].id}`} size="xs" onClick={close}>{m.links[0].title}</Anchor></>}
+                  </Text>
+                </div>
+              ))}
+              {toFile.length > 0 && <Text size="xs" fw={600} c="navy.7" tt="uppercase">Which deal?</Text>}
+              {toFile.map((it) => (
+                <div key={`file-${it.id}`}>
+                  <Text size="sm" fw={500}>{it.kind === "email" ? "Email" : "Meeting"}: {it.subject || "(no subject)"}</Text>
+                  <Text size="xs" c="dimmed">With {withLine(it.participants)} · {formatDateTime(it.at, me)}</Text>
+                  <PickDeal itemId={it.id} choices={it.choices} compact />
+                </div>
+              ))}
               {overdue.length > 0 && <Text size="xs" fw={600} c="red.8" tt="uppercase">Overdue</Text>}
               {overdue.map((t) => item(t, true))}
               {today.length > 0 && <Text size="xs" fw={600} c="orange.8" tt="uppercase">Today</Text>}

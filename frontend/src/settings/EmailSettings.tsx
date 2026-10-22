@@ -3,7 +3,7 @@
 
 import {
   ActionIcon, Alert, Badge, Button, Code, CopyButton, Group, List, NumberInput, Paper, PasswordInput, SimpleGrid, Stack,
-  Text, TextInput, Title, Tooltip,
+  Table, Text, TextInput, Title, Tooltip,
 } from "@mantine/core";
 import { IconCheck, IconCopy } from "@tabler/icons-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -12,6 +12,8 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { errorMessage, fieldErrors, notifyOk } from "../components/errors";
 import { Skeleton } from "../components/ui";
+import { useMe } from "../context";
+import { formatDateTime } from "../format";
 
 type Provider = { client_id: string; has_secret: boolean; from_env: boolean; ready: boolean; redirect_uri: string; tenant?: string };
 type Settings = {
@@ -109,8 +111,8 @@ export default function EmailSettings() {
         <Stack gap="sm">
           <Group justify="space-between"><Title order={5}>Gmail and Google Workspace</Title>{status(data.gmail)}</Group>
           <List size="sm" type="ordered" spacing={2}>
-            <List.Item>In the Google Cloud console, create a project and turn on the Gmail API.</List.Item>
-            <List.Item>Set up the OAuth consent screen and add the scope <Code>gmail.send</Code> (only sending).</List.Item>
+            <List.Item>In the Google Cloud console, create a project and turn on the Gmail API (and the Google Calendar API for calendar logging).</List.Item>
+            <List.Item>Set up the OAuth consent screen and add the scope <Code>gmail.send</Code> (sending). For email and calendar logging also add <Code>gmail.readonly</Code> and <Code>calendar.events</Code>. With a Google Workspace account, make the app "Internal" so only your firm can use it.</List.Item>
             <List.Item>Create an OAuth client ID of type “Web application” with this redirect address:</List.Item>
           </List>
           <Copyable value={data.gmail.redirect_uri} />
@@ -141,7 +143,7 @@ export default function EmailSettings() {
           </List>
           <Copyable value={data.outlook.redirect_uri} />
           <List size="sm" type="ordered" spacing={2} start={3}>
-            <List.Item>Under API permissions add the delegated Microsoft Graph permissions <Code>Mail.Send</Code> and <Code>Mail.ReadWrite</Code> (to confirm each email reached Sent Items).</List.Item>
+            <List.Item>Under API permissions add the delegated Microsoft Graph permissions <Code>Mail.Send</Code> and <Code>Mail.ReadWrite</Code> (to confirm each email reached Sent Items), plus <Code>Mail.Read</Code> and <Code>Calendars.ReadWrite</Code> for email and calendar logging.</List.Item>
             <List.Item>Under Certificates &amp; secrets create a client secret, and paste both here.</List.Item>
           </List>
           {data.outlook.from_env ? (
@@ -191,6 +193,51 @@ export default function EmailSettings() {
         </Group>
         {problem && !Object.keys(errors).length && <Text c="red" size="sm" mt="xs">{problem}</Text>}
       </Paper>
+      <LoggingOverview />
     </Stack>
+  );
+}
+
+type Row = { id: number; name: string; email: string;
+  connections: { label: string; email: string; mail: boolean; calendar: boolean; ok: boolean; synced_at: string | null }[] };
+
+/** Who has connected email and calendar logging (decision 64): each banker chooses; admins can see. */
+function LoggingOverview() {
+  const me = useMe();
+  const { data } = useQuery({ queryKey: ["sync-overview"], queryFn: () => api<Row[]>("settings/email/logging/") });
+  if (!data) return null;
+  const on = data.filter((r) => r.connections.length).length;
+  return (
+    <Paper withBorder p="lg">
+      <Stack gap="sm">
+        <Title order={5}>Email and calendar logging</Title>
+        <Text size="sm" c="dimmed">
+          Each person chooses whether to connect, in their own preferences. {on} of {data.length} {data.length === 1 ? "person has" : "people have"} connected.
+          Google and Microsoft 365 use the app details above; iCloud and other providers use an app password each person makes.
+        </Text>
+        <Table verticalSpacing={6} fz="sm">
+          <Table.Thead><Table.Tr><Table.Th>Person</Table.Th><Table.Th>Connected</Table.Th><Table.Th>Last checked</Table.Th></Table.Tr></Table.Thead>
+          <Table.Tbody>
+            {data.map((r) => (
+              <Table.Tr key={r.id}>
+                <Table.Td>{r.name}<Text size="xs" c="dimmed">{r.email}</Text></Table.Td>
+                <Table.Td>
+                  {r.connections.length ? r.connections.map((c, i) => (
+                    <Group key={i} gap={6}>
+                      <Text size="sm">{c.label}</Text>
+                      <Text size="xs" c="dimmed">{[c.mail && "email", c.calendar && "calendar"].filter(Boolean).join(" and ")}</Text>
+                      {!c.ok && <Badge size="xs" color="orange" variant="light">Needs attention</Badge>}
+                    </Group>
+                  )) : <Text size="sm" c="dimmed">Not connected</Text>}
+                </Table.Td>
+                <Table.Td>
+                  {r.connections.map((c, i) => <Text key={i} size="xs" c="dimmed">{c.synced_at ? formatDateTime(c.synced_at, me) : "Not yet"}</Text>)}
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </Stack>
+    </Paper>
   );
 }
