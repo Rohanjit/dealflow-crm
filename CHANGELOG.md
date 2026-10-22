@@ -4,6 +4,13 @@ Security-relevant changes are listed with what they mean for an install.
 
 ## Unreleased
 
+### Django REST Framework 3.18.3 (23 Oct 2026)
+- Fixes three advisories published on 22 Oct: an unauthenticated request could make a worker allocate
+  huge amounts of memory through a compression codec named in the Content-Type charset
+  (CVE-2026-114136), and a long Accept header took quadratic time to parse (CVE-2026-114138); both
+  could stall or crash the server. The third (CVE-2026-114137, token deletion) doesn't affect
+  Dealflow, which uses no API tokens. Found by the pip-audit step in CI.
+
 ### Investor data rooms (decision 64)
 - Each deal can have a data room. Files are copies of Vault documents, encrypted (AES-256-GCM) with a key
   made from the install's master key: unlike the Vault, the server can read them without a PIN, because it
