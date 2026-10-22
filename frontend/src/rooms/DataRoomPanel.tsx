@@ -176,7 +176,7 @@ export default function DataRoomPanel({ deal }: { deal: RecordData }) {
                   <Text size="sm" c="dimmed" px="lg">Nobody yet.</Text>
                 ) : (
                   <ScrollArea>
-                    <Table className="df-table" verticalSpacing="xs" horizontalSpacing="lg" miw={680}>
+                    <Table className="df-table" verticalSpacing="xs" horizontalSpacing="md" miw={600}>
                       <Table.Thead><Table.Tr><Table.Th>Investor</Table.Th><Table.Th>Link and NDA</Table.Th><Table.Th>Activity</Table.Th><Table.Th w={110} /></Table.Tr></Table.Thead>
                       <Table.Tbody>
                         {data.shares.map((s) => (
