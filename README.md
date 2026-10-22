@@ -41,7 +41,7 @@ cd dealflow-crm
 docker compose up -d
 ```
 
-Open <http://localhost:8000>. You can **look around first** with a sample firm (no sign-in), then choose **Set up for real**, which deletes the sample. The setup wizard works for a firm or for **just you**, and creates the first Admin account. A firm then adds its team under **Settings → Users** (create accounts directly, or share a one-time invite link).
+Open <http://localhost:8000> on the same computer. You can **look around first** with a sample firm (no sign-in), then choose **Set up for real**, which deletes the sample. The setup wizard works for a firm or for **just you**, and creates the first Admin account. A firm then adds its team under **Settings → Users** (create accounts directly, or share a one-time invite link).
 
 **Public demo site:** set `DEALFLOW_DEMO=1` in `.env` on a server of its own. Visitors get **Continue as guest** with sample data that resets every day. Never set it on an install that holds real data.
 
@@ -49,9 +49,11 @@ All data lives in the `dealflow-data` Docker volume: the encrypted database, enc
 
 Uploads are checked by a virus scanner (the `clamav` service) before they're stored. On first start it takes a few minutes to load, and uploads wait until it answers.
 
-Optional settings go in a `.env` file next to `docker-compose.yml`; see [`.env.example`](.env.example) for the port, time zone, Postgres and HTTPS options.
+**For a team, over HTTPS:** set `DEALFLOW_DOMAIN=crm.yourfirm.com` in `.env` and run `docker compose --profile https up -d`. The bundled Caddy gets and renews the certificate; see [`docs/https.md`](docs/https.md). Without a domain, Dealflow only answers on the computer it runs on.
 
-**Postgres instead of SQLite:** set `POSTGRES_PASSWORD` and `DATABASE_URL` in `.env`, then run `docker compose --profile postgres up -d`.
+Optional settings go in a `.env` file next to `docker-compose.yml`; see [`.env.example`](.env.example) for the port, time zone, Postgres and HTTPS options. Every container runs read-only, without extra privileges, from images pinned by digest; released images are signed ([`docs/verify-release.md`](docs/verify-release.md)).
+
+**Postgres instead of SQLite:** set `POSTGRES_PASSWORD` and `DATABASE_URL` in `.env`, then add `--profile postgres`.
 
 **Updating:** `git pull && docker compose up -d --build`. Database changes are applied automatically on start.
 

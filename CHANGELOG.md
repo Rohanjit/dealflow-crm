@@ -4,6 +4,29 @@ Security-relevant changes are listed with what they mean for an install.
 
 ## Unreleased
 
+### HTTPS by default, hardened containers, locked and scanned dependencies (phase S6 of decision 63)
+- **No plain http on a network.** Without a domain the app answers only on its own computer (127.0.0.1).
+  `DEALFLOW_DOMAIN` + `docker compose --profile https` puts Caddy in front: automatic certificates (or its
+  own authority for internal names), TLS 1.2/1.3 only, HTTP/2 and HTTP/3, http redirected; the app turns on
+  `__Host-` secure cookies, HSTS and proxy trust from that one setting.
+- **Client addresses can't be spoofed** through `X-Forwarded-For`: only the entry the proxy added is used
+  (lock-out counts, signed-in devices, audit log).
+- **Containers** run read-only, with every Linux capability dropped (a few given back to clamav, Postgres
+  and Caddy), no privilege escalation, process limits, memory-only `/tmp` (uploads never touch the disk
+  before they're checked and encrypted), health checks and rotated logs. Postgres sits on a network with no
+  internet access. All images are pinned by digest.
+- **Image:** Python packages installed offline from wheels checked against hashes; pip removed; tests not
+  shipped; gunicorn's control socket off.
+- **Dependencies upgraded for known vulnerabilities:** Django 5.1 (end of life) → 5.2 LTS, Django REST
+  framework 3.15 → 3.17, cryptography 46 → 50, React Router 6 → 7 (open redirect), Vitest 3 → 5 (dev only).
+  pip-audit and npm audit now report none.
+- **Outgoing mail requests** only go to Google's and Microsoft's https hosts, even when an address comes
+  back in a provider's answer.
+- **CI on every change:** tests (SQLite and Postgres), Django's deployment checks, pip-audit, npm audit,
+  bandit, semgrep, gitleaks over the whole history, trivy (Dockerfile and image), an SBOM, and the full stack
+  started with every container healthy. Releases are signed (Sigstore), attested and ship an SBOM.
+  Dependabot proposes updates weekly.
+
 ### Virus scanning (phase S5 of decision 63)
 - **Every upload is checked by ClamAV before it's stored:** Vault documents, email attachments from the
   computer and import files. Files are streamed to clamd (`INSTREAM`, stdlib client in `core/antivirus.py`,

@@ -1,0 +1,5 @@
+# Security tools for CI (.github/workflows/ci.yml), locked with hashes in requirements-ci.txt:
+#   uv pip compile requirements-ci.in --python-version 3.12 --python-platform linux --generate-hashes -o requirements-ci.txt
+pip-audit==2.10.1
+bandit==1.9.4
+semgrep==1.182.0

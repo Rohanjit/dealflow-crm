@@ -1,0 +1,163 @@
+# Every push and pull request: tests on SQLite and Postgres, the app build, and the security checks
+# (decision 63, S6). Third-party actions are pinned to a commit; tools run from hashed lock files
+# or digest-pinned images. Nothing here gets write access to the repository.
+name: CI
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 3 * * 1" # Mondays: catch newly published vulnerabilities in unchanged code
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TRIVY_IMAGE: aquasec/trivy:0.67.2@sha256:e2b22eac59c02003d8749f5b8d9bd073b62e30fefaef5b7c8371204e0a4b0c08
+  GITLEAKS_IMAGE: zricethezav/gitleaks:v8.28.0@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854
+
+jobs:
+  backend:
+    name: Backend tests (${{ matrix.db }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        db: [sqlite, postgres]
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+        env:
+          POSTGRES_DB: dealflow
+          POSTGRES_USER: dealflow
+          POSTGRES_PASSWORD: ci-only-password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dealflow" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: ${{ matrix.db == 'postgres' && 'postgres://dealflow:ci-only-password@localhost:5432/dealflow' || '' }}
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install --require-hashes --no-deps -r requirements.txt
+      - run: python manage.py makemigrations --check --dry-run
+      - run: python manage.py test --noinput
+      - name: Production settings pass Django's deployment checks
+        if: matrix.db == 'sqlite'
+        env:
+          DEALFLOW_DOMAIN: crm.example.com
+          DEALFLOW_CLAMD: clamav:3310
+          DEALFLOW_DATA_DIR: ${{ runner.temp }}/data
+          DEALFLOW_KEYS_DIR: ${{ runner.temp }}/keys
+        run: python manage.py check --deploy --fail-level WARNING
+
+  frontend:
+    name: Frontend build and tests
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - run: npm ci --ignore-scripts --no-fund
+      - run: npm run build
+      - run: npm test
+
+  security:
+    name: Security checks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # secret scanning reads the whole history
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - name: Install the checkers (hashed lock file)
+        run: pip install --require-hashes -r backend/requirements-ci.txt
+      - name: Known vulnerabilities in Python packages (pip-audit)
+        run: pip-audit -r backend/requirements.txt --require-hashes --disable-pip --strict
+      - name: Known vulnerabilities in JavaScript packages (npm audit)
+        working-directory: frontend
+        run: npm audit --audit-level=low
+      - name: Python security lint (bandit)
+        working-directory: backend
+        run: bandit -q -c bandit.yaml -r .
+      - name: Code patterns (semgrep)
+        run: >-
+          semgrep scan --metrics=off --error --quiet
+          --config p/python --config p/django --config p/secrets
+          --config p/typescript --config p/react --config p/javascript
+          --exclude tests --exclude migrations --exclude node_modules --exclude dist
+          backend frontend/src
+      - name: Secrets in the history (gitleaks)
+        run: docker run --rm -v "$PWD:/repo" "$GITLEAKS_IMAGE" git /repo --no-banner -c /repo/.gitleaks.toml --redact
+      - name: Dockerfile and compose settings (trivy config)
+        run: docker run --rm -v "$PWD:/src:ro" "$TRIVY_IMAGE" config --exit-code 1 --severity MEDIUM,HIGH,CRITICAL /src
+
+  image:
+    name: Image build, scan and smoke test
+    runs-on: ubuntu-24.04
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: dealflow:ci
+      - name: Vulnerabilities in the image (trivy)
+        run: >-
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY_IMAGE"
+          image --exit-code 1 --ignore-unfixed --severity HIGH,CRITICAL --scanners vuln dealflow:ci
+      - name: Software bill of materials (SBOM)
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: dealflow:ci
+          format: cyclonedx-json
+          output-file: dealflow-sbom.cdx.json
+          upload-artifact: false
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom
+          path: dealflow-sbom.cdx.json
+      - name: The hardened stack starts and every container is healthy
+        run: |
+          docker tag dealflow:ci dealflow:latest
+          docker compose config -q
+          docker compose up -d --no-build
+          for _ in $(seq 1 60); do
+            n=$(docker compose ps --format '{{.Health}}' | grep -c '^healthy$' || true)
+            [ "$n" = "3" ] && break
+            sleep 5
+          done
+          docker compose ps
+          [ "$n" = "3" ]
+          curl -fsS http://127.0.0.1:8000/api/health/
+          docker compose exec -T app python -c "import pathlib; assert pathlib.Path('/data/dealflow.sqlite3').read_bytes()[:15] != b'SQLite format 3'"
+      - if: always()
+        run: docker compose logs --no-color | tail -200

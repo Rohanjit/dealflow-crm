@@ -60,7 +60,8 @@ def folder() -> Path:
     d = Path(settings.AUDIT_DIR)
     d.mkdir(parents=True, exist_ok=True)
     try:
-        os.chmod(d, 0o700)
+        # Owner-only folder (semgrep flags any chmod).
+        os.chmod(d, 0o700)  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
     except OSError:
         pass
     return d
