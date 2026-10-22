@@ -108,6 +108,7 @@ ACTIONS = {
     ("VaultRotateView", "POST"): "Changed the Vault key",
     ("ScannerStatusView", "GET"): "Viewed the virus scanner",
     ("ScanRefusalAlertsView", "GET"): "Checked refused files",
+    ("AdminSecurityAlertsView", "GET"): "Checked security alerts",
     ("SecurityOverviewView", "GET"): "Viewed the security overview",
     ("AuditChainCheckView", "POST"): "Checked the audit log chain",
     ("RestoreTestView", "POST"): "Tested that the latest backup restores",

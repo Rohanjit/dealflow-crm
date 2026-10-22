@@ -41,6 +41,10 @@ export default function TaskBell() {
     queryKey: ["scan-refusals"], refetchInterval: 5 * 60_000, enabled: !!me.role.is_admin,
     queryFn: () => api<{ id: number; at: string; place: string; file_name: string; signature: string; user: string | null }[]>("security/refusals/", { background: true }),
   }).data;
+  const secAlerts = useQuery({
+    queryKey: ["admin-security-alerts"], refetchInterval: 5 * 60_000, enabled: !!me.role.is_admin,
+    queryFn: () => api<{ key: string; title: string; detail: string }[]>("security/admin-alerts/", { background: true }),
+  }).data;
   const qc = useQueryClient();
   const clearedQ = useQuery({ queryKey: ["cleared-alerts"], queryFn: () => api<{ keys: string[] }>("notifications/cleared/") });
   const cleared = useMemo(() => new Set(clearedQ.data?.keys ?? []), [clearedQ.data]);
@@ -51,6 +55,7 @@ export default function TaskBell() {
     const k: string[] = [];
     for (const s of signins ?? []) k.push(`signin:${s.id}`);
     for (const r of refusals ?? []) k.push(`virus:${r.id}`);
+    for (const a of secAlerts ?? []) k.push(a.key);
     for (const r of asks?.to_decide ?? []) k.push(`ask:${r.id}`);
     for (const t of data?.overdue ?? []) k.push(`task:${t.id}:overdue`);
     for (const t of data?.today ?? []) k.push(`task:${t.id}:today`);
@@ -62,7 +67,7 @@ export default function TaskBell() {
     for (const c of cold?.items ?? []) k.push(`cold:${c.module}:${c.id}`);
     for (const [m, n] of Object.entries(cold?.more ?? {})) if (n) k.push(`more:cold:${m}:${n}`);
     return k;
-  }, [asks, data, alerts, cold, signins, refusals]);
+  }, [asks, data, alerts, cold, signins, refusals, secAlerts]);
   const show = (key: string) => !cleared.has(key);
   const moreCount = (key: string) => Number(key.split(":").pop()) || 0;
   const total = keys.filter(show).reduce((sum, k) => sum + (k.startsWith("more:") ? moreCount(k) : 1), 0);
@@ -134,6 +139,7 @@ export default function TaskBell() {
   const toDecide = (asks?.to_decide ?? []).filter((r) => show(`ask:${r.id}`));
   const newSignins = (signins ?? []).filter((x) => show(`signin:${x.id}`));
   const newRefusals = (refusals ?? []).filter((x) => show(`virus:${x.id}`));
+  const newSec = (secAlerts ?? []).filter((x) => show(x.key));
   const askRow = (r: AccessRequest) => (
     <div key={`ask-${r.id}`}>
       <Anchor component={Link} to={`/m/deals/${r.deal}`} size="sm" fw={500} onClick={() => setOpened(false)}>{r.deal_title}</Anchor>
@@ -255,7 +261,16 @@ export default function TaskBell() {
         ) : (
           <ScrollArea.Autosize mah={420}>
             <Stack gap="sm">
-              {newSignins.length + newRefusals.length > 0 && <Text size="xs" fw={600} c="red.8" tt="uppercase">Security</Text>}
+              {newSignins.length + newRefusals.length + newSec.length > 0 && <Text size="xs" fw={600} c="red.8" tt="uppercase">Security</Text>}
+              {newSec.map((x) => (
+                <div key={x.key}>
+                  <Text size="sm" fw={500}>{x.title}</Text>
+                  <Text size="xs" c="dimmed">{x.detail}</Text>
+                  <Group gap={6} mt={4}>
+                    <Button size="compact-xs" variant="subtle" component={Link} to="/settings/security" onClick={close}>Open the security checklist</Button>
+                  </Group>
+                </div>
+              ))}
               {newRefusals.map((x) => (
                 <div key={`virus-${x.id}`}>
                   <Text size="sm" fw={500}>Harmful file refused: {x.file_name}</Text>

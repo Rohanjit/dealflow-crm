@@ -12,7 +12,7 @@ import { formatBytes, formatDateTime } from "../format";
 
 type Backup = { name: string; kind: string; size: number; created_at: string };
 type Data = {
-  backups: Backup[]; folder: string; backup_keep: number; backup_hour: number; backups_enabled: boolean;
+  backups: Backup[]; folder: string; backup_keep: number; backup_hour: number; backups_enabled: boolean; hourly_backups: boolean;
   last_backup_at: string | null; last_backup_error: string;
 };
 const KIND: Record<string, string> = { daily: "Daily", manual: "Manual", "pre-restore": "Before a restore" };
@@ -21,11 +21,11 @@ export default function BackupsSettings() {
   const me = useMe();
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["backups"], queryFn: () => api<Data>("backups/") });
-  const [cfg, setCfg] = useState({ backups_enabled: true, backup_keep: 7, backup_hour: 2 });
+  const [cfg, setCfg] = useState({ backups_enabled: true, backup_keep: 7, backup_hour: 2, hourly_backups: false });
   const [busy, setBusy] = useState<string | null>(null);
   const [restoreOpen, setRestoreOpen] = useState(false);
   useEffect(() => {
-    if (data) setCfg({ backups_enabled: data.backups_enabled, backup_keep: data.backup_keep, backup_hour: data.backup_hour });
+    if (data) setCfg({ backups_enabled: data.backups_enabled, backup_keep: data.backup_keep, backup_hour: data.backup_hour, hourly_backups: data.hourly_backups });
   }, [data]);
 
   async function saveCfg() {
@@ -73,8 +73,11 @@ export default function BackupsSettings() {
             <Switch label="Daily automatic backups" checked={cfg.backups_enabled} onChange={(e) => setCfg({ ...cfg, backups_enabled: e.currentTarget.checked })} mb={8} />
             <Select label="Time (server clock)" w={140} data={hours} value={String(cfg.backup_hour)} onChange={(v) => setCfg({ ...cfg, backup_hour: Number(v ?? 2) })} disabled={!cfg.backups_enabled} />
             <NumberInput label="Copies to keep" w={140} min={1} max={365} value={cfg.backup_keep} onChange={(v) => setCfg({ ...cfg, backup_keep: Number(v) || 1 })} />
-            <Button variant="default" onClick={saveCfg} loading={busy === "cfg"}>Save schedule</Button>
           </Group>
+          <Switch label="Also back up every hour (the last 24 are kept), so at most an hour of work can be lost"
+            checked={cfg.hourly_backups} disabled={!cfg.backups_enabled}
+            onChange={(e) => setCfg({ ...cfg, hourly_backups: e.currentTarget.checked })} />
+          <Group><Button variant="default" onClick={saveCfg} loading={busy === "cfg"}>Save schedule</Button></Group>
         </Stack>
       </Paper>
 

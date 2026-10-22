@@ -56,6 +56,16 @@ class Command(BaseCommand):
             except Exception:
                 log.exception("Daily backup failed")
             try:
+                from core.backups import due_for_hourly_backup
+
+                if due_for_hourly_backup():
+                    p = create_backup("hourly")
+                    log.info("Hourly backup written to %s", p)
+            except BackupError as e:
+                log.warning("Hourly backup skipped: %s", e)
+            except Exception:
+                log.exception("Hourly backup failed")
+            try:
                 from core import restore_test
 
                 # Weekly proof that backups restore (into a separate, temporary database).

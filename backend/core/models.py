@@ -13,6 +13,9 @@ class FirmSettings(models.Model):
     backup_hour = models.PositiveSmallIntegerField(default=2, help_text="Hour of day (server time) for the daily backup")
     backups_enabled = models.BooleanField(default=True)
     last_backup_at = models.DateTimeField(null=True, blank=True)
+    # Hourly backups (kept 24) on top of the daily ones: at most an hour of work lost (decision 63, S7).
+    hourly_backups = models.BooleanField(default=False)
+    last_hourly_at = models.DateTimeField(null=True, blank=True)
     last_backup_error = models.TextField(blank=True)
     # Home page: how far ahead "near target close" and "mandate nearing expiry" look.
     dashboard_days = models.PositiveSmallIntegerField(default=30)

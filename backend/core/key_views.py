@@ -214,3 +214,14 @@ class RestoreTestView(APIView):
         r = restore_test.run()
         current.note("Backup restore test " + ("passed" if r["ok"] else "failed"))
         return Response(r)
+
+
+class AdminSecurityAlertsView(APIView):
+    """Security events for admins' notification bell (core/security_overview.admin_alerts)."""
+
+    def get(self, request):
+        if not request.user.is_admin:
+            return Response([])
+        from . import security_overview
+
+        return Response(security_overview.admin_alerts())

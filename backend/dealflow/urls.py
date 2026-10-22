@@ -103,6 +103,7 @@ api = [
     path("vault/keys/", kv.VaultKeysView.as_view()),
     path("settings/security/scanner/", kv.ScannerStatusView.as_view()),
     path("security/refusals/", kv.ScanRefusalAlertsView.as_view()),
+    path("security/admin-alerts/", kv.AdminSecurityAlertsView.as_view()),
     path("settings/security/overview/", kv.SecurityOverviewView.as_view()),
     path("settings/security/audit-check/", kv.AuditChainCheckView.as_view()),
     path("settings/security/restore-test/", kv.RestoreTestView.as_view()),

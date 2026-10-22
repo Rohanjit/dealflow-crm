@@ -110,3 +110,26 @@ class BackupTests(APITestBase):
 
     def test_download_path_traversal(self):
         self.assertEqual(self.client.get("/api/backups/..%2Fsecret_key/download/").status_code, 404)
+
+
+class HourlyBackupTests(APITestBase):
+    def test_hourly_backups_when_switched_on_and_keep_24(self):
+        fs = FirmSettings.load()
+        fs.setup_completed_at = timezone.now()
+        fs.save()
+        self.assertFalse(backups.due_for_hourly_backup())
+        r = self.client.patch("/api/settings/firm/", {"hourly_backups": True}, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertTrue(backups.due_for_hourly_backup())
+        backups.create_backup("hourly")
+        self.assertFalse(backups.due_for_hourly_backup())
+        self.assertTrue(backups.due_for_hourly_backup(timezone.now() + timezone.timedelta(hours=1)))
+        d = backups.backup_dir()
+        for i in range(30):
+            (d / f"dealflow-hourly-20260101-{i:02d}0000.dfb").write_bytes(b"x")
+        backups.prune(2)
+        self.assertEqual(len(list(d.glob("dealflow-hourly-*"))), 24)
+
+    def test_only_admins_switch_it(self):
+        c = self.client_for(self.make_user("s@firm.com", self.make_role("S", manage_settings=True)))
+        self.assertEqual(c.patch("/api/settings/firm/", {"hourly_backups": True}, format="json").status_code, 403)

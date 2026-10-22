@@ -129,9 +129,12 @@ def overview(request) -> dict:
         _check("vault_recovery", vault["has_recovery_key"] if vault["encrypted"] else None,
                "Vault recovery key made" if vault["has_recovery_key"] else "No Vault recovery key yet",
                "Make one below (Encryption and keys) and keep it offline."),
-        _check("backups", bk["age_hours"] is not None and bk["age_hours"] <= 26 and bk["encrypted"],
+        _check("backups", bk["age_hours"] is not None and bk["age_hours"] <= (2 if fs.hourly_backups else 26) and bk["encrypted"],
                f"Last backup {bk['age_hours']} hours ago, encrypted" if bk["age_hours"] is not None else "No backups yet",
                "Check the scheduler is running, or take one in Settings > Backups."),
+        _check("hourly", fs.hourly_backups, "Hourly backups: at most an hour of work can be lost" if fs.hourly_backups
+               else "Daily backups only: up to a day of work could be lost",
+               "Turn on hourly backups in Settings > Backups."),
         _check("restore_test", (rt or {}).get("ok") if rt else (False if bk["count"] else None),
                f"Latest backup test-restored on {rt['at'][:10]} ({rt.get('rows', 0)} rows, {rt.get('files', 0)} files)"
                if rt and rt.get("ok") else ("Backups haven't been test-restored yet" if not rt
@@ -169,3 +172,44 @@ def overview(request) -> dict:
         "audit": {**aud, "chain": chain},
         "restore_test": rt,
     }
+
+
+def admin_alerts() -> list[dict]:
+    """Security events admins hear about in the notification bell. Each key changes when something
+    new happens, so a cleared alert comes back only for a new event (decision 60)."""
+    import hashlib
+
+    from accounts.models import SignInFailure
+    from core import antivirus, audit, restore_test
+    from core.models import FirmSettings
+
+    out = []
+    now = timezone.now()
+    locks = SignInFailure.objects.filter(locked_until__gt=now)
+    if locks.exists():
+        n = locks.count()
+        newest = locks.order_by("-id").first()
+        out.append({"key": f"sec:lockout:{newest.pk}", "title": f"{n} sign-in lock-out{'s' if n > 1 else ''} in force",
+                    "detail": "Five wrong passwords or codes locked an account or an address for 30 minutes."})
+    fs = FirmSettings.load()
+    if fs.last_backup_error:
+        h = hashlib.sha256(fs.last_backup_error.encode()).hexdigest()[:12]
+        out.append({"key": f"sec:backupfail:{h}", "title": "The last automatic backup failed",
+                    "detail": fs.last_backup_error[:200]})
+    if fs.backups_enabled and fs.setup_completed_at and not fs.sample_loaded_at:
+        bk = backups()
+        if bk["age_hours"] is None or bk["age_hours"] > 26:
+            out.append({"key": f"sec:nobackup:{now.date()}", "title": "No backup in the last day",
+                        "detail": "Check that the scheduler is running."})
+    rt = restore_test.last()
+    if rt and not rt.get("ok"):
+        out.append({"key": f"sec:restoretest:{rt['at']}", "title": "The backup restore test failed",
+                    "detail": (rt.get("problems") or [""])[0][:200]})
+    chain = audit.last_chain_check()
+    if chain and not chain.get("ok"):
+        out.append({"key": f"sec:chain:{chain['checked_at']}", "title": "The audit log was changed outside Dealflow",
+                    "detail": f"{chain['problem_count']} problems found in the chain."})
+    if antivirus.mode() != "off" and not antivirus.uploads_allowed():
+        out.append({"key": f"sec:scanner:{now.date()}", "title": "The virus scanner isn't answering",
+                    "detail": "Uploads are paused until it's back."})
+    return out

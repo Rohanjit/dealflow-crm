@@ -22,8 +22,11 @@ from django.utils import timezone
 
 FORMAT_VERSION = 1
 # .dfb = encrypted (decision 63, S4); .zip = from before backups were encrypted (still restorable).
-NAME_RE = re.compile(r"^dealflow-(daily|manual|pre-restore)-\d{8}-\d{6}\.(dfb|zip)$")
+NAME_RE = re.compile(r"^dealflow-(daily|hourly|manual|pre-restore)-\d{8}-\d{6}\.(dfb|zip)$")
 EXCLUDE = ["contenttypes", "auth.permission", "sessions"]
+
+
+HOURLY_KEEP = 24
 
 
 class BackupError(Exception):
@@ -87,7 +90,7 @@ def _write_zip(target: Path, kind: str):
 def create_backup(kind: str = "manual") -> Path:
     from .models import FirmSettings
 
-    if kind not in ("daily", "manual", "pre-restore"):
+    if kind not in ("daily", "hourly", "manual", "pre-restore"):
         raise ValueError(f"Unknown backup kind: {kind}")
     stamp = timezone.localtime().strftime("%Y%m%d-%H%M%S")
     target = backup_dir() / f"dealflow-{kind}-{stamp}.dfb"
@@ -110,6 +113,8 @@ def create_backup(kind: str = "manual") -> Path:
             raise
     if kind == "daily":
         FirmSettings.objects.filter(pk=1).update(last_backup_at=timezone.now(), last_backup_error="")
+    elif kind == "hourly":
+        FirmSettings.objects.filter(pk=1).update(last_hourly_at=timezone.now(), last_backup_error="")
     prune(fs.backup_keep)
     return target
 
@@ -139,8 +144,8 @@ def prune(keep: int):
     by_kind: dict[str, list[Path]] = {}
     for b in list_backups():
         by_kind.setdefault(b["kind"], []).append(backup_dir() / b["name"])
-    for paths in by_kind.values():
-        for p in paths[keep:]:
+    for kind, paths in by_kind.items():
+        for p in paths[(HOURLY_KEEP if kind == "hourly" else keep):]:
             p.unlink(missing_ok=True)
 
 
@@ -241,3 +246,14 @@ def due_for_daily_backup(now=None) -> bool:
     if fs.last_backup_at and timezone.localtime(fs.last_backup_at).date() >= now.date():
         return False
     return True
+
+
+def due_for_hourly_backup(now=None) -> bool:
+    from .models import FirmSettings
+
+    fs = FirmSettings.load()
+    if not (fs.backups_enabled and fs.hourly_backups and fs.setup_completed_at):
+        return False
+    now = timezone.localtime(now)
+    last = fs.last_hourly_at and timezone.localtime(fs.last_hourly_at)
+    return not last or (last.date(), last.hour) != (now.date(), now.hour)

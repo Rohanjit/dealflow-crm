@@ -721,6 +721,7 @@ def firm_payload(fs: FirmSettings):
         "backup_keep": fs.backup_keep,
         "backup_hour": fs.backup_hour,
         "backups_enabled": fs.backups_enabled,
+        "hourly_backups": fs.hourly_backups,
         "last_backup_at": fs.last_backup_at.isoformat() if fs.last_backup_at else None,
         "last_backup_error": fs.last_backup_error,
         "dashboard_days": fs.dashboard_days,
@@ -751,7 +752,7 @@ class FirmSettingsView(APIView):
             if not name and fs.workspace_kind == "firm":
                 errors["firm_name"] = "Enter the firm name."
             fs.firm_name = name[:150]
-        if "backup_keep" in request.data or "backup_hour" in request.data or "backups_enabled" in request.data:
+        if any(k in request.data for k in ("backup_keep", "backup_hour", "backups_enabled", "hourly_backups")):
             if not request.user.is_admin:
                 raise PermissionDenied("Only admins can change backup settings.")
             if fs.sample_loaded_at:
@@ -770,11 +771,12 @@ class FirmSettingsView(APIView):
                     raise ValueError
             except (TypeError, ValueError):
                 errors["backup_hour"] = "Pick an hour between 0 and 23."
-        if "backups_enabled" in request.data:
-            if not isinstance(request.data["backups_enabled"], bool):
-                errors["backups_enabled"] = "Send true or false."
-            else:
-                fs.backups_enabled = request.data["backups_enabled"]
+        for key in ("backups_enabled", "hourly_backups"):
+            if key in request.data:
+                if not isinstance(request.data[key], bool):
+                    errors[key] = "Send true or false."
+                else:
+                    setattr(fs, key, request.data[key])
         for key in ("stale_investor_days", "stale_contact_days"):
             if key in request.data:
                 n = to_id(request.data[key]) if request.data[key] not in (0, "0") else 0

@@ -96,3 +96,19 @@ class RestoreTestTests(APITestBase):
         r = self.client.post("/api/settings/security/restore-test/").json()
         self.assertFalse(r["ok"])
         self.assertIn("couldn't be opened", r["problems"][0])
+
+
+class AdminAlertTests(APITestBase):
+    def test_backup_failure_and_lockouts_reach_admins(self):
+        from accounts.models import SignInFailure
+        from core.models import FirmSettings
+
+        self.assertEqual(self.client.get("/api/security/admin-alerts/").json(), [])
+        FirmSettings.objects.filter(pk=1).update(last_backup_error="Disk full")
+        SignInFailure.objects.create(key="a:x", count=5, first_at=timezone.now(),
+                                     locked_until=timezone.now() + timezone.timedelta(minutes=30))
+        keys = [a["key"].split(":")[1] for a in self.client.get("/api/security/admin-alerts/").json()]
+        self.assertIn("backupfail", keys)
+        self.assertIn("lockout", keys)
+        other = self.client_for(self.make_user("m@firm.com", self.make_role("M")))
+        self.assertEqual(other.get("/api/security/admin-alerts/").json(), [])
