@@ -236,6 +236,12 @@ def prune(keep: int):
     for kind, paths in by_kind.items():
         for p in paths[(HOURLY_KEEP if kind == "hourly" else keep):]:
             p.unlink(missing_ok=True)
+    for p in backup_dir().glob("*.part"):  # left by a backup whose process was killed
+        try:
+            if time.time() - p.stat().st_mtime > 86400:
+                p.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def backup_path(name: str) -> Path:

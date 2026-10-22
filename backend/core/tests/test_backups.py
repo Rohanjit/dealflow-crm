@@ -1,5 +1,7 @@
 import io
 import json
+import os
+import time
 import zipfile
 from pathlib import Path
 from unittest import mock
@@ -265,7 +267,11 @@ class StreamingBackupTests(APITestBase):
 
     def test_a_backup_that_was_killed_doesnt_block_the_next(self):
         (backups.backup_dir() / ".lock").write_text("")  # left behind
+        old = backups.backup_dir() / "dealflow-manual-20260101-000000.dfb.part"
+        old.write_bytes(b"DFBK")
+        os.utime(old, (time.time() - 2 * 86400,) * 2)
         backups.create_backup("manual")
+        self.assertFalse(old.exists())  # cleared once it's a day old
         with backups._Lock():
             with self.assertRaises(backups.BackupError):
                 backups.create_backup("manual")
