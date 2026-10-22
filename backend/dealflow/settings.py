@@ -104,6 +104,7 @@ INSTALLED_APPS = [
     "vault",
     "reports",
     "mail",
+    "sync",
 ]
 
 MIDDLEWARE = [

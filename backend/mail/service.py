@@ -458,10 +458,15 @@ def confirm(se: SentEmail, sent: Sent | None, give_up=False):
 def touch_contacted(se: SentEmail, user):
     """Last contacted = the day it was sent, on each contact it went to and on their investor,
     through the normal save (stamps, audit), never moving it backwards."""
+    mark_contacted(se.contact_ids, timezone.localtime(se.sent_at).date(), user)
+
+
+def mark_contacted(contact_ids, day, user):
+    """Last contacted = day on these contacts and their investors, through the normal save, never
+    moving it backwards (also used by email and calendar logging)."""
     from contacts.models import Contact
 
-    day = timezone.localtime(se.sent_at).date()
-    for c in Contact.objects.filter(pk__in=se.contact_ids, archived_at__isnull=True).select_related("investor"):
+    for c in Contact.objects.filter(pk__in=list(contact_ids), archived_at__isnull=True).select_related("investor"):
         for mod, obj in [(get_module("contacts"), c), *([(get_module("investors"), c.investor)]
                                                        if c.investor_id and c.investor.archived_at is None else [])]:
             if (obj.last_contacted and obj.last_contacted >= day) or not enabled_map(mod.key).get("last_contacted", True):

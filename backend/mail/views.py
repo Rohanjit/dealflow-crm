@@ -236,6 +236,14 @@ def mail_callback(request, provider):
     cfg = service.app_config(provider)
     if not code or not cfg:
         return _back(back, mailbox="error", reason="Something was missing from the sign-in. Try again.")
+    if pending.get("purpose") == "sync":  # email and calendar logging (sync app) shares this address
+        from sync.views import finish_callback
+
+        try:
+            finish_callback(request, pending, code)
+        except MailError as e:
+            return _back(back, logging="error", reason=str(e)[:200])
+        return _back(back, logging="connected")
     try:
         tokens, email = PROVIDERS[provider].exchange(cfg, code, service.redirect_uri(request, provider),
                                                      pending["verifier"])

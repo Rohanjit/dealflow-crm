@@ -10,6 +10,7 @@ from core import guest as g
 from core import insight_views as iv
 from core import key_views as kv
 from mail import views as m
+from sync import views as sv
 from reports import views as rv
 from core import layout_views as lv
 from core import views as c
@@ -59,6 +60,17 @@ api = [
     path("mail/campaigns/<int:pk>/preview/", m.CampaignPreviewView.as_view()),
     path("mail/campaigns/<int:pk>/test/", m.CampaignTestView.as_view()),
     path("mail/campaigns/<int:pk>/<str:action>/", m.CampaignActionView.as_view()),
+    path("sync/", sv.SyncView.as_view()),
+    path("sync/connect/<str:kind>/", sv.SyncConnectView.as_view()),
+    path("sync/connections/<int:pk>/", sv.SyncConnectionView.as_view()),
+    path("sync/connections/<int:pk>/now/", sv.SyncNowView.as_view()),
+    path("sync/items/<int:pk>/", sv.ItemView.as_view()),
+    path("sync/items/<int:pk>/save/", sv.ItemSaveView.as_view()),
+    path("sync/items/<int:pk>/file/", sv.ItemFileView.as_view()),
+    path("sync/agenda/", sv.AgendaView.as_view()),
+    path("sync/meetings/", sv.MeetingsView.as_view()),
+    path("sync/schedule/", sv.ScheduleView.as_view()),
+    path("settings/email/logging/", sv.SyncOverviewView.as_view()),
     path("reports/", rv.SavedReportListView.as_view()),
     path("reports/run/", rv.ReportRunView.as_view()),
     path("reports/<int:pk>/", rv.SavedReportDetailView.as_view()),

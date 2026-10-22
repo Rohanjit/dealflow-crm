@@ -88,6 +88,12 @@ class Command(BaseCommand):
             except Exception:
                 log.exception("Sending campaign emails failed")
             try:
+                from sync import engine as sync_engine
+
+                sync_engine.tick()
+            except Exception:
+                log.exception("Reading connected mailboxes and calendars failed")
+            try:
                 today = timezone.localdate()
                 if housekept != today:
                     try:
