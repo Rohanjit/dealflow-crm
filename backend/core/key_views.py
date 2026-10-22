@@ -163,3 +163,54 @@ class ScanRefusalAlertsView(APIView):
         return Response([{"id": r.id, "at": r.at.isoformat(), "place": r.get_place_display(), "file_name": r.file_name,
                           "signature": r.signature, "user": (r.user.full_name or r.user.email) if r.user else None}
                          for r in rows])
+
+
+class SecurityOverviewView(APIView):
+    """Settings > Security: the checklist and the numbers behind it (core/security_overview.py)."""
+
+    permission_classes = [AdminOnly]
+
+    def get(self, request):
+        from . import security_overview
+
+        return Response(security_overview.overview(request))
+
+
+class AuditChainCheckView(APIView):
+    """Check the audit log's chain now (it's also checked nightly). Needs no passphrase."""
+
+    permission_classes = [AdminOnly]
+
+    def post(self, request):
+        from . import audit
+
+        return Response(audit.verify_chain())
+
+
+class SignOutEveryoneView(APIView):
+    """Incident response: end every session except the admin's own (docs/security/incident-response.md)."""
+
+    permission_classes = [AdminOnly, NotInSample]
+
+    def post(self, request):
+        from accounts import sessions
+        from accounts.models import User
+
+        _password(request)
+        mine = request.session.session_key
+        n = sum(sessions.end_all_for(u, keep=mine) for u in User.objects.all())
+        current.note(f"Signed everyone else out ({n} sessions)")
+        return Response({"ended": n})
+
+
+class RestoreTestView(APIView):
+    """Test that the newest backup restores, now (core/restore_test.py; also weekly)."""
+
+    permission_classes = [AdminOnly]
+
+    def post(self, request):
+        from . import restore_test
+
+        r = restore_test.run()
+        current.note("Backup restore test " + ("passed" if r["ok"] else "failed"))
+        return Response(r)

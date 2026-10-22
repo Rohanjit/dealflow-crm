@@ -137,9 +137,10 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "dealflow.wsgi.application"
 
+# An empty DATABASE_URL counts as not set (SQLite).
 DATABASES = {
-    "default": dj_database_url.config(
-        default=f"sqlite:///{DATA_DIR / 'dealflow.sqlite3'}",
+    "default": dj_database_url.parse(
+        os.environ.get("DATABASE_URL", "").strip() or f"sqlite:///{DATA_DIR / 'dealflow.sqlite3'}",
         conn_max_age=600,
     )
 }

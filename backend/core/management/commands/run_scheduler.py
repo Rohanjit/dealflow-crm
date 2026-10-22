@@ -16,6 +16,12 @@ from core.backups import BackupError, create_backup, due_for_daily_backup
 log = logging.getLogger("dealflow.scheduler")
 
 
+def backups_exist() -> bool:
+    from core.backups import list_backups
+
+    return bool(list_backups())
+
+
 class Command(BaseCommand):
     help = "Run scheduled jobs (daily backups) forever."
 
@@ -50,6 +56,19 @@ class Command(BaseCommand):
             except Exception:
                 log.exception("Daily backup failed")
             try:
+                from core import restore_test
+
+                # Weekly proof that backups restore (into a separate, temporary database).
+                if restore_test.due() and backups_exist():
+                    r = restore_test.run()
+                    if r["ok"]:
+                        system(f"Backup restore test passed ({r['backup']}, {r.get('rows', 0)} rows)")
+                    else:
+                        log.error("Backup restore test failed: %s", r["problems"])
+                        system(f"Backup restore test FAILED ({r.get('backup')})")
+            except Exception:
+                log.exception("Backup restore test failed to run")
+            try:
                 from mail import campaigns as mail_campaigns
                 from mail import service as mail_service
 
@@ -78,6 +97,13 @@ class Command(BaseCommand):
                         log.exception("Tidying sign-in records failed")
                     for done in audit.housekeeping(today):
                         system(done)
+                    try:
+                        chain = audit.verify_chain()
+                        if not chain["ok"]:
+                            log.error("Audit log chain check found %s problems", chain["problem_count"])
+                            system(f"Audit log check found {chain['problem_count']} problems")
+                    except Exception:
+                        log.exception("Checking the audit log chain failed")
                     housekept = today
             except Exception:
                 log.exception("Audit log housekeeping failed")

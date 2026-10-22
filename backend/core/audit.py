@@ -431,6 +431,39 @@ def housekeeping(today: dt.date | None = None) -> list[str]:
     return done
 
 
+def verify_chain() -> dict:
+    """Check the whole chain without the passphrase: every line must name the hash of the line before,
+    and HEAD the hash of the last one. Nothing is decrypted. The result is kept in chain.json for
+    Settings > Security (the scheduler runs this nightly)."""
+    pruned = _read_json(folder() / "pruned.json") or {}
+    prev = pruned.get("last_hash", GENESIS)
+    problems, count = [], 0
+    with _locked():
+        for path in _months():
+            month = path.name[:7]
+            for n, raw in enumerate(_lines(path), start=1):
+                count += 1
+                try:
+                    line = json.loads(raw)
+                except ValueError:
+                    problems.append(f"{month}, line {n}: unreadable line.")
+                    continue
+                if line.get("p") != prev:
+                    problems.append(f"{month}, line {n}: the line before it is missing or was changed.")
+                prev = _hash(raw)
+        head = folder() / "HEAD"
+        if head.exists() and head.read_text().strip() != prev:
+            problems.append("The newest entries are missing: the log ends earlier than it should.")
+    result = {"checked_at": timezone.now().isoformat(), "entries": count, "ok": not problems,
+              "problems": problems[:20], "problem_count": len(problems)}
+    _write_json(folder() / "chain.json", result)
+    return result
+
+
+def last_chain_check() -> dict | None:
+    return _read_json(folder() / "chain.json")
+
+
 def status() -> dict:
     months = _months()
     size = sum(p.stat().st_size for p in folder().glob("????-??.log*"))

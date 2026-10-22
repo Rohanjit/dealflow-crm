@@ -998,6 +998,15 @@ class HealthView(APIView):
     authentication_classes = []
 
     def get(self, request):
+        # Used by the container health checks: the app answers and its database does. Nothing else
+        # is reported here (it's open to anyone); admins see the details in Settings > Security.
+        from django.db import connection
+
+        try:
+            with connection.cursor() as c:
+                c.execute("SELECT 1")
+        except Exception:
+            return Response({"ok": False}, status=503)
         return Response({"ok": True})
 
 

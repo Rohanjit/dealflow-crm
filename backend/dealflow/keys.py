@@ -155,5 +155,6 @@ def status() -> dict:
         "keys_dir": str(kd),
         "separate": not inside(kd, dd) and not inside(dd, kd),
         "db_encrypted": bool(getattr(settings, "DB_ENCRYPTED", False)),
+        "postgres": "postgresql" in settings.DATABASES["default"]["ENGINE"],
         "backup_key_id": (kd / "backups" / "current").read_text().strip() if (kd / "backups" / "current").exists() else None,
     }

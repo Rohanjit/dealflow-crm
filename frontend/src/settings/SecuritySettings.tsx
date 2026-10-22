@@ -1,8 +1,8 @@
 // Settings > Security (admins). Grows with each phase of the security programme (decision 63).
 
 import {
-  Alert, Anchor, Button, Checkbox, Code, CopyButton, Group, List, Modal, Paper, PasswordInput, Select, Stack, Text, TextInput,
-  ThemeIcon, Title,
+  Alert, Anchor, Badge, Button, Checkbox, Code, CopyButton, Group, List, Modal, Paper, PasswordInput, Select, SimpleGrid, Stack, Text,
+  TextInput, ThemeIcon, Title,
 } from "@mantine/core";
 import { IconAlertTriangle, IconCheck } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
@@ -12,7 +12,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useMe } from "../context";
 import { formatDateTime } from "../format";
-import { errorMessage, fieldErrors, notifyOk } from "../components/errors";
+import { errorMessage, fieldErrors, notifyError, notifyOk } from "../components/errors";
 import { Skeleton } from "../components/ui";
 
 type Sec = { idle_minutes: number; absolute_hours: number };
@@ -64,6 +64,7 @@ export default function SecuritySettings() {
     try {
       await api("settings/security/", { method: "PUT", body: { idle_minutes: Number(idle), password } });
       await qc.invalidateQueries({ queryKey: ["security-settings"] });
+      await qc.invalidateQueries({ queryKey: ["security-overview"] });
       await qc.invalidateQueries({ queryKey: ["app"] });
       setPassword("");
       notifyOk("Security settings saved.");
@@ -80,6 +81,7 @@ export default function SecuritySettings() {
         <Title order={4}>Security</Title>
         <Text size="sm" c="dimmed">How Dealflow protects your firm's data, and the settings you control.</Text>
       </div>
+      <Overview />
       <Paper withBorder p="lg">
         <Stack gap="sm">
           <Title order={5}>Sign out when idle</Title>
@@ -116,7 +118,7 @@ function Encryption() {
   const [saved, setSaved] = useState(false);
   const [useRec, setUseRec] = useState(false);
   if (!data) return null;
-  const refresh = () => qc.invalidateQueries({ queryKey: ["vault-keys"] });
+  const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: ["vault-keys"] }), qc.invalidateQueries({ queryKey: ["security-overview"] })]);
   const ok = (good: boolean, text: string) => (
     <Group gap={8} wrap="nowrap" align="flex-start">
       <ThemeIcon size={18} radius="xl" variant="light" color={good ? "teal" : "orange"}>{good ? <IconCheck size={12} /> : <IconAlertTriangle size={12} />}</ThemeIcon>
@@ -193,6 +195,113 @@ function Encryption() {
         )}
       </Modal>
       {useRec && <UseRecovery onClose={() => { setUseRec(false); refresh(); }} />}
+    </Paper>
+  );
+}
+
+type Check = { key: string; ok: boolean | null; label: string; fix: string };
+type OverviewData = {
+  score: { ok: number; total: number };
+  checks: Check[];
+  two_step: { people: number; enrolled: number; passkey: number; app_only: number; single_method: number; without: string[] };
+  sign_ins: { open_sessions: number; people_signed_in: number; new_devices_14_days: number; locked_now: number; failures_recent: number };
+  audit: { chain: { checked_at: string; ok: boolean; entries: number; problem_count: number; problems: string[] } | null };
+};
+
+function Overview() {
+  const me = useMe();
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ["security-overview"], queryFn: () => api<OverviewData>("settings/security/overview/") });
+  const [checking, setChecking] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [signOut, setSignOut] = useState(false);
+  const [pw, setPw] = useState("");
+  const [err, setErr] = useState("");
+  if (!data) return <Skeleton h={220} />;
+  const all = data.score.ok === data.score.total;
+  const refresh = () => qc.invalidateQueries({ queryKey: ["security-overview"] });
+  const chain = data.audit.chain;
+  return (
+    <Paper withBorder p="lg">
+      <Stack gap="md">
+        <Group justify="space-between" align="flex-start">
+          <div>
+            <Title order={5}>Security checklist</Title>
+            <Text size="sm" c="dimmed">Everything Dealflow checks about this install, and what to do about anything that isn't right.</Text>
+          </div>
+          <Badge size="lg" variant="light" color={all ? "teal" : "orange"}>{data.score.ok} of {data.score.total} in place</Badge>
+        </Group>
+        <Stack gap={8}>
+          {data.checks.map((c) => (
+            <Group key={c.key} gap={8} wrap="nowrap" align="flex-start">
+              <ThemeIcon size={18} radius="xl" variant="light" color={c.ok === null ? "gray" : c.ok ? "teal" : "orange"} mt={1}>
+                {c.ok === false ? <IconAlertTriangle size={12} /> : <IconCheck size={12} />}
+              </ThemeIcon>
+              <div>
+                <Text size="sm" c={c.ok === null ? "dimmed" : undefined}>{c.label}</Text>
+                {c.fix && <Text size="xs" c="dimmed">{c.fix}</Text>}
+              </div>
+            </Group>
+          ))}
+        </Stack>
+        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
+          <Paper withBorder p="sm" radius="md">
+            <Text size="xs" c="dimmed">Two-step login</Text>
+            <Text fw={600}>{data.two_step.enrolled} of {data.two_step.people} people</Text>
+            <Text size="xs" c="dimmed">{data.two_step.passkey} with a passkey · {data.two_step.app_only} app only</Text>
+            {data.two_step.without.length > 0 && <Text size="xs" c="orange.8">Not yet: {data.two_step.without.join(", ")}</Text>}
+          </Paper>
+          <Paper withBorder p="sm" radius="md">
+            <Text size="xs" c="dimmed">Signed in now</Text>
+            <Text fw={600}>{data.sign_ins.people_signed_in} {data.sign_ins.people_signed_in === 1 ? "person" : "people"} · {data.sign_ins.open_sessions} sessions</Text>
+            <Text size="xs" c="dimmed">
+              {data.sign_ins.failures_recent} failed sign-ins in 24 hours · {data.sign_ins.locked_now} locked · {data.sign_ins.new_devices_14_days} new devices in 14 days
+            </Text>
+          </Paper>
+          <Paper withBorder p="sm" radius="md">
+            <Text size="xs" c="dimmed">Audit log chain</Text>
+            <Text fw={600}>{!chain ? "Not checked yet" : chain.ok ? "Unbroken" : `${chain.problem_count} problems`}</Text>
+            <Text size="xs" c="dimmed">{chain ? `${chain.entries} entries · checked ${formatDateTime(chain.checked_at, me)}` : "Checked every night."}</Text>
+          </Paper>
+        </SimpleGrid>
+        {chain && !chain.ok && (
+          <Alert color="red" variant="light" icon={<IconAlertTriangle size={16} />} title="The audit log was changed outside Dealflow">
+            {chain.problems.map((p) => <div key={p}>{p}</div>)}
+          </Alert>
+        )}
+        <Group gap="xs">
+          <Button size="xs" variant="default" loading={checking} onClick={async () => {
+            setChecking(true);
+            try { await api("settings/security/audit-check/", { method: "POST" }); await refresh(); notifyOk("Audit log checked."); }
+            finally { setChecking(false); }
+          }}>Check the audit log now</Button>
+          <Button size="xs" variant="default" loading={testing} onClick={async () => {
+            setTesting(true);
+            try {
+              const r = await api<{ ok: boolean; rows?: number; problems: string[] }>("settings/security/restore-test/", { method: "POST" });
+              await refresh();
+              if (r.ok) notifyOk(`The latest backup restores: ${r.rows} rows checked in a separate database.`);
+              else notifyError(new Error(r.problems[0] ?? "The test failed."), "Backup restore test failed");
+            } catch (e) { notifyError(e, "Backup restore test failed"); } finally { setTesting(false); }
+          }}>Test the latest backup now</Button>
+          <Button size="xs" variant="default" color="red" onClick={() => { setPw(""); setErr(""); setSignOut(true); }}>Sign everyone else out</Button>
+        </Group>
+      </Stack>
+      <Modal opened={signOut} onClose={() => setSignOut(false)} title="Sign everyone else out?">
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          try {
+            const r = await api<{ ended: number }>("settings/security/sign-out-everyone/", { body: { password: pw } });
+            setSignOut(false); await refresh(); notifyOk(`${r.ended} ${r.ended === 1 ? "session" : "sessions"} ended. You're still signed in.`);
+          } catch (x) { setErr(errorMessage(x)); }
+        }}>
+          <Stack>
+            <Text size="sm">Everyone except you is signed out at once, on every device, and has to sign in again with two-step login. Use this if you think an account or device was compromised.</Text>
+            <PasswordInput label="Your password" value={pw} onChange={(e) => setPw(e.currentTarget.value)} autoFocus error={err || undefined} />
+            <Group justify="flex-end"><Button type="submit" color="red" disabled={!pw}>Sign everyone else out</Button></Group>
+          </Stack>
+        </form>
+      </Modal>
     </Paper>
   );
 }
