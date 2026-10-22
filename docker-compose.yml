@@ -78,7 +78,7 @@ services:
   # loads its signatures, and uploads are refused until it answers. Signatures update themselves.
   clamav:
     <<: *hardened
-    image: clamav/clamav:1.4@sha256:3bba6dd5ac6663d55b80f86a3126e146612d93b593cc2617188d13f637d91260
+    image: clamav/clamav:1.5@sha256:e19130cdebaeacc71fa46eab3ed6f69941f2f22aa5e08d55e9197f8edf43ce5e
     # It starts as root to prepare its folders, then runs as its own user.
     cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE, FOWNER]
     mem_limit: 3g
