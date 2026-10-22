@@ -87,7 +87,8 @@ def _write_zip(target: Path, kind: str):
 def create_backup(kind: str = "manual") -> Path:
     from .models import FirmSettings
 
-    assert kind in ("daily", "manual", "pre-restore")
+    if kind not in ("daily", "manual", "pre-restore"):
+        raise ValueError(f"Unknown backup kind: {kind}")
     stamp = timezone.localtime().strftime("%Y%m%d-%H%M%S")
     target = backup_dir() / f"dealflow-{kind}-{stamp}.dfb"
     fs = FirmSettings.load()

@@ -23,14 +23,16 @@ def _keys(email: str, ip: str) -> list[tuple[str, int]]:
 
 
 def client_ip(request) -> str:
-    # The proxy in front (Caddy) puts the real address first in X-Forwarded-For; only trusted when
-    # the app sits behind it (DEALFLOW_BEHIND_PROXY).
+    # Behind the proxy (DEALFLOW_BEHIND_PROXY), the address it saw is the last entry of
+    # X-Forwarded-For (DEALFLOW_PROXY_HOPS entries from the end with several proxies); entries before
+    # it come from the client and can't be trusted. Without a proxy the header is ignored.
     from django.conf import settings
 
     if getattr(settings, "SECURE_PROXY_SSL_HEADER", None):
-        fwd = request.META.get("HTTP_X_FORWARDED_FOR", "")
-        if fwd:
-            return fwd.split(",")[0].strip()
+        hops = [h.strip() for h in request.META.get("HTTP_X_FORWARDED_FOR", "").split(",") if h.strip()]
+        n = getattr(settings, "PROXY_HOPS", 1)
+        if len(hops) >= n:
+            return hops[-n][:70]
     return request.META.get("REMOTE_ADDR", "") or "unknown"
 
 

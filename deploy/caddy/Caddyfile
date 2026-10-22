@@ -1,0 +1,46 @@
+# Dealflow over HTTPS (decision 63, S6). Started with:  docker compose --profile https up -d
+# DEALFLOW_DOMAIN is the name people open (crm.yourfirm.com). Caddy gets and renews its certificate
+# from Let's Encrypt (the server must be reachable on ports 80 and 443 at that name), or, with
+# DEALFLOW_TLS=internal, from its own authority for a name only your network knows (install the
+# root certificate from the caddy-data volume on each computer).
+{
+	admin off
+	# With DEALFLOW_TLS=internal the root certificate is copied out by hand (docs), not installed here.
+	skip_install_trust
+	# Old protocol versions and weak ciphers are never offered: TLS 1.2 and 1.3 only.
+	servers {
+		protocols h1 h2 h3
+	}
+}
+
+{$DEALFLOW_DOMAIN} {
+	# CADDY_TLS_ISSUER is "internal", an email address for Let's Encrypt notices, or empty.
+	tls {$CADDY_TLS_ISSUER} {
+		protocols tls1.2 tls1.3
+	}
+
+	encode zstd gzip
+
+	# Uploads: 50 MB Vault files, with room for the form around them.
+	request_body {
+		max_size 60MB
+	}
+
+	header {
+		-Server
+		-Via
+	}
+
+	reverse_proxy app:8000 {
+		# Caddy sets X-Forwarded-For to the address it saw (it ignores whatever the client sent).
+		transport http {
+			read_timeout 300s
+			write_timeout 300s
+		}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

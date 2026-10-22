@@ -1,0 +1,9 @@
+# Secret scanning (gitleaks), run in CI over the whole history. Default rules, plus one narrow
+# exception: the made-up password that test accounts use.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures"
+regexTarget = "secret"
+regexes = ['''^Str0ng-pass-123$''']

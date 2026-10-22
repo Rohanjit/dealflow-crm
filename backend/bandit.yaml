@@ -1,0 +1,5 @@
+# Bandit (static security checks for Python), run in CI: bandit -c bandit.yaml -r .
+exclude_dirs: ["tests", "migrations", "fakes.py"]
+# B101: asserts are only used for developer checks of module definitions at import time.
+# B105/B106: flags every message string containing the word "password" ("Enter your password").
+skips: ["B101", "B105", "B106"]

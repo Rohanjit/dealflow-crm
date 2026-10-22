@@ -44,10 +44,25 @@ class MailError(Exception):
 # ---------------------------------------------------------------- HTTP
 
 
+# Only these services are ever called (some addresses, like Outlook's upload sessions, come back in a
+# provider's answer, so they're checked rather than trusted).
+ALLOWED_HOSTS = ("googleapis.com", "google.com", "microsoft.com", "microsoftonline.com", "office.com",
+                 "office365.com", "outlook.com")
+
+
+def _check_url(url: str) -> None:
+    parts = urllib.parse.urlsplit(url)
+    host = (parts.hostname or "").lower()
+    if parts.scheme != "https" or not any(host == h or host.endswith("." + h) for h in ALLOWED_HOSTS):
+        raise MailError("The mail service answered with an address Dealflow won't call.")
+
+
 def _urllib(method: str, url: str, headers: dict, body: bytes | None):
+    _check_url(url)
     req = urllib.request.Request(url, data=body, method=method, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:
+        # https to the allowed hosts only (_check_url above).
+        with urllib.request.urlopen(req, timeout=60) as r:  # nosec B310
             return r.status, {k.lower(): v for k, v in r.headers.items()}, r.read()
     except urllib.error.HTTPError as e:
         return e.code, {k.lower(): v for k, v in (e.headers or {}).items()}, e.read()

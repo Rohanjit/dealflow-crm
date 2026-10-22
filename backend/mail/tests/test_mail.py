@@ -7,6 +7,7 @@ import urllib.parse
 from unittest import mock
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase
 from django.utils import timezone
 
 from contacts.models import Contact
@@ -503,3 +504,16 @@ class HelperTests(APITestBase):
         out = providers.Outgoing("A\r\nBcc: evil@x.com", "a@b.com", [("", "c@d.com")], "Hi\r\nBcc: evil@x.com", "t")
         raw = providers.build_mime(out).decode()
         self.assertNotIn("\nBcc:", raw)
+
+
+class ProviderAddressTests(TestCase):
+    def test_only_https_to_the_mail_services(self):
+        from mail.providers import MailError, _check_url
+
+        for ok in ("https://gmail.googleapis.com/x", "https://oauth2.googleapis.com/token",
+                   "https://graph.microsoft.com/v1.0/me", "https://outlook.office.com/api/v2.0/x"):
+            _check_url(ok)
+        for bad in ("http://graph.microsoft.com/", "file:///etc/passwd", "https://evil.com/?graph.microsoft.com",
+                    "https://graph.microsoft.com.evil.com/", "https://169.254.169.254/latest"):
+            with self.assertRaises(MailError):
+                _check_url(bad)

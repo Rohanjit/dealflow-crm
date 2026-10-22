@@ -10,6 +10,8 @@ import time
 from django.urls import resolve
 from django.urls.exceptions import Resolver404
 
+from accounts.lockout import client_ip
+
 from . import audit
 
 SECRET_WORDS = ("password", "pin", "passphrase", "token", "secret")
@@ -235,7 +237,7 @@ class AuditMiddleware:
         signed_in = user is not None and getattr(user, "is_authenticated", False)
         entry = {
             "u": {"id": user.pk, "name": user.full_name, "email": user.email} if signed_in else None,
-            "ip": request.META.get("REMOTE_ADDR", ""),
+            "ip": client_ip(request),
             "m": request.method,
             "path": request.path,
             "q": request.META.get("QUERY_STRING", "")[:2000],
@@ -245,6 +247,7 @@ class AuditMiddleware:
         }
         if fwd := request.META.get("HTTP_X_FORWARDED_FOR"):
             entry["fwd"] = fwd[:200]
+            entry["peer"] = request.META.get("REMOTE_ADDR", "")
         if body is not None:
             entry["b"] = body
         if changes := request.__dict__.get("_df_changes"):

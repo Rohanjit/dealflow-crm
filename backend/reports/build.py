@@ -14,7 +14,8 @@ import io
 import re
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from xml.sax.saxutils import escape
+# Escapes text for PDF paragraphs; nothing is parsed as XML.
+from xml.sax.saxutils import escape  # nosec B406
 
 from django.contrib.auth import get_user_model
 from django.http import QueryDict

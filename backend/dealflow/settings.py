@@ -72,9 +72,20 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
 # The names people reach this install by. Anything else is refused (Host-header attacks). Set
 # DJANGO_ALLOWED_HOSTS=crm.yourfirm.com (comma-separated) for a server.
 ALLOWED_HOSTS = [h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]").split(",") if h.strip()]
+# The container's own health check calls http://127.0.0.1:8000/api/health/.
+for _local in ("localhost", "127.0.0.1"):
+    if _local not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_local)
 CSRF_TRUSTED_ORIGINS = [
     o.strip() for o in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()
 ]
+# DEALFLOW_DOMAIN=crm.yourfirm.com: the install is served at https://<domain> by the bundled Caddy
+# proxy (docker compose --profile https), which gets and renews its certificate. The name is
+# accepted, and https, secure cookies, HSTS and the proxy's headers are on unless set otherwise.
+DOMAIN = os.environ.get("DEALFLOW_DOMAIN", "").strip().lower().rstrip(".")
+if DOMAIN:
+    ALLOWED_HOSTS.append(DOMAIN)
+    CSRF_TRUSTED_ORIGINS.append(f"https://{DOMAIN}")
 
 INSTALLED_APPS = [
     "django.contrib.auth",
@@ -219,7 +230,7 @@ X_FRAME_OPTIONS = "DENY"
 # it): cookies only travel over https and carry the __Host- prefix, plain http is redirected,
 # and browsers are told to use https for a year (HSTS). DEALFLOW_BEHIND_PROXY=1 trusts the
 # proxy's X-Forwarded-Proto; never set it when the app is reachable without the proxy.
-HTTPS = os.environ.get("DEALFLOW_HTTPS", os.environ.get("DEALFLOW_SECURE_COOKIES", "0")) == "1"
+HTTPS = os.environ.get("DEALFLOW_HTTPS", os.environ.get("DEALFLOW_SECURE_COOKIES", "1" if DOMAIN else "0")) == "1"
 if HTTPS:
     SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = True
     SESSION_COOKIE_NAME = "__Host-dealflow_session"
@@ -236,8 +247,11 @@ if HTTPS:
         SILENCED_SYSTEM_CHECKS = ["security.W021"]
 else:
     SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = False
-if os.environ.get("DEALFLOW_BEHIND_PROXY", "0") == "1":
+if os.environ.get("DEALFLOW_BEHIND_PROXY", "1" if DOMAIN else "0") == "1":
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# How many proxies stand in front of the app (Caddy alone: 1). The client's address is read that many
+# entries from the end of X-Forwarded-For.
+PROXY_HOPS = max(1, int(os.environ.get("DEALFLOW_PROXY_HOPS", "1") or 1))
 
 # Plain request bodies (JSON, forms) up to 5 MB; files are streamed to disk and checked per feature.
 DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024

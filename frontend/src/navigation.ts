@@ -7,10 +7,11 @@
 // Also owns scrolling: a new page starts at the top, Back returns to where you were.
 // Browsers without view transitions get the same navigation without the animation.
 
-import { createBrowserHistory, type BrowserHistory, type Location } from "@remix-run/router";
+import { UNSAFE_createBrowserHistory as createBrowserHistory, type Location } from "react-router";
 import { flushSync } from "react-dom";
 
 type Direction = "forward" | "back" | "same";
+type BrowserHistory = ReturnType<typeof createBrowserHistory>;
 
 const scrolls = new Map<string, number>();
 // The row or card someone just clicked ("deals:5"), so its title can grow into the record's page.

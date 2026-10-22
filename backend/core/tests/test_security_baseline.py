@@ -214,3 +214,27 @@ class InviteTests(APITestBase):
         r = self.client.post("/api/invites/", {"role": Role.objects.get(name="Member").pk}, format="json")
         Invite.objects.update(expires_at=timezone.now() - dt.timedelta(minutes=1))
         self.assertEqual(APIClient().get(f"/api/invites/accept/{r.json()['token']}/").status_code, 400)
+
+
+class ClientAddressTests(APITestBase):
+    """Behind the proxy the client's address is the last X-Forwarded-For entry (what the proxy saw);
+    anything the client put before it is ignored, and without a proxy the header is ignored."""
+
+    def ip(self, fwd):
+        from django.test import RequestFactory
+
+        from accounts.lockout import client_ip
+
+        return client_ip(RequestFactory().get("/", HTTP_X_FORWARDED_FOR=fwd, REMOTE_ADDR="172.18.0.5"))
+
+    def test_without_proxy_header_is_ignored(self):
+        self.assertEqual(self.ip("1.2.3.4"), "172.18.0.5")
+
+    def test_behind_proxy_takes_the_proxys_entry(self):
+        from django.test import override_settings
+
+        with override_settings(SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https"), PROXY_HOPS=1):
+            self.assertEqual(self.ip("6.6.6.6, 203.0.113.9"), "203.0.113.9")  # spoofed first entry ignored
+            self.assertEqual(self.ip("203.0.113.9"), "203.0.113.9")
+        with override_settings(SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https"), PROXY_HOPS=2):
+            self.assertEqual(self.ip("6.6.6.6, 203.0.113.9, 10.0.0.2"), "203.0.113.9")

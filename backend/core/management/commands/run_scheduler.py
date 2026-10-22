@@ -81,6 +81,13 @@ class Command(BaseCommand):
                     housekept = today
             except Exception:
                 log.exception("Audit log housekeeping failed")
+            try:
+                # Heartbeat for the container's health check and Settings > Security.
+                from django.conf import settings
+
+                (settings.DATA_DIR / "scheduler.alive").write_text(timezone.now().isoformat())
+            except OSError:
+                log.exception("Couldn't write the scheduler heartbeat")
             if opts["once"]:
                 return
             time.sleep(opts["interval"])

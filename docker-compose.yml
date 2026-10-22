@@ -1,13 +1,31 @@
 # Dealflow — one command to run:   docker compose up -d
-# Then open http://localhost:8000 and follow the setup wizard.
+# Then open http://localhost:8000 on this computer and follow the setup wizard.
 #
-# Postgres instead of SQLite: set DATABASE_URL in .env (see .env.example) and run
-#   docker compose --profile postgres up -d
+# For a team, serve it over HTTPS at your own name (crm.yourfirm.com): set DEALFLOW_DOMAIN in .env
+# and run   docker compose --profile https up -d   (see .env.example). Without that, Dealflow only
+# answers on this computer (127.0.0.1), never on the network in plain http.
+#
+# Postgres instead of SQLite: set DATABASE_URL in .env (see .env.example) and add --profile postgres.
+#
+# Every container runs with the least it needs (decision 63, S6): no extra Linux capabilities, no
+# privilege escalation, a read-only system, memory-only /tmp, limited processes, and images pinned
+# by digest.
+
+x-hardened: &hardened
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  cap_drop: [ALL]
+  read_only: true
+  pids_limit: 512
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "5" }
 
 x-app: &app
+  <<: *hardened
   image: dealflow:latest
   build: .
-  restart: unless-stopped
   env_file:
     - path: .env
       required: false
@@ -16,29 +34,56 @@ x-app: &app
     DEALFLOW_KEYS_DIR: /keys
     # Every upload is checked by the virus scanner first; uploads wait while it's unavailable.
     DEALFLOW_CLAMD: clamav:3310
+  tmpfs:
+    # Uploads wait here (in memory, never on disk) until they're checked and encrypted.
+    - /tmp:size=1g,mode=1777
   volumes:
     - dealflow-data:/data
     # Keys live in their own volume, apart from the data they protect (docs/key-management.md).
     - dealflow-keys:/keys
+  networks: [default, private]
 
 services:
   app:
     <<: *app
     command: web
+    depends_on:
+      db:
+        condition: service_healthy
+        required: false
     ports:
-      - "${DEALFLOW_PORT:-8000}:8000"
+      # Only this computer by default. DEALFLOW_BIND=0.0.0.0 opens plain http to the network:
+      # use the https profile instead.
+      - "${DEALFLOW_BIND:-127.0.0.1}:${DEALFLOW_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "/app/backend/docker_health.py", "web"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
 
   scheduler:
     <<: *app
     command: scheduler
     depends_on:
       - app
+    healthcheck:
+      test: ["CMD", "python", "/app/backend/docker_health.py", "scheduler"]
+      interval: 60s
+      timeout: 5s
+      start_period: 3m
 
   # Virus scanner (ClamAV). Needs about 1.5 GB of memory; the first start takes a few minutes while it
   # loads its signatures, and uploads are refused until it answers. Signatures update themselves.
   clamav:
-    image: clamav/clamav:1.4
-    restart: unless-stopped
+    <<: *hardened
+    image: clamav/clamav:1.4@sha256:3bba6dd5ac6663d55b80f86a3126e146612d93b593cc2617188d13f637d91260
+    # It starts as root to prepare its folders, then runs as its own user.
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE, FOWNER]
+    tmpfs:
+      - /tmp:mode=1777
+      - /run/clamav:mode=0755
+      - /var/log/clamav:mode=0755
+      - /var/lock:mode=1777
     volumes:
       - ./deploy/clamav/clamd.conf:/etc/clamav/clamd.conf:ro
       - dealflow-clamav:/var/lib/clamav
@@ -48,19 +93,67 @@ services:
       timeout: 10s
       start_period: 10m
 
+  # HTTPS in front of the app (docker compose --profile https up -d). Gets and renews certificates.
+  caddy:
+    <<: *hardened
+    image: caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    profiles: ["https"]
+    cap_add: [NET_BIND_SERVICE]
+    depends_on:
+      - app
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        [ -n "$$DEALFLOW_DOMAIN" ] || { echo "Set DEALFLOW_DOMAIN in .env to the name people will open"; exit 1; };
+        exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DEALFLOW_DOMAIN: ${DEALFLOW_DOMAIN:-}
+      # "internal" (Caddy's own authority, for names only your network knows) or an email address
+      # for Let's Encrypt notices; empty is fine.
+      CADDY_TLS_ISSUER: ${DEALFLOW_TLS:-${DEALFLOW_ACME_EMAIL:-}}
+    tmpfs:
+      - /tmp
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
   db:
-    image: postgres:16-alpine
+    <<: *hardened
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     profiles: ["postgres"]
-    restart: unless-stopped
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE, FOWNER]
     environment:
       POSTGRES_DB: dealflow
       POSTGRES_USER: dealflow
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      # Required: set it in .env (the database refuses to start without one).
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --data-checksums"
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
     volumes:
       - dealflow-db:/var/lib/postgresql/data
+    # Only the app can reach the database; it has no route to the internet.
+    networks: [private]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "dealflow"]
+      interval: 30s
+      timeout: 5s
+
+networks:
+  default: {}
+  private:
+    internal: true
 
 volumes:
   dealflow-data:
   dealflow-keys:
   dealflow-db:
   dealflow-clamav:
+  caddy-data:
+  caddy-config:
