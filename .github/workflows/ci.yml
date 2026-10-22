@@ -159,5 +159,12 @@ jobs:
           [ "$n" = "3" ]
           curl -fsS http://127.0.0.1:8000/api/health/
           docker compose exec -T app python -c "import pathlib; assert pathlib.Path('/data/dealflow.sqlite3').read_bytes()[:15] != b'SQLite format 3'"
+      - name: Show what went wrong (as annotations)
+        if: failure()
+        run: |
+          docker compose ps -a > ps.txt 2>&1 || true
+          docker compose logs --no-color --tail 15 > logs.txt 2>&1 || true
+          echo "::error title=compose ps::$(sed ':a;N;$!ba;s/\n/%0A/g' ps.txt)"
+          echo "::error title=compose logs::$(tail -c 3500 logs.txt | sed ':a;N;$!ba;s/\n/%0A/g')"
       - if: always()
         run: docker compose logs --no-color | tail -200
