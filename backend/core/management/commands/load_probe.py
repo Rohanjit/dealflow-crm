@@ -137,7 +137,7 @@ class Command(BaseCommand):
         ]
         todo = probes + ([] if skip_slow else slow)
         if only:
-            names = {n.strip() for n in only.split(",")}
+            names = {n.strip() for n in only.split("|")}
             todo = [p for p in todo if p[0] in names]
         self.stdout.write(f"{'request':42} {'ms':>9} {'queries':>8} {'KB':>8} {'status':>6} {'peak MB':>8}")
         for name, uid, method, url, body in todo:

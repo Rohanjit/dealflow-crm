@@ -77,6 +77,7 @@ class StuckRuleTests(InsightBase):
                                   "to_status": "open"})
 
     def rule(self, module, stage):
+        stuck.refresh(module)  # what the scheduler does every few minutes after new stage moves
         return next(r for r in stuck.rules(module) if r["stage"] == stage)
 
     def test_defaults_until_enough_history_then_learned(self):
@@ -95,6 +96,32 @@ class StuckRuleTests(InsightBase):
         self.stay(9, "contacted", 60, 40, paused=True)  # lost then reopened: not a normal stay
         r = self.rule("outreach", "contacted")
         self.assertEqual((r["samples"], r["days"]), (5, stuck.FLOOR))  # 1.5 × 2 days, but never under 7
+
+    def test_screens_never_read_the_whole_log(self):
+        """The bell and lists use stored figures; the scheduler re-learns them after new stage moves."""
+        from unittest import mock
+
+        from core.models import StageStats
+
+        for rid in range(1, 6):
+            self.stay(rid, "contacted", 60, 10)
+        for m in stuck.PIPELINES:
+            stuck.rules(m)  # first time ever: learned on the spot and stored
+        self.assertEqual(StageStats.objects.get(module="outreach").data["contacted"]["samples"], 5)
+        stuck.forget()
+        self.stay(6, "contacted", 60, 10)
+        with mock.patch.object(stuck, "durations", side_effect=AssertionError("read the whole log")):
+            self.assertEqual(next(r for r in stuck.rules("outreach") if r["stage"] == "contacted")["samples"], 5)
+            self.client.get("/api/insights/alerts/")
+            self.client.get("/api/m/outreach/?stuck=1")
+        # The scheduler waits REFRESH_EVERY after the last time, then picks up the new move.
+        self.assertEqual(stuck.refresh_due(), [])
+        StageStats.objects.filter(module="outreach").update(computed_at=timezone.now() - stuck.REFRESH_EVERY)
+        self.assertIn("outreach", stuck.refresh_due())
+        self.assertEqual(StageStats.objects.get(module="outreach").data["contacted"]["samples"], 6)
+        # Nothing new: nothing to do, however old the figures are.
+        StageStats.objects.update(computed_at=timezone.now() - stuck.STALE_AFTER * 2)
+        self.assertEqual(stuck.refresh_due(), [])
 
     def test_final_stage_has_no_rule(self):
         self.assertNotIn("won", [r["stage"] for r in stuck.rules("outreach")])

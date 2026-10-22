@@ -226,6 +226,9 @@ def replace_all_data(data_file: Path, files_dir: Path | None):
             shutil.copytree(files_dir, media)
         else:
             media.mkdir(parents=True, exist_ok=True)
+    from . import stuck
+
+    stuck.forget()  # figures held by this worker described the data that was just replaced
 
 
 def dump_data(target: Path):

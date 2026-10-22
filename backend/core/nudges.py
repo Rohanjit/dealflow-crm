@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.utils import timezone
 
 from . import records, stuck
@@ -49,9 +49,33 @@ def is_mine(module: str, obj, user) -> bool:
     return user.pk in ids or (not ids and user.is_admin)
 
 
-def _base(module: str, user):
+def _mine_q(module: str, user) -> Q:
+    """In the database, the same test as is_mine: on the record's team, or an admin and the record
+    has nobody on it. Keeps the bell from loading every record in the firm."""
+    from deals.models import Deal
+
+    if module == "deals":
+        team = Q(lead_banker=user)
+        for rel in TEAM:
+            team |= Q(**{rel: user})
+        cond = Q(pk__in=Deal.objects.filter(team).values("pk"))
+        if user.is_admin:
+            nobody = Q(lead_banker__isnull=True)
+            for rel in TEAM:
+                nobody &= Q(**{f"{rel}__isnull": True})
+            cond |= Q(pk__in=Deal.objects.filter(nobody).values("pk"))
+        return cond
+    cond = Q(lead_banker=user)
+    if user.is_admin:
+        cond |= Q(lead_banker__isnull=True)
+    return cond
+
+
+def _base(module: str, user, mine: bool = False):
     mod = get_module(module)
     qs = mod.model.objects.filter(archived_at__isnull=True)
+    if mine:
+        qs = qs.filter(_mine_q(module, user))
     if module == "deals":
         qs = qs.prefetch_related(*TEAM).select_related("company")
     elif module == "outreach":
@@ -85,7 +109,7 @@ def for_user(user) -> dict:
         # ---- stuck
         if fs.stuck_alerts and (q := stuck.stuck_q(module, fs, today)) is not None:
             by_stage = {r["stage"]: r for r in stuck.rules(module, fs)}
-            for obj in _base(module, user).filter(q):
+            for obj in _base(module, user, mine=True).filter(q):
                 if not is_mine(module, obj, user):
                     continue
                 stage = getattr(obj, p.stage_field)
@@ -94,14 +118,14 @@ def for_user(user) -> dict:
                     continue
                 r = by_stage[stage]
                 out["stuck"].append({
-                    **_ref(module, obj), "stage": stage, "stage_label": r["label"],
+                    "_ref": (module, obj), "stage": stage, "stage_label": r["label"],
                     "days": stuck.days_in_stage(obj, module, today), "flag_after": r["days"],
                     "usual": r["median"], "source": r["source"],
                 })
         # ---- quiet
         if fs.nudge_quiet_days:
             cut = now - dt.timedelta(days=fs.nudge_quiet_days)
-            qs = (_base(module, user).filter(**{p.status_field: p.open_value}, updated_at__lt=cut)
+            qs = (_base(module, user, mine=True).filter(**{p.status_field: p.open_value}, updated_at__lt=cut)
                   .exclude(**{p.stage_field: p.won}))
             if module == "deals":
                 qs = qs.annotate(_tracker=Max("tracker__updated_at"))
@@ -114,7 +138,7 @@ def for_user(user) -> dict:
                 last = max(x for x in (o.updated_at, last_note.get(o.pk), getattr(o, "_tracker", None)) if x)
                 if last >= cut or ("quiet", module, o.pk) in snoozed:
                     continue
-                out["quiet"].append({**_ref(module, o), "days": (now - last).days})
+                out["quiet"].append({"_ref": (module, o), "days": (now - last).days})
 
     # ---- tracker investors not moving
     if fs.nudge_tracker_days and user.can("deals", "view"):
@@ -122,12 +146,13 @@ def for_user(user) -> dict:
 
         cut_date = today - dt.timedelta(days=fs.nudge_tracker_days)
         cut = now - dt.timedelta(days=fs.nudge_tracker_days)
-        deals = {d.pk: d for d in _base("deals", user).filter(status="open").exclude(stage="closed")}
+        deals = {d.pk: d for d in _base("deals", user, mine=True).filter(status="open").exclude(stage="closed")}
         entries = (
             DealInvestor.objects.filter(archived_at__isnull=True, status="open", deal_id__in=deals, updated_at__lt=cut)
             .exclude(stage="selected").select_related("investor").order_by("stage_entered", "pk")
         )
-        noted = set(Note.objects.filter(module="deal_investors", created_at__gte=cut).values_list("record_id", flat=True))
+        noted = set(Note.objects.filter(module="deal_investors", created_at__gte=cut,
+                                        record_id__in=entries.values("pk")).values_list("record_id", flat=True))
         groups: dict[int, list] = {}
         for e in entries:
             since = e.stage_entered or timezone.localtime(e.created_at).date()
@@ -139,7 +164,7 @@ def for_user(user) -> dict:
             if not is_mine("deals", d, user) or ("tracker", "deals", deal_id) in snoozed:
                 continue
             out["tracker"].append({
-                **_ref("deals", d), "count": len(items), "days": max(n for _, n in items),
+                "_ref": ("deals", d), "count": len(items), "days": max(n for _, n in items),
                 "investors": [e.investor.firm_name for e, _ in items[:3]],
             })
 
@@ -156,24 +181,52 @@ def for_user(user) -> dict:
         latest: dict[tuple[str, int], Note] = {}
         for n in logged:
             latest.setdefault((n.module, n.record_id), n)
+        latest = {k: n for k, n in latest.items() if (f"meeting:{n.pk}", k[0], k[1]) not in snoozed}
+        # Load the records and the tasks added since in a few queries, not a few per meeting.
+        objs: dict[tuple[str, int], object] = {}
+        for module in {m for m, _ in latest}:
+            if user.can(module, "view"):
+                ids = [rid for m, rid in latest if m == module]
+                for obj in _base(module, user).filter(pk__in=ids):
+                    objs[(module, obj.pk)] = obj
+        since = min((n.created_at for n in latest.values()), default=now)
+        deal_ids = {o.deal_id for (m, _), o in objs.items() if m == "deal_investors"} | {
+            rid for (m, rid) in objs if m == "deals"}
+        outreach_ids = {rid for (m, rid) in objs if m == "outreach"}
+        investor_ids = {o.investor_id for (m, _), o in objs.items() if m == "deal_investors"}
+        # Newest task per thing it can be about, so each meeting is one lookup.
+        newest: dict[tuple, object] = {}
+        for at, deal_id, outreach_id, investor_id in Task.objects.filter(created_at__gte=since).filter(
+                Q(deal_id__in=deal_ids) | Q(outreach_id__in=outreach_ids) | Q(investor_id__in=investor_ids)
+        ).values_list("created_at", "deal_id", "outreach_id", "investor_id"):
+            keys = [("outreach", outreach_id)] if outreach_id else []
+            if deal_id:
+                keys += [("deal", deal_id), ("deal+investor", deal_id, investor_id)]
+            elif investor_id:
+                keys.append(("investor only", investor_id))
+            for k in keys:
+                if k not in newest or at > newest[k]:
+                    newest[k] = at
+
+        def task_since(key, at) -> bool:
+            return key in newest and newest[key] >= at
+
         for (module, rid), n in latest.items():
-            if (f"meeting:{n.pk}", module, rid) in snoozed or not user.can(module, "view"):
-                continue
-            obj = _base(module, user).filter(pk=rid).first()
+            obj = objs.get((module, rid))
             if obj is None:
                 continue
             if module == "deal_investors":
-                has_task = Task.objects.filter(created_at__gte=n.created_at, deal_id=obj.deal_id, investor_id=obj.investor_id).exists() \
-                    or Task.objects.filter(created_at__gte=n.created_at, deal_id=obj.deal_id, investor__isnull=True).exists() \
-                    or Task.objects.filter(created_at__gte=n.created_at, investor_id=obj.investor_id, deal__isnull=True).exists()
+                has_task = (task_since(("deal+investor", obj.deal_id, obj.investor_id), n.created_at)
+                            or task_since(("deal+investor", obj.deal_id, None), n.created_at)
+                            or task_since(("investor only", obj.investor_id), n.created_at))
                 related = f"deals:{obj.deal_id}"
             else:
-                has_task = Task.objects.filter(created_at__gte=n.created_at, **{("deal_id" if module == "deals" else "outreach_id"): rid}).exists()
+                has_task = task_since(("deal" if module == "deals" else "outreach", rid), n.created_at)
                 related = f"{module}:{rid}"
             if has_task:
                 continue
             out["meeting"].append({
-                **_ref(module, obj), "note": n.pk, "kind": n.kind, "date": n.date.isoformat(),
+                "_ref": (module, obj), "note": n.pk, "kind": n.kind, "date": n.date.isoformat(),
                 "days": (today - timezone.localtime(n.created_at).date()).days, "related": related,
             })
 
@@ -182,7 +235,8 @@ def for_user(user) -> dict:
     out["tracker"].sort(key=lambda x: -x["days"])
     for k in KINDS:
         counts[k] = len(out[k])
-        out[k] = out[k][:SHOWN]
+        # Names and subtitles only for the ones shown (a few queries each).
+        out[k] = [{**_ref(*item.pop("_ref")), **item} for item in out[k][:SHOWN]]
     return {**out, "counts": counts, "count": sum(counts.values()),
             "settings": {"stuck": fs.stuck_alerts, "quiet_days": fs.nudge_quiet_days,
                          "tracker_days": fs.nudge_tracker_days, "meeting": fs.nudge_meeting_task}}

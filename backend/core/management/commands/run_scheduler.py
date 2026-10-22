@@ -88,6 +88,15 @@ class Command(BaseCommand):
             except Exception:
                 log.exception("Sending campaign emails failed")
             try:
+                from core import stuck
+
+                # Re-learn how long stages usually take when there are new stage moves (every 10 minutes
+                # at most), so the bell and lists never read the whole log themselves.
+                for module in stuck.refresh_due():
+                    log.info("Stage times re-learned for %s", module)
+            except Exception:
+                log.exception("Re-learning stage times failed")
+            try:
                 from sync import engine as sync_engine
 
                 sync_engine.tick()

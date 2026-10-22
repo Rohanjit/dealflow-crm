@@ -1,7 +1,8 @@
 """Stuck alerts (decision 59): an open outreach attempt or deal that has sat in one stage longer
 than the firm usually takes there.
 
-"Usually" is learned from the interaction log's stage entries: for every past stay in a stage that
+"Usually" is learned from the interaction log's stage entries (by the scheduler every few minutes
+when there are new stage moves, stored in core.StageStats, so no screen reads the whole log): for every past stay in a stage that
 ended with a move to another stage, the number of days it lasted (stays interrupted by On hold,
 Lost and the like are left out). With at least MIN_SAMPLES stays, a record is stuck after half as
 long again as the median (never sooner than FLOOR days); with fewer, after DEFAULTS. An admin can
@@ -15,8 +16,9 @@ import datetime as dt
 import math
 import statistics
 import threading
+import time
 
-from django.db.models import Count, Max, Q
+from django.db.models import Max, Q
 from django.utils import timezone
 
 from .models import FirmSettings, Note
@@ -43,24 +45,25 @@ QUICK_FILTER = {
     "help": "In the same stage for longer than your firm usually takes (see Settings > Alerts).",
 }
 
-_cache: dict[str, tuple[tuple, dict[str, list[int]]]] = {}
+# How often the scheduler re-learns a pipeline's stage times when there are new stage moves, and how
+# old the figures may get before a screen re-learns them itself (if the scheduler isn't running).
+REFRESH_EVERY = dt.timedelta(minutes=10)
+STALE_AFTER = dt.timedelta(hours=6)
+MEMO_SECONDS = 60  # each worker re-reads the stored figures at most once a minute
+_memo: dict[str, tuple[float, dict]] = {}
 _lock = threading.Lock()
 
 
 def durations(module: str) -> dict[str, list[int]]:
-    """Days each finished stay in a stage lasted, per stage, from the stage entries in the log."""
+    """Days each finished stay in a stage lasted, per stage, from the stage entries in the log.
+    Reads the module's whole stage history: only refresh() calls it."""
     notes = Note.objects.filter(module=module, kind="stage")
-    stamp = tuple(notes.aggregate(n=Count("id"), last=Max("id")).values())
-    with _lock:
-        hit = _cache.get(module)
-        if hit and hit[0] == stamp:
-            return hit[1]
     p = get_module(module).pipeline
     out: dict[str, list[int]] = {}
     rows = notes.order_by("record_id", "created_at", "id").values_list("record_id", "date", "meta")
     rec = cur = entered = None
     paused = False
-    for rid, date, meta in rows.iterator():
+    for rid, date, meta in rows.iterator(chunk_size=5000):
         meta = meta if isinstance(meta, dict) else {}
         to_stage, to_status = meta.get("to_stage"), meta.get("to_status")
         if rid != rec:
@@ -78,34 +81,91 @@ def durations(module: str) -> dict[str, list[int]]:
             cur, entered, paused = to_stage, date, False
         if to_status and to_status != p.open_value:
             paused = True
-    with _lock:
-        _cache[module] = (stamp, out)
     return out
+
+
+def _latest_note_id(module: str) -> int:
+    # Uses the (module, kind, id) index: one step, however long the log is.
+    return Note.objects.filter(module=module, kind="stage").aggregate(m=Max("id"))["m"] or 0
+
+
+def refresh(module: str) -> dict:
+    """Learn the module's stage times again from the whole log and store them."""
+    from .models import StageStats
+
+    last = _latest_note_id(module)
+    data = {stage: {"median": statistics.median(days), "samples": len(days)}
+            for stage, days in durations(module).items()}
+    StageStats.objects.update_or_create(module=module, defaults={
+        "data": data, "last_note_id": last, "computed_at": timezone.now()})
+    with _lock:
+        _memo.pop(module, None)
+    return data
+
+
+def refresh_due(now=None) -> list[str]:
+    """Scheduler: re-learn pipelines that have new stage moves, at most every REFRESH_EVERY."""
+    from .models import StageStats
+
+    now = now or timezone.now()
+    done = []
+    for module in PIPELINES:
+        row = StageStats.objects.filter(module=module).first()
+        if row is None or (row.computed_at <= now - REFRESH_EVERY and _latest_note_id(module) > row.last_note_id):
+            refresh(module)
+            done.append(module)
+    return done
+
+
+def stats(module: str) -> dict:
+    """{stage: {"median", "samples"}} as last learned. Learned on the spot only the first time, or
+    when the stored figures are over STALE_AFTER old and out of date (the scheduler isn't running)."""
+    from .models import StageStats
+
+    now = time.monotonic()
+    with _lock:
+        hit = _memo.get(module)
+        if hit and now - hit[0] < MEMO_SECONDS:
+            return hit[1]
+    row = StageStats.objects.filter(module=module).first()
+    if row is None or (row.computed_at <= timezone.now() - STALE_AFTER and _latest_note_id(module) > row.last_note_id):
+        data = refresh(module)
+    else:
+        data = row.data
+    with _lock:
+        _memo[module] = (now, data)
+    return data
+
+
+def forget():
+    """Drop this worker's copy (tests, and after a restore)."""
+    with _lock:
+        _memo.clear()
 
 
 def rules(module: str, fs: FirmSettings | None = None) -> list[dict]:
     """For each stage (except the final one): what's usual and when a record counts as stuck."""
     fs = fs or FirmSettings.load()
     p = get_module(module).pipeline
-    learned = durations(module)
+    learned = stats(module)
     overrides = (fs.stuck_overrides or {}).get(module) or {}
     out = []
     for value, label in p.stages:
         if value == p.won:
             continue
-        samples = learned.get(value, [])
-        median = statistics.median(samples) if samples else None
+        seen = learned.get(value) or {}
+        n, median = seen.get("samples", 0), seen.get("median")
         default = DEFAULTS.get(module, {}).get(value, 21)
         if value in overrides:
             days, source = int(overrides[value]), "set"
-        elif len(samples) >= MIN_SAMPLES:
+        elif n >= MIN_SAMPLES:
             days, source = max(FLOOR, math.ceil(median * FACTOR)), "learned"
         else:
             days, source = default, "default"
         out.append({
             "stage": value, "label": label, "days": days, "source": source, "default": default,
-            "median": median, "samples": len(samples),
-            "learned": max(FLOOR, math.ceil(median * FACTOR)) if len(samples) >= MIN_SAMPLES else None,
+            "median": median, "samples": n,
+            "learned": max(FLOOR, math.ceil(median * FACTOR)) if n >= MIN_SAMPLES else None,
         })
     return out
 

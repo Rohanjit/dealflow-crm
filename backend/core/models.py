@@ -219,7 +219,22 @@ class Note(models.Model):
 
     class Meta:
         ordering = ["-date", "-created_at", "-id"]
-        indexes = [models.Index(fields=["module", "record_id"])]
+        indexes = [
+            models.Index(fields=["module", "record_id"]),
+            # "Latest stage move in this pipeline" (core/stuck.py) without reading the whole log.
+            models.Index(fields=["module", "kind", "id"], name="core_note_mod_kind_id"),
+        ]
+
+
+class StageStats(models.Model):
+    """How long a pipeline's stages usually take, learned from the log (core/stuck.py). Worked out
+    by the scheduler every few minutes when there are new stage moves, so screens and the
+    notification bell never read the whole log themselves."""
+
+    module = models.CharField(max_length=30, unique=True)
+    data = models.JSONField(default=dict)  # {stage: {"median": days, "samples": n}}
+    last_note_id = models.BigIntegerField(default=0)  # newest stage entry counted
+    computed_at = models.DateTimeField()
 
 
 class AlertSnooze(models.Model):

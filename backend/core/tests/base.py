@@ -35,6 +35,9 @@ class APITestBase(DataDirMixin, TestCase):
     password = "Str0ng-pass-123"
 
     def setUp(self):
+        from core import stuck
+
+        stuck.forget()  # stage-time figures held by this process belong to the previous test
         self.admin_role = Role.objects.get(is_admin=True)
         self.admin = User.objects.create_user("admin@firm.com", self.password, full_name="Asha Admin", role=self.admin_role)
         fs = FirmSettings.load()
