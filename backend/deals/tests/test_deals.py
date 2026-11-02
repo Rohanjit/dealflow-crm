@@ -310,7 +310,7 @@ class TrackerTests(DealBase):
         self.assertEqual(next(s for s in inv["sections"] if s["key"] == "deal_history")["status"], "hidden")
         # people who can add to trackers can find investor names for the picker
         editor = self.make_user("e@firm.com", self.make_role("Deal team", {"deals": ["view", "create", "edit"]}))
-        names = self.client_for(editor).get("/api/lookup/investors/?q=blu").json()
+        names = self.client_for(editor).get("/api/lookup/investors/?q=north").json()
         self.assertEqual([n["title"] for n in names], ["Northwind Ventures"])
 
     def test_purging_a_deal_removes_its_tracker(self):

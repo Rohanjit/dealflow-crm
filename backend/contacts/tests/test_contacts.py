@@ -130,7 +130,7 @@ class ContactListTests(ContactTestBase):
 
     def test_ordering(self):
         firms = [r["firm"]["title"] if r["firm"] else None for r in self.client.get(URL + "?ordering=firm").json()["results"]]
-        self.assertEqual(firms, ["Northwind Ventures", "Northwind Ventures", "Harbourline Alternate Assets", None])
+        self.assertEqual(firms, ["Harbourline Alternate Assets", "Northwind Ventures", "Northwind Ventures", None])
         # blanks sort last either way
         self.assertEqual(self.names("ordering=designation")[-1], "Anita Rao")
         self.assertEqual(self.names("ordering=-designation")[-1], "Anita Rao")
@@ -159,19 +159,19 @@ class ContactListTests(ContactTestBase):
 
 class LookupTests(ContactTestBase):
     def test_lookup_permissions(self):
-        r = self.client.get("/api/lookup/investors/?q=blu").json()
+        r = self.client.get("/api/lookup/investors/?q=north").json()
         self.assertEqual([(x["title"], x["module"]) for x in r], [("Northwind Ventures", "investors")])
         # can add contacts but can't open Investors: may still pick a firm by name
         u = self.make_user("c@firm.com", self.make_role("Contacts", {"contacts": ["view", "create"]}))
-        self.assertEqual(self.client_for(u).get("/api/lookup/investors/?q=kot").status_code, 200)
+        self.assertEqual(self.client_for(u).get("/api/lookup/investors/?q=harb").status_code, 200)
         self.assertEqual(self.client_for(u).get("/api/m/investors/").status_code, 403)
         # view-only on contacts: no reason to look firms up
         v = self.make_user("v@firm.com", self.make_role("Viewer", {"contacts": ["view"]}))
-        self.assertEqual(self.client_for(v).get("/api/lookup/investors/?q=kot").status_code, 403)
+        self.assertEqual(self.client_for(v).get("/api/lookup/investors/?q=harb").status_code, 403)
 
     def test_lookup_by_ids_includes_archived(self):
         self.client.delete(f"/api/m/investors/{self.northwind['id']}/")
-        self.assertEqual(self.client.get("/api/lookup/investors/?q=blu").json(), [])
+        self.assertEqual(self.client.get("/api/lookup/investors/?q=north").json(), [])
         r = self.client.get(f"/api/lookup/investors/?ids={self.northwind['id']},{self.harbourline['id']}").json()
         self.assertEqual({(x["title"], x["archived"]) for x in r}, {("Northwind Ventures", True), ("Harbourline Alternate Assets", False)})
 

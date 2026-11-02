@@ -127,7 +127,7 @@ def _can_lookup(user, module: str) -> bool:
 
 
 class LookupView(APIView):
-    """Short list of {id, title} for link pickers: ?q=blu, or ?ids=3,7 to label chosen records."""
+    """Short list of {id, title} for link pickers: ?q=north, or ?ids=3,7 to label chosen records."""
 
     def get(self, request, module):
         mod = _module(module)

@@ -71,7 +71,7 @@ class SuggestionTests(SyncBase):
         self.assertEqual((pre["designation"], pre["company"], pre["work_email"]), ("Principal", "Larkspur Capital", "meera@larkspur.example"))
         self.assertEqual(self.client_for(other).get(f"/api/capture/suggestions/{people[0]['id']}/prefill/").status_code, 404)
         # Once they're a contact they drop off
-        Contact.objects.create(full_name="Meera Rao", work_email="Meera@Larkspur.com", created_by=self.admin, updated_by=self.admin)
+        Contact.objects.create(full_name="Meera Rao", work_email="Meera@Larkspur.example", created_by=self.admin, updated_by=self.admin)
         self.assertEqual(self.client.get("/api/capture/suggestions/").json()["people"], [])
 
     def test_counts_and_dismiss(self):

@@ -248,7 +248,7 @@ class LinkedFieldTests(CustomBase):
         self.assertEqual(r.json()[key], "Halden")
         co.refresh_from_db()
         self.assertEqual(co.custom[key], "Halden")
-        self.assertEqual([x["id"] for x in self.client.get(f"/api/m/outreach/?{key}=tat").json()["results"]], [o.pk])
+        self.assertEqual([x["id"] for x in self.client.get(f"/api/m/outreach/?{key}=hal").json()["results"]], [o.pk])
 
     def test_investor_fields_shown_read_only_on_contacts(self):
         key = self.add("investors", [("Strategy", "text", {})])["Strategy"].key

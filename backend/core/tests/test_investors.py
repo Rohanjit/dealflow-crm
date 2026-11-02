@@ -128,16 +128,16 @@ class InvestorCrudTests(APITestBase):
             return sorted(r["firm_name"] for r in self.client.get(URL + "?" + qs).json()["results"])
 
         self.assertEqual(names("q=harbourline"), ["Harbourline Alt"])
-        self.assertEqual(names(f"sectors={self.opt('sectors', 'Fintech').pk}"), ["Northwind Ventures", "Cedarwood US"])
+        self.assertEqual(names(f"sectors={self.opt('sectors', 'Fintech').pk}"), ["Cedarwood US", "Northwind Ventures"])
         self.assertEqual(names("relationship_strength=strong"), ["Harbourline Alt"])
-        self.assertEqual(names("relationship_owner=me"), ["Northwind Ventures", "Cedarwood US"])
+        self.assertEqual(names("relationship_owner=me"), ["Cedarwood US", "Northwind Ventures"])
         self.assertEqual(names("relationship_owner=none"), ["Harbourline Alt"])
         self.assertEqual(names("tags=PE"), ["Harbourline Alt"])
         self.assertEqual(names("ticket=100&ticket_currency=INR&ticket_unit=Cr"), ["Harbourline Alt"])
         self.assertEqual(names("ticket=20&ticket_currency=INR&ticket_unit=Cr"), ["Northwind Ventures"])
         self.assertEqual(names("ticket=10&ticket_currency=USD&ticket_unit=Mn"), ["Cedarwood US"])
         self.assertEqual(names("last_contacted_from=2026-08-01&last_contacted_to=2026-09-30"),
-                         ["Northwind Ventures", "Harbourline Alt", "Cedarwood US"])
+                         ["Cedarwood US", "Harbourline Alt", "Northwind Ventures"])
         order = [r["firm_name"] for r in self.client.get(URL + "?ordering=-min_ticket&ticket_currency=").json()["results"]]
         # grouped by currency (INR before USD), then by scaled amount within it
         self.assertEqual(order, ["Harbourline Alt", "Northwind Ventures", "Cedarwood US"])
@@ -146,7 +146,7 @@ class InvestorCrudTests(APITestBase):
 
     def test_global_search(self):
         self.client.post(URL, self.payload(), format="json")
-        r = self.client.get("/api/search/?q=blu").json()["results"]
+        r = self.client.get("/api/search/?q=north").json()["results"]
         self.assertEqual(r[0]["title"], "Northwind Ventures")
         self.assertEqual(r[0]["subtitle"], "VC · Mumbai")
 
