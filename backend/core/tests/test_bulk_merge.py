@@ -139,8 +139,8 @@ class TrackerAddTests(BulkTestBase):
 
 class MergeTests(BulkTestBase):
     def test_merge_investors_moves_everything(self):
-        keep = self.investor("Blume Ventures", hq_city="Mumbai")
-        dup = self.investor("Blume", hq_city="Bengaluru", tags=["seed"])
+        keep = self.investor("Northwind Ventures", hq_city="Mumbai")
+        dup = self.investor("Northwind", hq_city="Bengaluru", tags=["seed"])
         contact = Contact.objects.get(pk=self.post("/api/m/contacts/", {"full_name": "Karan", "firm": f"investors:{dup.pk}"}).json()["id"])
         task = Task.objects.get(pk=self.post("/api/m/tasks/", {"title": "Call Karan", "related": f"investors:{dup.pk}"}).json()["id"])
         d1, d2 = self.deal(self.company("Acme")), self.deal(self.company("Zeta"))
@@ -213,10 +213,10 @@ class MergeTests(BulkTestBase):
 
 class DuplicateFinderTests(BulkTestBase):
     def test_groups_look_alike_records(self):
-        a = self.investor("Blume Ventures", website="https://blume.vc")
-        b = self.investor("Blume")
-        c = self.investor("Elevation", website="blume.vc/about")
-        self.investor("Peak XV Partners")
+        a = self.investor("Northwind Ventures", website="https://northwind.example")
+        b = self.investor("Northwind")
+        c = self.investor("Altitude", website="northwind.example/about")
+        self.investor("Summit Nine Partners")
         groups = self.client.get("/api/m/investors/duplicates/").json()["groups"]
         self.assertEqual(len(groups), 1)
         self.assertEqual({r["id"] for r in groups[0]["records"]}, {a.pk, b.pk, c.pk})

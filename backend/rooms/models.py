@@ -148,7 +148,7 @@ class Visit(models.Model):
     """Something an investor did: opened the room, read a file (for how long, which pages), downloaded
     one, agreed to the NDA, asked a question; or a code sent or refused."""
 
-    # Read as "<investor> <label>", e.g. "Priya Shah (Blume Ventures) read “IM”".
+    # Read as "<investor> <label>", e.g. "Priya Shah (Northwind Ventures) read “IM”".
     KINDS = [("code_sent", "was emailed a code"), ("code_wrong", "entered a wrong code"),
              ("locked", "was paused after too many wrong codes"), ("opened", "opened the room"),
              ("nda", "agreed to the NDA"), ("viewed", "read"), ("downloaded", "downloaded"),

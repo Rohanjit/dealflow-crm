@@ -100,11 +100,11 @@ def load():
     # ------------------------------------------------------------------ investors
     INV = [
         # name, type, city, sectors, stages, geographies, instrument, deploying, min, max, owner, strength
-        ("Blume Ventures", "VC", "Mumbai", ["Consumer / D2C", "Technology / SaaS"], ["Early stage (Series A/B)", "Growth"], ["India"], "equity", "yes", 10, 60, asha, "strong"),
-        ("Peak XV Partners", "VC", "Bengaluru", ["Consumer / D2C", "Fintech", "Technology / SaaS"], ["Growth", "Late stage"], ["South Asia", "Southeast Asia"], "equity", "yes", 75, 400, vikram, "warm"),
-        ("Kotak Alt Credit", "NBFC / debt fund", "Mumbai", ["Consumer / D2C", "Manufacturing", "Logistics"], ["Growth", "Late stage"], ["India"], "debt", "yes", 50, 300, guest, "warm"),
-        ("Motilal Oswal PE", "PE", "Mumbai", ["Consumer / D2C", "Financial services"], ["Growth", "Pre-IPO"], ["India"], "equity", "unknown", 40, 200, asha, "cold"),
-        ("A91 Partners", "PE", "Mumbai", ["Consumer / D2C", "Healthcare"], ["Growth"], ["India"], "both", "yes", 25, 150, vikram, "strong"),
+        ("Northwind Ventures", "VC", "Mumbai", ["Consumer / D2C", "Technology / SaaS"], ["Early stage (Series A/B)", "Growth"], ["India"], "equity", "yes", 10, 60, asha, "strong"),
+        ("Summit Nine Partners", "VC", "Bengaluru", ["Consumer / D2C", "Fintech", "Technology / SaaS"], ["Growth", "Late stage"], ["South Asia", "Southeast Asia"], "equity", "yes", 75, 400, vikram, "warm"),
+        ("Harbourline Alt Credit", "NBFC / debt fund", "Mumbai", ["Consumer / D2C", "Manufacturing", "Logistics"], ["Growth", "Late stage"], ["India"], "debt", "yes", 50, 300, guest, "warm"),
+        ("Meridian Oak PE", "PE", "Mumbai", ["Consumer / D2C", "Financial services"], ["Growth", "Pre-IPO"], ["India"], "equity", "unknown", 40, 200, asha, "cold"),
+        ("Q47 Partners", "PE", "Mumbai", ["Consumer / D2C", "Healthcare"], ["Growth"], ["India"], "both", "yes", 25, 150, vikram, "strong"),
         ("Iron Bridge Capital", "PE", "New York", ["Industrials", "Logistics"], ["Buyout"], ["US", "Global"], "equity", "yes", 500, 2000, None, None),
         ("Sahyadri Family Office", "Family office", "Pune", ["Manufacturing", "Agritech & food", "Consumer / D2C"], ["Growth", "Late stage"], ["India"], "equity", "yes", 15, 80, guest, "warm"),
         ("Gulf Horizon Investments", "Family office", "Dubai", ["Healthcare", "Logistics", "Real estate"], ["Late stage", "Pre-IPO"], ["Middle East", "India"], "both", "yes", 100, 600, anu, "cold"),
@@ -153,16 +153,16 @@ def load():
 
     # ------------------------------------------------------------------ contacts
     CONTACTS = [
-        ("Ravi Kulkarni", "CFO", co("Acme Foods Pvt Ltd"), "Partner / MD", True, "ravi@acmefoods.example", "+91 98200 11223"),
-        ("Meera Iyer", "Founder & CEO", co("Orbit Logistics"), "Partner / MD", True, "meera@orbit.example", "+91 98410 55667"),
-        ("Karan Malhotra", "Partner", f"investors:{investors['Blume Ventures'].pk}", "Partner / MD", True, "karan@blume.example", "+91 99300 44556"),
-        ("Priya Nair", "Vice President", f"investors:{investors['Peak XV Partners'].pk}", "Principal / VP", True, "priya@peakxv.example", "+91 98860 77889"),
-        ("Sameer Desai", "Director, Credit", f"investors:{investors['Kotak Alt Credit'].pk}", "Principal / VP", True, "sameer@kotakalt.example", "+91 98190 33445"),
+        ("Ravi Kulkarni", "CFO", co("Acme Foods Pvt Ltd"), "Partner / MD", True, "ravi@acmefoods.example", "+91 90000 00001"),
+        ("Meera Iyer", "Founder & CEO", co("Orbit Logistics"), "Partner / MD", True, "meera@orbit.example", "+91 90000 00002"),
+        ("Karan Malhotra", "Partner", f"investors:{investors['Northwind Ventures'].pk}", "Partner / MD", True, "karan@northwind.example", "+91 90000 00003"),
+        ("Priya Nair", "Vice President", f"investors:{investors['Summit Nine Partners'].pk}", "Principal / VP", True, "priya@summitnine.example", "+91 90000 00004"),
+        ("Sameer Desai", "Director, Credit", f"investors:{investors['Harbourline Alt Credit'].pk}", "Principal / VP", True, "sameer@harbourlinealt.example", "+91 90000 00005"),
         ("Fatima Al Mansoori", "Investment Director", f"investors:{investors['Gulf Horizon Investments'].pk}", "Principal / VP", True, "fatima@gulfhorizon.example", "+971 50 123 4567"),
-        ("Arjun Mehta", "Head of Finance", co("Nova Retail"), "Principal / VP", True, "arjun@novaretail.example", "+91 99000 12121"),
-        ("Dr. Lakshmi Rao", "Managing Director", co("Zeta Pharma"), "Partner / MD", True, "lakshmi@zetapharma.example", "+91 98480 23232"),
-        ("Neha Kapoor", "Associate", f"investors:{investors['A91 Partners'].pk}", "Associate / Analyst", False, "neha@a91.example", "+91 98110 90909"),
-        ("Rohit Sinha", "Partner, Khaitan & Associates (legal)", None, "Other", False, "rohit@lawfirm.example", "+91 98100 45454"),
+        ("Arjun Mehta", "Head of Finance", co("Nova Retail"), "Principal / VP", True, "arjun@novaretail.example", "+91 90000 00006"),
+        ("Dr. Lakshmi Rao", "Managing Director", co("Zeta Pharma"), "Partner / MD", True, "lakshmi@zetapharma.example", "+91 90000 00007"),
+        ("Neha Kapoor", "Associate", f"investors:{investors['Q47 Partners'].pk}", "Associate / Analyst", False, "neha@q47.example", "+91 90000 00008"),
+        ("Rohit Sinha", "Partner, Varma & Associates (legal)", None, "Other", False, "rohit@lawfirm.example", "+91 90000 00009"),
     ]
     contacts = {}
     for i, (name, title, firm, level, primary, email, mobile) in enumerate(CONTACTS):
@@ -236,44 +236,44 @@ def load():
     update(d_zeta, {"stage": "first_draft", "mandate_expiry": day(-2), "mandate_date": day(-60), "team_md": [asha.pk]})
     update(d_verdant, {"stage": "investor_outreach", "instrument": "equity", "investment_stage": opt("investment_stages", "Growth"),
                        "target_close_date": day(45), "mandate_expiry": day(150), "team_vp": [vikram.pk], "team_analyst": [anu.pk]})
-    note("deals", d_orbit, "meeting", 6, "Peak XV issued a term sheet at ₹1,400 Cr pre-money. Blume still deciding.", by=vikram)
-    note("deals", d_orbit, "call", 2, "Meera wants a better liquidation preference. Going back to Peak XV.", by=vikram)
-    note("deals", d_nova, "email", 18, "Shared the DD tracker with Kotak Alt Credit's legal counsel.")
+    note("deals", d_orbit, "meeting", 6, "Summit Nine issued a term sheet at ₹1,400 Cr pre-money. Northwind still deciding.", by=vikram)
+    note("deals", d_orbit, "call", 2, "Meera wants a better liquidation preference. Going back to Summit Nine.", by=vikram)
+    note("deals", d_nova, "email", 18, "Shared the DD tracker with Harbourline Alt Credit's legal counsel.")
 
     # Investor trackers
     def track(deal, investor, stage, **kw):
         return make("deal_investors", {"deal": f"deals:{deal.pk}", "investor": f"investors:{investors[investor].pk}", "stage": stage, **kw})
 
-    track(d_orbit, "Peak XV Partners", "term_sheet_received")
-    track(d_orbit, "Blume Ventures", "meeting_held")
-    track(d_orbit, "A91 Partners", "nda_signed")
+    track(d_orbit, "Summit Nine Partners", "term_sheet_received")
+    track(d_orbit, "Northwind Ventures", "meeting_held")
+    track(d_orbit, "Q47 Partners", "nda_signed")
     track(d_orbit, "Iron Bridge Capital", "teaser_sent", status="declined", decline_reason=opt("decline_reasons", "Ticket size mismatch"))
     track(d_orbit, "Gulf Horizon Investments", "teaser_sent", status="no_response")
-    t_kotak = track(d_nova, "Kotak Alt Credit", "term_sheet_received")
+    t_harbour = track(d_nova, "Harbourline Alt Credit", "term_sheet_received")
     track(d_verdant, "Sahyadri Family Office", "teaser_sent")
-    track(d_verdant, "Motilal Oswal PE", "identified")
+    track(d_verdant, "Meridian Oak PE", "identified")
     track(d_zeta, "Lighthouse Pharma Fund", "identified")
 
     # A closed deal for the record (and for "Closed" on the home page)
     d_closed = make("deals", {"company": co("Brightpath Clinics"), "transaction_type": opt("transaction_types", "Equity raise"),
                               "stage": "closed", "lead_banker": asha.pk, "target_raise": money(80), "amount_raised": money(85),
                               "closing_date": day(-30), "fee_earned": money(1.9), "mandate_date": day(-260),
-                              "lead_investors": [f"investors:{investors['A91 Partners'].pk}"]})
-    note("deals", d_closed, "note", 30, "Closed at ₹85 Cr with A91 leading. Success fee invoiced.", by=asha)
+                              "lead_investors": [f"investors:{investors['Q47 Partners'].pk}"]})
+    note("deals", d_closed, "note", 30, "Closed at ₹85 Cr with Q47 leading. Success fee invoiced.", by=asha)
 
     # ------------------------------------------------------------------ tasks (some for the guest, so reminders show)
     now = timezone.localtime()
     later = now + dt.timedelta(hours=2)
     TASKS = [
-        ("Send revised teaser to Peak XV", day(-2), "high", "open", guest, f"deals:{d_orbit.pk}"),
+        ("Send revised teaser to Summit Nine", day(-2), "high", "open", guest, f"deals:{d_orbit.pk}"),
         ("Call Ravi about the retainer", f"{today.isoformat()}T{later:%H:%M}" if later.date() == today else today.isoformat(),
          "medium", "open", guest, f"outreach:{o_acme.pk}"),
-        ("Review the DD tracker with Kotak's counsel", today.isoformat(), "medium", "in_progress", guest, f"deals:{d_nova.pk}"),
+        ("Review the DD tracker with Harbourline's counsel", today.isoformat(), "medium", "in_progress", guest, f"deals:{d_nova.pk}"),
         ("Book Mumbai roadshow meetings for Verdant", day(5), "medium", "open", guest, f"deals:{d_verdant.pk}"),
         ("Share the IM draft with Dr. Rao", day(3), "high", "open", anu, f"deals:{d_zeta.pk}"),
         ("Update investor list for Orbit", day(1), "low", "open", vikram, f"deals:{d_orbit.pk}"),
         ("Plan the Q4 pipeline review", None, "low", "open", guest, None),
-        ("Send NDA to A91 Partners", day(-10), "medium", "done", vikram, f"investors:{investors['A91 Partners'].pk}"),
+        ("Send NDA to Q47 Partners", day(-10), "medium", "done", vikram, f"investors:{investors['Q47 Partners'].pk}"),
     ]
     for title, due, priority, status, who, related in TASKS:
         d = {"title": title, "priority": priority, "status": status, "assigned_to": who.pk}
@@ -289,9 +289,9 @@ def load():
     DOCS = [
         ("Orbit Logistics teaser", "Teaser", [f"deals:{d_orbit.pk}"], ["Cold-chain logistics leader", "FY26 revenue: Rs 610 Cr", "EBITDA margin: 11.8%", "Raising: Rs 200 Cr growth equity"]),
         ("Orbit Logistics engagement letter", "Engagement letter", [f"deals:{d_orbit.pk}"], ["Mandate: exclusive, 9 months", "Retainer: Rs 40 L", "Success fee: 2%"]),
-        ("Peak XV term sheet (draft)", "Term sheet", [f"deals:{d_orbit.pk}", f"investors:{investors['Peak XV Partners'].pk}"], ["Pre-money valuation: Rs 1,400 Cr", "Instrument: CCPS", "Board seat: 1"]),
+        ("Summit Nine term sheet (draft)", "Term sheet", [f"deals:{d_orbit.pk}", f"investors:{investors['Summit Nine Partners'].pk}"], ["Pre-money valuation: Rs 1,400 Cr", "Instrument: CCPS", "Board seat: 1"]),
         ("Nova Retail DD tracker", "DD report", [f"deals:{d_nova.pk}"], ["Legal DD: in progress", "Financial DD: complete", "Tax DD: pending documents"]),
-        ("Mutual NDA - Kotak Alt Credit", "NDA", [f"investors:{investors['Kotak Alt Credit'].pk}"], ["Parties: Northbridge Capital and Kotak Alt Credit", "Term: 2 years"]),
+        ("Mutual NDA - Harbourline Alt Credit", "NDA", [f"investors:{investors['Harbourline Alt Credit'].pk}"], ["Parties: Northbridge Capital and Harbourline Alt Credit", "Term: 2 years"]),
     ]
     for title, category, tagged, lines in DOCS:
         data = _pdf(title, lines)
@@ -323,7 +323,7 @@ def load():
     back(Outreach, "outreach", o_bright, 30)
     back(Outreach, "outreach", o_kite, 40)
     back(Deal, "deals", d_nova, 20)
-    back(DealInvestor, "deal_investors", t_kotak, 16)
+    back(DealInvestor, "deal_investors", t_harbour, 16)
     # Log entries were written as history: date them on their own day.
     for n in Note.objects.exclude(kind="stage"):
         Note.objects.filter(pk=n.pk).update(created_at=at((today - n.date).days))

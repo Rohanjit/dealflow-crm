@@ -10,9 +10,9 @@ URL = "/api/m/investors/"
 class InvestorCrudTests(APITestBase):
     def payload(self, **kw):
         d = {
-            "firm_name": "Blume Ventures",
+            "firm_name": "Northwind Ventures",
             "investor_type": self.opt("investor_types", "VC").pk,
-            "website": "blume.vc",
+            "website": "northwind.example",
             "hq_city": "Mumbai",
             "sectors": [self.opt("sectors", "Fintech").pk, self.opt("sectors", "Consumer / D2C").pk],
             "min_ticket": {"amount": "5", "currency": "INR", "unit": "Cr"},
@@ -30,7 +30,7 @@ class InvestorCrudTests(APITestBase):
         r = self.client.post(URL, self.payload(), format="json")
         self.assertEqual(r.status_code, 201, r.content)
         body = r.json()
-        self.assertEqual(body["website"], "https://blume.vc")
+        self.assertEqual(body["website"], "https://northwind.example")
         self.assertEqual(body["min_ticket"], {"amount": "5", "currency": "INR", "unit": "Cr"})
         self.assertEqual(sorted(body["tags"]), ["Top tier", "fintech"])
         self.assertEqual(body["_stamps"]["created_by"]["name"], "Asha Admin")
@@ -73,7 +73,7 @@ class InvestorCrudTests(APITestBase):
         self.assertEqual(self.client.get(URL).json()["count"], 0)
         self.assertEqual(self.client.get(f"{URL}{inv['id']}/").status_code, 404)
         arch = self.client.get("/api/archive/").json()["results"]
-        self.assertEqual(arch[0]["title"], "Blume Ventures")
+        self.assertEqual(arch[0]["title"], "Northwind Ventures")
         self.assertEqual(arch[0]["archived_by"], "Asha Admin")
         self.client.post(f"/api/archive/investors/{inv['id']}/")
         self.assertEqual(self.client.get(URL).json()["count"], 1)
@@ -100,7 +100,7 @@ class InvestorCrudTests(APITestBase):
         c = self.client_for(nobody)
         self.assertEqual(c.get(URL).status_code, 403)
         self.assertEqual(c.get("/api/schema/").json()["modules"], [])
-        self.assertEqual(c.get("/api/search/?q=blume").json()["results"], [])
+        self.assertEqual(c.get("/api/search/?q=northwind").json()["results"], [])
 
     def test_restore_flag_without_admin_cannot_purge(self):
         arch_role = self.make_role("Archivist", {"investors": ["view", "delete"]}, restore_archive=True)
@@ -113,41 +113,41 @@ class InvestorCrudTests(APITestBase):
     def test_filters_search_sort(self):
         self.client.post(URL, self.payload(), format="json")
         self.client.post(URL, self.payload(
-            firm_name="Kotak Alt", investor_type=self.opt("investor_types", "PE").pk, hq_city="Mumbai",
+            firm_name="Harbourline Alt", investor_type=self.opt("investor_types", "PE").pk, hq_city="Mumbai",
             sectors=[self.opt("sectors", "Healthcare").pk],
             min_ticket={"amount": "50", "currency": "INR", "unit": "Cr"},
             max_ticket={"amount": "300", "currency": "INR", "unit": "Cr"},
             relationship_strength="strong", tags=["pe"], relationship_owner=None,
         ), format="json")
         self.client.post(URL, self.payload(
-            firm_name="Sequoia US", min_ticket={"amount": "5", "currency": "USD", "unit": "Mn"},
+            firm_name="Cedarwood US", min_ticket={"amount": "5", "currency": "USD", "unit": "Mn"},
             max_ticket={"amount": "50", "currency": "USD", "unit": "Mn"}, tags=[],
         ), format="json")
 
         def names(qs):
             return sorted(r["firm_name"] for r in self.client.get(URL + "?" + qs).json()["results"])
 
-        self.assertEqual(names("q=kotak"), ["Kotak Alt"])
-        self.assertEqual(names(f"sectors={self.opt('sectors', 'Fintech').pk}"), ["Blume Ventures", "Sequoia US"])
-        self.assertEqual(names("relationship_strength=strong"), ["Kotak Alt"])
-        self.assertEqual(names("relationship_owner=me"), ["Blume Ventures", "Sequoia US"])
-        self.assertEqual(names("relationship_owner=none"), ["Kotak Alt"])
-        self.assertEqual(names("tags=PE"), ["Kotak Alt"])
-        self.assertEqual(names("ticket=100&ticket_currency=INR&ticket_unit=Cr"), ["Kotak Alt"])
-        self.assertEqual(names("ticket=20&ticket_currency=INR&ticket_unit=Cr"), ["Blume Ventures"])
-        self.assertEqual(names("ticket=10&ticket_currency=USD&ticket_unit=Mn"), ["Sequoia US"])
+        self.assertEqual(names("q=harbourline"), ["Harbourline Alt"])
+        self.assertEqual(names(f"sectors={self.opt('sectors', 'Fintech').pk}"), ["Northwind Ventures", "Cedarwood US"])
+        self.assertEqual(names("relationship_strength=strong"), ["Harbourline Alt"])
+        self.assertEqual(names("relationship_owner=me"), ["Northwind Ventures", "Cedarwood US"])
+        self.assertEqual(names("relationship_owner=none"), ["Harbourline Alt"])
+        self.assertEqual(names("tags=PE"), ["Harbourline Alt"])
+        self.assertEqual(names("ticket=100&ticket_currency=INR&ticket_unit=Cr"), ["Harbourline Alt"])
+        self.assertEqual(names("ticket=20&ticket_currency=INR&ticket_unit=Cr"), ["Northwind Ventures"])
+        self.assertEqual(names("ticket=10&ticket_currency=USD&ticket_unit=Mn"), ["Cedarwood US"])
         self.assertEqual(names("last_contacted_from=2026-08-01&last_contacted_to=2026-09-30"),
-                         ["Blume Ventures", "Kotak Alt", "Sequoia US"])
+                         ["Northwind Ventures", "Harbourline Alt", "Cedarwood US"])
         order = [r["firm_name"] for r in self.client.get(URL + "?ordering=-min_ticket&ticket_currency=").json()["results"]]
         # grouped by currency (INR before USD), then by scaled amount within it
-        self.assertEqual(order, ["Kotak Alt", "Blume Ventures", "Sequoia US"])
+        self.assertEqual(order, ["Harbourline Alt", "Northwind Ventures", "Cedarwood US"])
         order = [r["firm_name"] for r in self.client.get(URL + "?ordering=investor_type").json()["results"]]
-        self.assertEqual(order[0], "Kotak Alt")  # PE < VC
+        self.assertEqual(order[0], "Harbourline Alt")  # PE < VC
 
     def test_global_search(self):
         self.client.post(URL, self.payload(), format="json")
         r = self.client.get("/api/search/?q=blu").json()["results"]
-        self.assertEqual(r[0]["title"], "Blume Ventures")
+        self.assertEqual(r[0]["title"], "Northwind Ventures")
         self.assertEqual(r[0]["subtitle"], "VC · Mumbai")
 
 

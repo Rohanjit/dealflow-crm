@@ -41,7 +41,7 @@ class ParsingTests(APITestBase):
 class ImportFlowTests(APITestBase):
     def setUp(self):
         super().setUp()
-        self.client.post("/api/m/investors/", {"firm_name": "Blume Ventures", "website": "https://www.blume.vc"}, format="json")
+        self.client.post("/api/m/investors/", {"firm_name": "Northwind Ventures", "website": "https://www.northwind.example"}, format="json")
         self.bob = self.make_user("bob@firm.com", self.admin_role, full_name="Bob Banker")
 
     def upload(self, f):
@@ -52,11 +52,11 @@ class ImportFlowTests(APITestBase):
     def test_full_flow(self):
         f = xlsx([
             ["Investor Name", "Type", "City", "Sector", "Min ticket (INR Cr)", "Max ticket", "Owner", "Last contact", "Random"],
-            ["Blume", "VC", "Mumbai", "Fintech", 5, "₹ 40 Cr", "Bob Banker", "03/04/2026", "x"],   # dup: generic words ignored
-            ["Blume Ventures", "VC", "Mumbai", "Fintech; Space", 5, "₹ 40 Cr", "", "", ""],        # dup of existing by name
-            ["Kotak Alt", "PE", "Mumbai", "Healthcare, Fintech", 50, "₹ 300 Cr", "bob@firm.com", "2026-01-15", ""],
+            ["Northwind", "VC", "Mumbai", "Fintech", 5, "₹ 40 Cr", "Bob Banker", "03/04/2026", "x"],   # dup: generic words ignored
+            ["Northwind Ventures", "VC", "Mumbai", "Fintech; Space", 5, "₹ 40 Cr", "", "", ""],        # dup of existing by name
+            ["Harbourline Alt", "PE", "Mumbai", "Healthcare, Fintech", 50, "₹ 300 Cr", "bob@firm.com", "2026-01-15", ""],
             ["", "VC", "Delhi", "", "", "", "", "", ""],                                             # missing name
-            ["Kotak alt.", "PE", "", "", "abc", "", "", "", ""],                                     # dup in file + bad money
+            ["Harbourline alt.", "PE", "", "", "abc", "", "", "", ""],                                     # dup in file + bad money
         ])
         up = self.upload(f)
         self.assertEqual(up["row_count"], 5)
@@ -70,8 +70,8 @@ class ImportFlowTests(APITestBase):
         r = self.client.post(BASE + "check/", {"token": up["token"], "mapping": m}, format="json").json()
         rows = {x["row"]: x for x in r["rows"]}
         self.assertEqual(rows[2]["errors"], {})
-        self.assertEqual(rows[2]["duplicate_of"][0]["title"], "Blume Ventures")
-        self.assertEqual(rows[3]["duplicate_of"][0]["title"], "Blume Ventures")
+        self.assertEqual(rows[2]["duplicate_of"][0]["title"], "Northwind Ventures")
+        self.assertEqual(rows[3]["duplicate_of"][0]["title"], "Northwind Ventures")
         self.assertTrue(any("Space" in w for w in rows[3]["warnings"]))
         self.assertIn("Firm name", rows[5]["errors"])
         self.assertIn("Min ticket size", rows[6]["errors"])
@@ -81,13 +81,13 @@ class ImportFlowTests(APITestBase):
 
         r = self.client.post(BASE + "commit/", {"token": up["token"], "mapping": m, "include_rows": [2, 4]}, format="json")
         self.assertEqual(r.json()["created"], 2, r.content)
-        kotak = Investor.objects.get(firm_name="Kotak Alt")
-        self.assertEqual(kotak.min_ticket_amount, 50)
-        self.assertEqual((kotak.min_ticket_currency, kotak.min_ticket_unit), ("INR", "Cr"))
-        self.assertEqual(kotak.relationship_owner, self.bob)
-        self.assertEqual(sorted(o.label for o in kotak.sectors.all()), ["Fintech", "Healthcare"])
-        self.assertEqual(str(Investor.objects.get(firm_name="Blume").last_contacted), "2026-04-03")
-        self.assertEqual(kotak.created_by, self.admin)
+        harbourline = Investor.objects.get(firm_name="Harbourline Alt")
+        self.assertEqual(harbourline.min_ticket_amount, 50)
+        self.assertEqual((harbourline.min_ticket_currency, harbourline.min_ticket_unit), ("INR", "Cr"))
+        self.assertEqual(harbourline.relationship_owner, self.bob)
+        self.assertEqual(sorted(o.label for o in harbourline.sectors.all()), ["Fintech", "Healthcare"])
+        self.assertEqual(str(Investor.objects.get(firm_name="Northwind").last_contacted), "2026-04-03")
+        self.assertEqual(harbourline.created_by, self.admin)
         # token is single-use
         r = self.client.post(BASE + "check/", {"token": up["token"], "mapping": m}, format="json")
         self.assertEqual(r.status_code, 400)
@@ -102,9 +102,9 @@ class ImportFlowTests(APITestBase):
         self.assertEqual(list(Investor.objects.get(firm_name="Orbit Fund").sectors.all()), [opt])
 
     def test_website_duplicate_and_csv(self):
-        up = self.upload(SimpleUploadedFile("a.csv", "Firm name;Website\nBlume VC;blume.vc\n".encode("utf-8-sig")))
+        up = self.upload(SimpleUploadedFile("a.csv", "Firm name;Website\nNorthwind VC;northwind.example\n".encode("utf-8-sig")))
         r = self.client.post(BASE + "check/", {"token": up["token"], "mapping": up["mapping"]}, format="json").json()
-        self.assertEqual(r["rows"][0]["duplicate_of"][0]["title"], "Blume Ventures")
+        self.assertEqual(r["rows"][0]["duplicate_of"][0]["title"], "Northwind Ventures")
 
     def test_mapping_rules(self):
         up = self.upload(SimpleUploadedFile("a.csv", b"City,Other\nMumbai,x\n"))
@@ -132,10 +132,10 @@ class ImportFlowTests(APITestBase):
 class ExportTests(APITestBase):
     def test_export_respects_filters_and_switches(self):
         vc = ChoiceOption.objects.get(choice_list__key="investor_types", label="VC")
-        self.client.post("/api/m/investors/", {"firm_name": "Blume", "investor_type": vc.pk,
+        self.client.post("/api/m/investors/", {"firm_name": "Northwind", "investor_type": vc.pk,
                                                "min_ticket": {"amount": "5", "currency": "INR", "unit": "Cr"},
                                                "last_contacted": "2026-09-01"}, format="json")
-        self.client.post("/api/m/investors/", {"firm_name": "Kotak"}, format="json")
+        self.client.post("/api/m/investors/", {"firm_name": "Harbourline"}, format="json")
         self.client.patch("/api/settings/fields/", {"module": "investors", "field_key": "notes", "enabled": False}, format="json")
         r = self.client.get(f"/api/m/investors/export/?investor_type={vc.pk}")
         self.assertEqual(r.status_code, 200)
@@ -145,14 +145,14 @@ class ExportTests(APITestBase):
         self.assertNotIn("Notes", headers)
         self.assertEqual(ws.max_row, 2)
         row = {h: c.value for h, c in zip(headers, ws[2])}
-        self.assertEqual(row["Firm name"], "Blume")
+        self.assertEqual(row["Firm name"], "Northwind")
         self.assertEqual(row["Investor type"], "VC")
         self.assertEqual(row["Min ticket size"], 5)
         self.assertEqual(row["Min ticket size – currency & unit"], "INR Cr")
         self.assertEqual(row["Created by"], "Asha Admin")
 
     def test_export_round_trips_through_import(self):
-        self.client.post("/api/m/investors/", {"firm_name": "Blume", "min_ticket": {"amount": "5", "currency": "USD", "unit": "Mn"}}, format="json")
+        self.client.post("/api/m/investors/", {"firm_name": "Northwind", "min_ticket": {"amount": "5", "currency": "USD", "unit": "Mn"}}, format="json")
         data = self.client.get("/api/m/investors/export/").content
         self.client.delete(f"/api/m/investors/{Investor.objects.get().pk}/")
         up = self.client.post("/api/m/investors/import/upload/", {"file": SimpleUploadedFile("e.xlsx", data)}, format="multipart").json()

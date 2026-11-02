@@ -163,7 +163,7 @@ class UploadScanTests(ScanBase):
         self.assertEqual(r.status_code, 201, r.content)
 
     def test_import_files_are_scanned(self):
-        f = SimpleUploadedFile("list.csv", b"Firm name\nBlume\n" + EICAR + b"\n", content_type="text/csv")
+        f = SimpleUploadedFile("list.csv", b"Firm name\nNorthwind\n" + EICAR + b"\n", content_type="text/csv")
         r = self.client.post("/api/m/investors/import/upload/", {"file": f}, format="multipart")
         self.assertEqual(r.status_code, 400)
         self.assertEqual(ScanRefusal.objects.get().place, "import")

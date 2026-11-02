@@ -47,7 +47,7 @@ def make_xlsx() -> bytes:
 class RoomBase(MailBase):
     def setUp(self):
         super().setUp()
-        self.entry = DealInvestor.objects.create(deal=self.deal, investor=self.blume, created_by=self.admin,
+        self.entry = DealInvestor.objects.create(deal=self.deal, investor=self.northwind, created_by=self.admin,
                                                  updated_by=self.admin)
         self.deal.team_md.add(self.admin)
 
@@ -71,7 +71,7 @@ class RoomBase(MailBase):
         return r.json()
 
     def share(self, client=None, status=201, **kw):
-        data = {"entry": self.entry.pk, "email": "priya@blume.vc", "days": 30, **kw}
+        data = {"entry": self.entry.pk, "email": "priya@northwind.example", "days": 30, **kw}
         with self.captureOnCommitCallbacks(execute=True):
             r = (client or self.client).post(f"/api/deals/{self.deal.pk}/room/shares/", data, format="json")
         self.assertEqual(r.status_code, status, r.content)
@@ -85,12 +85,12 @@ class RoomBase(MailBase):
         return part.get_content()
 
     def link(self) -> str:
-        msgs = [m for m in self.sent_to("priya@blume.vc") if "data room link" in m["Subject"]]
+        msgs = [m for m in self.sent_to("priya@northwind.example") if "data room link" in m["Subject"]]
         self.assertTrue(msgs, "no invitation sent")
         return re.search(r"https://crm\.test(/r/[^\s/]+/)", self.body(msgs[-1])).group(1)
 
     def code(self) -> str:
-        msgs = [m for m in self.sent_to("priya@blume.vc") if "is your code" in m["Subject"]]
+        msgs = [m for m in self.sent_to("priya@northwind.example") if "is your code" in m["Subject"]]
         return re.search(r"\b(\d{6})\b", self.body(msgs[-1])).group(1)
 
     def investor(self):
@@ -188,7 +188,7 @@ class SharingTests(RoomBase):
         self.assertEqual(len(tags), 1)
         r2 = self.client.post(f"/api/deals/{self.deal.pk}/room/trace/",
                               {"file": SimpleUploadedFile("leak.pdf", r.content)}, format="multipart")
-        self.assertEqual(r2.json()["found"][0]["who"], "Ms. Priya Shah (Blume Ventures)")
+        self.assertEqual(r2.json()["found"][0]["who"], "Ms. Priya Shah (Northwind Ventures)")
 
         # Questions go to the deal team, the answer back to the investor only.
         inv.post(path + "ask/", {"file": rf.pk, "text": "What's the FY26 EBITDA margin?", "page": "2"})
@@ -196,10 +196,10 @@ class SharingTests(RoomBase):
         self.assertEqual(len(q), 1)
         logged = Note.objects.filter(module="deal_investors", record_id=self.entry.pk, meta__room_question__isnull=False)
         self.assertEqual(logged.count(), 1)
-        before = len(self.sent_to("priya@blume.vc"))
+        before = len(self.sent_to("priya@northwind.example"))
         self.client.post(f"/api/rooms/questions/{q[0]['id']}/answer/", {"answer": "About 18%."}, format="json")
-        self.assertEqual(len(self.sent_to("priya@blume.vc")), before + 1)
-        self.assertNotIn("18%", self.body(self.sent_to("priya@blume.vc")[-1]))  # the answer stays in the room
+        self.assertEqual(len(self.sent_to("priya@northwind.example")), before + 1)
+        self.assertNotIn("18%", self.body(self.sent_to("priya@northwind.example")[-1]))  # the answer stays in the room
         self.assertContains(inv.get(path), "About 18%.")
         self.assertEqual(self.client.get("/api/rooms/alerts/").json()["questions"], [])
 
@@ -231,7 +231,7 @@ class SharingTests(RoomBase):
 
         wb = openpyxl.load_workbook(io.BytesIO(r.content))
         self.assertIn("Ms. Priya Shah", wb["Cash flow"].oddHeader.left.text)
-        self.assertIn("priya@blume.vc", wb.active.oddFooter.left.text)
+        self.assertIn("priya@northwind.example", wb.active.oddFooter.left.text)
         with zipfile.ZipFile(io.BytesIO(r.content)) as z:
             self.assertIn("DealflowTrace", z.read("docProps/custom.xml").decode())
         self.assertEqual(Visit.objects.get(kind="downloaded").trace, marks.find_trace(r.content)[0])
@@ -263,7 +263,7 @@ class ApprovalTests(RoomBase):
         out = self.share(client=vc)
         self.assertEqual(out["shares"][0]["status"], "waiting")
         self.assertEqual(out["room"]["pending"]["requested_by"], "Vikram VP")
-        self.assertEqual(self.sent_to("priya@blume.vc"), [])
+        self.assertEqual(self.sent_to("priya@northwind.example"), [])
         req = AccessRequest.objects.get(kind="room", status="pending")
         # The VP can't approve; the MD can.
         self.assertEqual(vc.post(f"/api/access-requests/{req.pk}/", {"decision": "approve"}, format="json").status_code, 400)
@@ -275,12 +275,12 @@ class ApprovalTests(RoomBase):
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual(Share.objects.get().status, "active")
         self.link()  # sent from the VP's mailbox
-        self.assertEqual(self.sent_to("priya@blume.vc")[0]["From"].addresses[0].display_name, "Vikram VP")
+        self.assertEqual(self.sent_to("priya@northwind.example")[0]["From"].addresses[0].display_name, "Vikram VP")
         # Later shares go straight out.
-        DealInvestor.objects.create(deal=self.deal, investor=self.blume.__class__.objects.create(
-            firm_name="Kalaari", created_by=self.admin, updated_by=self.admin), created_by=self.admin, updated_by=self.admin)
+        DealInvestor.objects.create(deal=self.deal, investor=self.northwind.__class__.objects.create(
+            firm_name="Larkspur", created_by=self.admin, updated_by=self.admin), created_by=self.admin, updated_by=self.admin)
         e2 = DealInvestor.objects.exclude(pk=self.entry.pk).get()
-        out = self.share(client=vc, entry=e2.pk, email="meera@kalaari.com", name="Meera Rao")
+        out = self.share(client=vc, entry=e2.pk, email="meera@larkspur.example", name="Meera Rao")
         self.assertTrue(all(s["status"] == "active" for s in out["shares"]))
 
     def test_who_can_share(self):

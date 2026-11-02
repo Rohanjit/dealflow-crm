@@ -64,7 +64,7 @@ class TypesTests(CustomBase):
             k["Carry"]: "20", k["Dry powder"]: {"amount": "500", "currency": "INR", "unit": "Cr"},
             k["Next fund close"]: "2027-03-31", k["Next call"]: "2026-11-02T15:30", k["ESG mandate"]: True,
             k["Co-invests"]: "yes", k["Fund type"]: evergreen, k["Themes"]: [climate, fintech], k["Coverage banker"]: self.admin.pk,
-            k["IR email"]: "ir@fund.com", k["IR phone"]: "+91 98100 00000", k["Data room"]: "dataroom.example.com",
+            k["IR email"]: "ir@fund.com", k["IR phone"]: "+91 90000 00010", k["Data room"]: "dataroom.example.com",
             k["Labels"]: ["priority", "warm"], k["Anchor LP"]: f"investors:{anchor.pk}", k["Portfolio companies"]: [f"companies:{co.pk}"],
         }
         r = self.client.post("/api/m/investors/", {"firm_name": "Custom Capital", **values}, format="json")
@@ -244,10 +244,10 @@ class LinkedFieldTests(CustomBase):
         self.assertFalse(f["readonly"])
         co = Company.objects.create(name="Shared Co", created_by=self.admin, updated_by=self.admin)
         o = Outreach.objects.create(company=co, created_by=self.admin, updated_by=self.admin)
-        r = self.client.patch(f"/api/m/outreach/{o.pk}/", {key: "Tata"}, format="json")
-        self.assertEqual(r.json()[key], "Tata")
+        r = self.client.patch(f"/api/m/outreach/{o.pk}/", {key: "Halden"}, format="json")
+        self.assertEqual(r.json()[key], "Halden")
         co.refresh_from_db()
-        self.assertEqual(co.custom[key], "Tata")
+        self.assertEqual(co.custom[key], "Halden")
         self.assertEqual([x["id"] for x in self.client.get(f"/api/m/outreach/?{key}=tat").json()["results"]], [o.pk])
 
     def test_investor_fields_shown_read_only_on_contacts(self):

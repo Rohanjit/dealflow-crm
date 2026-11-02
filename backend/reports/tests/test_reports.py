@@ -19,7 +19,7 @@ class ReportBase(APITestBase):
         super().setUp()
         self.vc = self.opt("investor_types", "VC")
         self.pe = self.opt("investor_types", "PE")
-        for name, t, amt in (("Blume Ventures", self.vc, 10), ("Peak XV", self.vc, 75), ("A91 Partners", self.pe, 25)):
+        for name, t, amt in (("Northwind Ventures", self.vc, 10), ("Summit Nine", self.vc, 75), ("Q47 Partners", self.pe, 25)):
             Investor.objects.create(firm_name=name, investor_type=t, min_ticket_amount=amt, min_ticket_currency="INR",
                                     min_ticket_unit="Cr", min_ticket_value=amt * 10**7, hq_city="Mumbai",
                                     created_by=self.admin, updated_by=self.admin)
@@ -39,7 +39,7 @@ class RunTests(ReportBase):
         ws = load_workbook(io.BytesIO(r.content)).active
         rows = list(ws.values)
         self.assertEqual(rows[0][:4], ("Firm name", "Investor type", "Min ticket size", "Min ticket size – currency & unit"))
-        self.assertEqual([row[0] for row in rows[1:]], ["Peak XV", "Blume Ventures"])
+        self.assertEqual([row[0] for row in rows[1:]], ["Summit Nine", "Northwind Ventures"])
 
     def test_csv(self):
         r = self.run_report(format="csv", columns=["hq_city", "min_ticket"])

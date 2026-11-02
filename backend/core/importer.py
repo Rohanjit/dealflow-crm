@@ -421,7 +421,7 @@ class RowContext:
         return {"exact": exact, "norm": norm}
 
     def link(self, f: FieldDef, raw: str, warnings: list, commit: bool, allow_create=True) -> str | None:
-        """Find the record a cell names ("Blume Ventures") → "investors:12"."""
+        """Find the record a cell names ("Northwind Ventures") → "investors:12"."""
         name = " ".join(raw.split())
         if not name:
             return None
@@ -459,7 +459,7 @@ class RowContext:
         return None
 
     def links(self, f: FieldDef, raw: str, warnings: list, commit: bool) -> list:
-        """A cell naming several records ("Blume Ventures; Accel"). Names are split on ; | or new
+        """A cell naming several records ("Northwind Ventures; Arclight"). Names are split on ; | or new
         lines, and on commas only when the whole cell isn't itself one name."""
         names = [p.strip() for p in re.split(r"[;|\n]", raw) if p.strip()]
         if len(names) == 1 and "," in names[0] and self.link(f, names[0], [], False, allow_create=False) is None:

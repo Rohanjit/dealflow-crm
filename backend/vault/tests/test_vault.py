@@ -126,19 +126,19 @@ class PinTests(APITestBase):
 class UploadTests(VaultBase):
     def test_upload_several_with_shared_details(self):
         acme = self.company()
-        blume = self.client.post("/api/m/investors/", {"firm_name": "Blume Ventures"}, format="json").json()
+        northwind = self.client.post("/api/m/investors/", {"firm_name": "Northwind Ventures"}, format="json").json()
         cat = self.opt("document_categories", "NDA")
         docs = self.upload(
-            [upload_file("NDA - Blume.pdf"), upload_file("Model v3.docx", DOCX, "application/octet-stream")],
-            {"category": cat.pk, "tagged": [f"companies:{acme['id']}", f"investors:{blume['id']}"],
+            [upload_file("NDA - Northwind.pdf"), upload_file("Model v3.docx", DOCX, "application/octet-stream")],
+            {"category": cat.pk, "tagged": [f"companies:{acme['id']}", f"investors:{northwind['id']}"],
              "titles": ["", "Financial model v3"], "file_size": 1},
         )
-        self.assertEqual([d["title"] for d in docs], ["NDA - Blume", "Financial model v3"])
+        self.assertEqual([d["title"] for d in docs], ["NDA - Northwind", "Financial model v3"])
         self.assertEqual({d["file_type"] for d in docs}, {"PDF", "Word"})
         self.assertEqual(docs[0]["file_size"], len(PDF))
         self.assertEqual(docs[0]["created_by"], self.admin.pk)
         self.assertEqual(docs[0]["created_at"], timezone.localdate().isoformat())
-        self.assertEqual({t["title"] for t in docs[0]["tagged"]}, {"Acme Foods", "Blume Ventures"})
+        self.assertEqual({t["title"] for t in docs[0]["tagged"]}, {"Acme Foods", "Northwind Ventures"})
         stored = Document.objects.get(pk=docs[0]["id"]).file.name
         self.assertRegex(stored, r"^vault/\d{4}/\d{2}/[0-9a-f]{32}\.pdf$")
         self.assertTrue((Path(settings.MEDIA_ROOT) / stored).exists())

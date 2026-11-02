@@ -86,7 +86,7 @@ export function formatBirthday(value: string | null | undefined, p: Prefs): stri
   return year ? `${day} ${mon} ${year}` : `${day} ${mon}`;
 }
 
-/** wa.me link for numbers written with a country code (+91 98200 12345). */
+/** wa.me link for numbers written with a country code (+91 90000 00011). */
 export function whatsappLink(phone: string): string | null {
   const t = phone.trim();
   const digits = t.replace(/\D/g, "");

@@ -78,7 +78,7 @@ export default function MyTasks({ module, params }: { module: ModuleSchema; para
       {module.perms.create && (
         <form onSubmit={add}>
           <Group gap="xs" align="flex-end" wrap="wrap">
-            <TextInput style={{ flex: 1, minWidth: 260 }} placeholder="Add a task for yourself, e.g. Send teaser to Blume"
+            <TextInput style={{ flex: 1, minWidth: 260 }} placeholder="Add a task for yourself, e.g. Send teaser to Northwind"
               aria-label="New task" value={title} onChange={(e) => setTitle(e.currentTarget.value)} />
             <DateInput w={170} placeholder="Due date (optional)" aria-label="Due date" clearable valueFormat={me.date_format}
               dateParser={dateParser(me.date_format)} value={due} onChange={setDue} />

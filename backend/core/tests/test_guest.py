@@ -178,7 +178,7 @@ class DemoSiteTests(DataDirMixin, TestCase):
         self.assertTrue(guest.demo_reload_due())
         guest.reload_demo()
         self.assertFalse(Investor.objects.filter(firm_name="Added by a guest").exists())
-        self.assertTrue(Investor.objects.filter(firm_name="Blume Ventures").exists())
+        self.assertTrue(Investor.objects.filter(firm_name="Northwind Ventures").exists())
         self.assertEqual(User.objects.filter(email=sample.GUEST_EMAIL).count(), 1)
 
     def test_demo_never_loads_over_a_real_install(self):

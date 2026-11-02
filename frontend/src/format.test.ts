@@ -53,8 +53,8 @@ describe("formatBirthday", () => {
 
 describe("whatsappLink", () => {
   it("needs a country code", () => {
-    expect(whatsappLink("+91 98200 12345")).toBe("https://wa.me/919820012345");
-    expect(whatsappLink("98200 12345")).toBeNull();
+    expect(whatsappLink("+91 90000 00011")).toBe("https://wa.me/919000000011");
+    expect(whatsappLink("90000 00011")).toBeNull();
     expect(whatsappLink("+91 22")).toBeNull();
   });
 });

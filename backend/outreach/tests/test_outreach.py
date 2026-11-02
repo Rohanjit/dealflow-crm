@@ -251,7 +251,7 @@ class ContactsCompanySideTests(OutreachBase):
         o = self.outreach()
         r = self.client.post("/api/m/contacts/", {"full_name": "Ravi CFO", "firm": self.company_link()}, format="json")
         self.assertEqual(r.json()["firm"]["module"], "companies")
-        self.client.post("/api/m/investors/", {"firm_name": "Blume"}, format="json")
+        self.client.post("/api/m/investors/", {"firm_name": "Northwind"}, format="json")
         names = lambda qs: [x["full_name"] for x in self.client.get("/api/m/contacts/?" + qs).json()["results"]]  # noqa: E731
         self.assertEqual(names("firm_type=companies"), ["Ravi CFO"])
         self.assertEqual(names(f"firm={self.company_link()}"), ["Ravi CFO"])

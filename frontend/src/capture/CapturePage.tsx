@@ -173,7 +173,7 @@ function Paste({ onRead }: { onRead: (v: Values) => void }) {
     <Paper withBorder p="lg">
       <Stack gap="sm">
         <Title order={5}>Paste a signature or business card text</Title>
-        <Textarea autosize minRows={4} maxRows={12} placeholder={"Meera Rao\nPrincipal | Kalaari Capital\nM: +91 98450 12345\nmeera@kalaari.com"}
+        <Textarea autosize minRows={4} maxRows={12} placeholder={"Meera Rao\nPrincipal | Larkspur Capital\nM: +91 90000 00012\nmeera@larkspur.example"}
           value={text} onChange={(e) => setText(e.currentTarget.value)} />
         <Group><Button variant="default" onClick={read} loading={busy} disabled={!text.trim()}>Read the details</Button></Group>
       </Stack>

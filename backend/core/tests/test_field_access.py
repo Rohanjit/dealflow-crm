@@ -33,8 +33,8 @@ class FieldAccessBase(APITestBase):
         self.deal = Deal.objects.create(company=self.co, stage="data_collection", success_fee_pct=2.5,
                                         agreed_retainer_amount=10, agreed_retainer_currency="INR", agreed_retainer_unit="Lakh",
                                         target_close_date="2026-11-01", created_by=a, updated_by=a)
-        self.blume = Investor.objects.create(firm_name="Blume Ventures", created_by=a, updated_by=a)
-        self.priya = Contact.objects.create(full_name="Priya Shah", investor=self.blume, work_email="priya@blume.vc",
+        self.northwind = Investor.objects.create(firm_name="Northwind Ventures", created_by=a, updated_by=a)
+        self.priya = Contact.objects.create(full_name="Priya Shah", investor=self.northwind, work_email="priya@northwind.example",
                                             designation="Partner", created_by=a, updated_by=a)
 
 
@@ -61,9 +61,9 @@ class ReadTests(FieldAccessBase):
         self.assertEqual(next(s for s in inv_sections.values() if s.get("module") == "contacts")["status"], "hidden")
 
     def test_search_filters_and_sorting_ignore_hidden_fields(self):
-        self.assertEqual(self.c.get("/api/m/contacts/?q=priya@blume").json()["count"], 0)
-        self.assertEqual(self.client.get("/api/m/contacts/?q=priya@blume").json()["count"], 1)
-        self.assertEqual(self.c.get(f"/api/m/contacts/?firm=investors:{self.blume.pk}").json()["count"], 0)
+        self.assertEqual(self.c.get("/api/m/contacts/?q=priya@northwind").json()["count"], 0)
+        self.assertEqual(self.client.get("/api/m/contacts/?q=priya@northwind").json()["count"], 1)
+        self.assertEqual(self.c.get(f"/api/m/contacts/?firm=investors:{self.northwind.pk}").json()["count"], 0)
         self.assertEqual(self.c.get("/api/m/deals/?success_fee_pct_min=99").json()["count"], 1)  # filter ignored
         self.assertEqual(self.c.get("/api/m/deals/?ordering=-success_fee_pct").status_code, 200)
 
@@ -72,7 +72,7 @@ class ReadTests(FieldAccessBase):
         self.assertEqual(hit["subtitle"], "")
         self.assertIn("Pune", self.client.get("/api/lookup/companies/?q=zeta").json()[0]["subtitle"])
         found = self.c.get("/api/search/?q=priya").json()
-        self.assertNotIn("Blume", str(found))
+        self.assertNotIn("Northwind", str(found))
 
     def test_export_and_report(self):
         r = self.c.get("/api/m/deals/export/?columns=success_fee_pct,agreed_retainer,stage")
@@ -95,7 +95,7 @@ class ReadTests(FieldAccessBase):
         self.assertIsNone(m["facts"]["sector"])
         sector = next(x for x in m["results"][0]["reasons"] if x["factor"] == "sector")
         self.assertEqual(sector["text"], "Not shown to your role")
-        people = self.c.get(f"/api/mail/recipients/?about=investors:{self.blume.pk}").json()["people"]
+        people = self.c.get(f"/api/mail/recipients/?about=investors:{self.northwind.pk}").json()["people"]
         self.assertEqual(people, [])  # only a work email, which this role can't see
 
 

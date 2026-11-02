@@ -25,7 +25,7 @@ class TaskBase(APITestBase):
 
 class TaskBasicsTests(TaskBase):
     def test_defaults_and_due_date_and_time(self):
-        t = self.post({"title": "Send teaser to Blume", "due": "2026-10-12T14:30"})
+        t = self.post({"title": "Send teaser to Northwind", "due": "2026-10-12T14:30"})
         self.assertEqual((t["status"], t["priority"], t["assigned_to"], t["created_by"]),
                          ("open", "medium", self.admin.pk, self.admin.pk))
         self.assertEqual(t["due"], "2026-10-12T14:30")
@@ -68,12 +68,12 @@ class TaskLinksTests(TaskBase):
         self.company = self.client.post("/api/m/companies/", {"name": "Acme Foods"}, format="json").json()
         self.deal = self.client.post("/api/m/deals/", {"company": f"companies:{self.company['id']}"}, format="json").json()
         self.outreach = self.client.post("/api/m/outreach/", {"company": f"companies:{self.company['id']}"}, format="json").json()
-        self.investor = self.client.post("/api/m/investors/", {"firm_name": "Blume Ventures"}, format="json").json()
+        self.investor = self.client.post("/api/m/investors/", {"firm_name": "Northwind Ventures"}, format="json").json()
         self.contact = self.client.post("/api/m/contacts/", {"full_name": "Ravi Kulkarni"}, format="json").json()
 
     def test_link_to_each_kind_of_record(self):
         for module, rec, title in (("deals", self.deal, "Acme Foods"), ("outreach", self.outreach, "Acme Foods"),
-                                   ("investors", self.investor, "Blume Ventures"), ("contacts", self.contact, "Ravi Kulkarni")):
+                                   ("investors", self.investor, "Northwind Ventures"), ("contacts", self.contact, "Ravi Kulkarni")):
             t = self.post({"title": f"About {module}", "related": f"{module}:{rec['id']}"})
             self.assertEqual((t["related"]["module"], t["related"]["title"]), (module, title))
             listed = self.client.get(f"{URL}?related={module}:{rec['id']}").json()["results"]

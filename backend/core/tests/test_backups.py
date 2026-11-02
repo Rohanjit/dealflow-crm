@@ -20,7 +20,7 @@ from .base import APITestBase
 
 class BackupTests(APITestBase):
     def test_backup_and_restore(self):
-        self.client.post("/api/m/investors/", {"firm_name": "Blume", "tags": ["a"]}, format="json")
+        self.client.post("/api/m/investors/", {"firm_name": "Northwind", "tags": ["a"]}, format="json")
         media = settings.MEDIA_ROOT
         media.mkdir(parents=True, exist_ok=True)
         (media / "doc.txt").write_text("secret deal memo")
@@ -34,7 +34,7 @@ class BackupTests(APITestBase):
         blob = b"".join(dl.streaming_content)
         # Encrypted (decision 63, S4): nothing readable without the backup key.
         self.assertTrue(blob.startswith(b"DFBK"))
-        self.assertNotIn(b"Blume", blob)
+        self.assertNotIn(b"Northwind", blob)
         from core import backup_crypto
 
         src, plain = settings.DATA_DIR / "t.dfb", settings.DATA_DIR / "t.zip"
@@ -49,7 +49,7 @@ class BackupTests(APITestBase):
         (media / "doc.txt").unlink()
         r = self.client.post("/api/backups/restore/", {"file": SimpleUploadedFile("b.dfb", blob), "confirm": "RESTORE", "password": self.password}, format="multipart")
         self.assertEqual(r.status_code, 200, r.content)
-        self.assertEqual(list(Investor.objects.values_list("firm_name", flat=True)), ["Blume"])
+        self.assertEqual(list(Investor.objects.values_list("firm_name", flat=True)), ["Northwind"])
         self.assertEqual([t.name for t in Investor.objects.get().tags.all()], ["a"])
         self.assertEqual((media / "doc.txt").read_text(), "secret deal memo")
         self.assertTrue(r.json()["safety_backup"].startswith("dealflow-pre-restore-"))
@@ -62,7 +62,7 @@ class BackupTests(APITestBase):
         from tasks.models import Task
 
         c = self.client
-        inv = c.post("/api/m/investors/", {"firm_name": "Blume"}, format="json").json()
+        inv = c.post("/api/m/investors/", {"firm_name": "Northwind"}, format="json").json()
         co = c.post("/api/m/companies/", {"name": "Acme Foods"}, format="json").json()
         c.post("/api/m/contacts/", {"full_name": "Ravi", "firm": f"companies:{co['id']}"}, format="json")
         o = c.post("/api/m/outreach/", {"company": f"companies:{co['id']}", "stage": "won"}, format="json").json()
@@ -208,7 +208,7 @@ class StreamingBackupTests(APITestBase):
     def test_backup_is_streamed_and_restores_from_the_encrypted_file(self):
         from core import backup_crypto
 
-        self.client.post("/api/m/investors/", {"firm_name": "Blume", "tags": ["a", "b"]}, format="json")
+        self.client.post("/api/m/investors/", {"firm_name": "Northwind", "tags": ["a", "b"]}, format="json")
         settings.MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
         (settings.MEDIA_ROOT / "doc.bin").write_bytes(b"DFV1 already encrypted")
         made = []

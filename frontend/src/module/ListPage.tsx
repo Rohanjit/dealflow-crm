@@ -574,7 +574,7 @@ export function FilterDrawer({
   );
 }
 
-/** Filter by specific linked records (e.g. contacts at Blume and Kotak). Searches on the server. */
+/** Filter by specific linked records (e.g. contacts at Northwind and Harbourline). Searches on the server. */
 function LinkFilter({ f, value, onChange }: { f: FieldSchema; value: string[]; onChange: (v: string[]) => void }) {
   const labels = useModuleLabels();
   const [search, setSearch] = useState("");

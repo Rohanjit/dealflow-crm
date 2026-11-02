@@ -41,11 +41,11 @@ class MailBase(APITestBase):
         ms.public_url = "https://crm.test"
         ms.save()
         a = self.admin
-        self.blume = Investor.objects.create(firm_name="Blume Ventures", created_by=a, updated_by=a)
-        self.priya = Contact.objects.create(full_name="Ms. Priya Shah", designation="Partner", investor=self.blume,
-                                            work_email="priya@blume.vc", primary_contact=True, created_by=a, updated_by=a)
+        self.northwind = Investor.objects.create(firm_name="Northwind Ventures", created_by=a, updated_by=a)
+        self.priya = Contact.objects.create(full_name="Ms. Priya Shah", designation="Partner", investor=self.northwind,
+                                            work_email="priya@northwind.example", primary_contact=True, created_by=a, updated_by=a)
         self.zeta = Company.objects.create(name="Zeta Pharma", created_by=a, updated_by=a)
-        self.ravi = Contact.objects.create(full_name="Ravi Menon", company=self.zeta, work_email="ravi@zeta.in",
+        self.ravi = Contact.objects.create(full_name="Ravi Menon", company=self.zeta, work_email="ravi@zeta.example",
                                            created_by=a, updated_by=a)
         self.deal = Deal.objects.create(company=self.zeta, stage="data_collection", created_by=a, updated_by=a)
 
@@ -64,7 +64,7 @@ class MailBase(APITestBase):
         return MailAccount.objects.get(user=user)
 
     def send(self, client=None, status=201, **body):
-        data = {"about": f"deals:{self.deal.pk}", "to": ["ravi@zeta.in"], "subject": "Data request",
+        data = {"about": f"deals:{self.deal.pk}", "to": ["ravi@zeta.example"], "subject": "Data request",
                 "body": "Hi Ravi,\n\nPlease share the FY25 numbers.", **body}
         r = (client or self.client).post("/api/mail/send/", data, format="json")
         self.assertEqual(r.status_code, status, r.content)
@@ -158,7 +158,7 @@ class SendTests(MailBase):
         self.assertIn("mail.google.com", r["web_link"])
         msg = self.fake.gmail_sent[0]
         self.assertEqual(msg["Subject"], "Data request")
-        self.assertIn("ravi@zeta.in", msg["To"])
+        self.assertIn("ravi@zeta.example", msg["To"])
         self.assertIn("Ravi Menon", msg["To"])
         self.assertEqual([p.get_filename() for p in msg.iter_attachments()], ["Teaser.pdf"])
         # Logged on the deal and on Ravi's contact page, confirmed.
@@ -178,10 +178,10 @@ class SendTests(MailBase):
 
     def test_email_to_an_investor_contact_moves_the_investor_too(self):
         self.connect("gmail")
-        self.send(about=f"investors:{self.blume.pk}", to=["priya@blume.vc"])
-        self.blume.refresh_from_db()
-        self.assertEqual(self.blume.last_contacted, timezone.localdate())
-        self.assertEqual(Note.objects.filter(module="investors", record_id=self.blume.pk, kind="email").count(), 1)
+        self.send(about=f"investors:{self.northwind.pk}", to=["priya@northwind.example"])
+        self.northwind.refresh_from_db()
+        self.assertEqual(self.northwind.last_contacted, timezone.localdate())
+        self.assertEqual(Note.objects.filter(module="investors", record_id=self.northwind.pk, kind="email").count(), 1)
 
     def test_last_contacted_never_moves_backwards(self):
         self.connect("gmail")
@@ -285,8 +285,8 @@ class SendTests(MailBase):
 
     def test_suggestions_list_the_record_people(self):
         r = self.client.get(f"/api/mail/recipients/?about=deals:{self.deal.pk}").json()
-        self.assertEqual([p["email"] for p in r["people"]], ["ravi@zeta.in"])
-        r = self.client.get(f"/api/mail/recipients/?about=investors:{self.blume.pk}").json()
+        self.assertEqual([p["email"] for p in r["people"]], ["ravi@zeta.example"])
+        r = self.client.get(f"/api/mail/recipients/?about=investors:{self.northwind.pk}").json()
         self.assertEqual(r["people"][0]["name"], "Ms. Priya Shah")
 
     def test_vault_documents_need_an_open_vault(self):
@@ -318,12 +318,12 @@ class CampaignTests(MailBase):
         super().setUp()
         a = self.admin
         self.people = [self.priya, self.ravi]
-        self.people.append(Contact.objects.create(full_name="Dr. Neha Rao", investor=self.blume, work_email="neha@blume.vc",
+        self.people.append(Contact.objects.create(full_name="Dr. Neha Rao", investor=self.northwind, work_email="neha@northwind.example",
                                                   created_by=a, updated_by=a))
         self.people.append(Contact.objects.create(full_name="No Email", created_by=a, updated_by=a))
         self.people.append(Contact.objects.create(full_name="Opted Out", work_email="out@x.com", email_opt_out=True,
                                                   created_by=a, updated_by=a))
-        self.people.append(Contact.objects.create(full_name="Priya Again", personal_email="PRIYA@blume.vc",
+        self.people.append(Contact.objects.create(full_name="Priya Again", personal_email="PRIYA@northwind.example",
                                                   created_by=a, updated_by=a))
 
     def make(self, client=None, status=201, **body):
@@ -343,7 +343,7 @@ class CampaignTests(MailBase):
         p = self.client.get(f"/api/mail/campaigns/{c['id']}/preview/").json()
         self.assertEqual(p["subject"], "Priya, our Q3 note")
         self.assertIn("Dear Priya,", p["body"])
-        self.assertIn("Blume Ventures", p["body"])
+        self.assertIn("Northwind Ventures", p["body"])
         self.assertIn("Asha Admin", p["body"])
         self.assertIn(MailSettings.load().opt_out_text, p["body"])
         # Ravi works at a company: {firm} is its name.
@@ -362,11 +362,11 @@ class CampaignTests(MailBase):
         self.assertEqual(len(self.client.get("/api/mail/campaigns/").json()), 1)
 
     def test_from_investors_and_from_list_filters(self):
-        c = self.make(recipients={"investors": [self.blume.pk]})
+        c = self.make(recipients={"investors": [self.northwind.pk]})
         self.assertEqual(c["counts"]["queued"], 1)  # the primary contact only
-        c = self.make(recipients={"investors": [self.blume.pk], "who": "all"})
+        c = self.make(recipients={"investors": [self.northwind.pk], "who": "all"})
         self.assertEqual(c["counts"]["queued"], 2)
-        c = self.make(recipients={"module": "contacts", "query": {"q": "blume"}})
+        c = self.make(recipients={"module": "contacts", "query": {"q": "northwind"}})
         self.assertEqual((c["counts"]["total"], c["counts"]["queued"]), (3, 2))  # Priya twice: once skipped
 
     def test_start_and_send_in_batches_with_logs(self):
@@ -384,17 +384,17 @@ class CampaignTests(MailBase):
         self.assertEqual(camp.status, "done")
         sent = self.fake.gmail_sent
         self.assertEqual(sorted(m["To"] for m in sent),
-                         ['"Dr. Neha Rao" <neha@blume.vc>', '"Ms. Priya Shah" <priya@blume.vc>', "Ravi Menon <ravi@zeta.in>"])
+                         ['"Dr. Neha Rao" <neha@northwind.example>', '"Ms. Priya Shah" <priya@northwind.example>', "Ravi Menon <ravi@zeta.example>"])
         neha = next(m for m in sent if "neha" in m["To"])
         self.assertEqual(neha["Subject"], "Neha, our Q3 note")
         self.assertIn("List-Unsubscribe", neha)
         self.assertIn("unsubscribe", neha.get_body(("plain",)).get_content())
-        # Logged on each contact and on Blume's page (twice: two people there).
+        # Logged on each contact and on Northwind's page (twice: two people there).
         self.assertEqual(Note.objects.filter(module="contacts", kind="email").count(), 3)
         self.assertEqual(Note.objects.filter(module="investors", kind="email").count(), 2)
         self.assertEqual(Note.objects.filter(kind="email").first().meta["campaign_name"], "Fund update")
-        self.blume.refresh_from_db()
-        self.assertEqual(self.blume.last_contacted, timezone.localdate())
+        self.northwind.refresh_from_db()
+        self.assertEqual(self.northwind.last_contacted, timezone.localdate())
         d = self.client.get(f"/api/mail/campaigns/{c['id']}/").json()
         self.assertEqual((d["counts"]["sent"], d["confirmed"]), (3, 3))
 
@@ -490,8 +490,8 @@ class TemplateTests(MailBase):
 
 class HelperTests(APITestBase):
     def test_render_and_names(self):
-        self.assertEqual(campaigns.render("Hi {first_name|there}, {firm}", {"first_name": "", "firm": "Blume"}),
-                         "Hi there, Blume")
+        self.assertEqual(campaigns.render("Hi {first_name|there}, {firm}", {"first_name": "", "firm": "Northwind"}),
+                         "Hi there, Northwind")
         self.assertEqual(campaigns._split("Dr. Neha  Rao"), ("Neha", "Rao"))
         self.assertEqual(campaigns.unknown_fields("{first_name} {Bad} { full_name }"), ["Bad"])
 

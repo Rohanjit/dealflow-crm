@@ -128,7 +128,7 @@ def parse(text: str, sender_name: str = "", sender_email: str = "") -> dict:
     for ln in plain:
         if ln == out.get("full_name") or _same_person(ln, out.get("full_name", ""), "") and not TITLE_WORDS.search(ln):
             continue
-        # "Partner | Blume Ventures" or "Partner, Blume Ventures"
+        # "Partner | Northwind Ventures" or "Partner, Northwind Ventures"
         parts = [p.strip() for p in re.split(r"\s[|•·]\s|\s[-–]\s|,\s", ln) if p.strip()]
         for p in parts:
             if "designation" not in out and TITLE_WORDS.search(p) and not COMPANY_WORDS.search(p) and len(p) <= 60:

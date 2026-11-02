@@ -227,25 +227,25 @@ class DealTeamTests(DealBase):
         self.assertIn("deactivated", r.json()["team_analyst"])
 
     def test_lead_investors(self):
-        blume = self.investor("Blume Ventures")
-        accel = self.investor("Accel")
-        d = self.deal(lead_investors=[f"investors:{blume['id']}", {"module": "investors", "id": accel["id"]}])
-        self.assertEqual([i["title"] for i in d["lead_investors"]], ["Accel", "Blume Ventures"])
-        rows = self.client.get(f"{D_URL}?lead_investors=investors:{blume['id']},investors:{accel['id']}&view=all").json()
+        northwind = self.investor("Northwind Ventures")
+        arclight = self.investor("Arclight")
+        d = self.deal(lead_investors=[f"investors:{northwind['id']}", {"module": "investors", "id": arclight["id"]}])
+        self.assertEqual([i["title"] for i in d["lead_investors"]], ["Arclight", "Northwind Ventures"])
+        rows = self.client.get(f"{D_URL}?lead_investors=investors:{northwind['id']},investors:{arclight['id']}&view=all").json()
         self.assertEqual(rows["count"], 1)
         # archived investors stay linked but can't be newly added
-        self.client.delete(f"/api/m/investors/{accel['id']}/")
-        r = self.patch(f"{D_URL}{d['id']}/", {"lead_investors": [f"investors:{accel['id']}", f"investors:{blume['id']}"]})
-        self.assertTrue(next(i for i in r["lead_investors"] if i["id"] == accel["id"])["archived"])
+        self.client.delete(f"/api/m/investors/{arclight['id']}/")
+        r = self.patch(f"{D_URL}{d['id']}/", {"lead_investors": [f"investors:{arclight['id']}", f"investors:{northwind['id']}"]})
+        self.assertTrue(next(i for i in r["lead_investors"] if i["id"] == arclight["id"])["archived"])
         other = self.deal()
-        r = self.client.patch(f"{D_URL}{other['id']}/", {"lead_investors": [f"investors:{accel['id']}"]}, format="json")
+        r = self.client.patch(f"{D_URL}{other['id']}/", {"lead_investors": [f"investors:{arclight['id']}"]}, format="json")
         self.assertEqual(r.status_code, 400)
         # export writes the names in one cell and the team as names
         self.patch(f"{D_URL}{d['id']}/", {"team_vp": [self.vp.pk]})
         wb = load_workbook(io.BytesIO(self.client.get(f"{D_URL}export/?view=all").content))
         header = [c.value for c in wb.active[1]]
         row = next(r for r in wb.active.iter_rows(min_row=2, values_only=True) if r[header.index("Lead investor(s)")])
-        self.assertEqual(row[header.index("Lead investor(s)")], "Accel, Blume Ventures")
+        self.assertEqual(row[header.index("Lead investor(s)")], "Arclight, Northwind Ventures")
         self.assertEqual(row[header.index("VP")], "Vikram VP")
 
 
@@ -253,15 +253,15 @@ class TrackerTests(DealBase):
     def setUp(self):
         super().setUp()
         self.d = self.deal(stage="investor_outreach")
-        self.blume = self.investor("Blume Ventures")
+        self.northwind = self.investor("Northwind Ventures")
 
     def track(self, inv, **kw):
         return self.post(T_URL, {"deal": f"deals:{self.d['id']}", "investor": f"investors:{inv['id']}", **kw})
 
     def test_add_move_decline(self):
-        t = self.track(self.blume)
-        self.assertEqual((t["_title"], t["stage"], t["status"]), ("Blume Ventures", "identified", "open"))
-        r = self.client.post(T_URL, {"deal": f"deals:{self.d['id']}", "investor": f"investors:{self.blume['id']}"}, format="json")
+        t = self.track(self.northwind)
+        self.assertEqual((t["_title"], t["stage"], t["status"]), ("Northwind Ventures", "identified", "open"))
+        r = self.client.post(T_URL, {"deal": f"deals:{self.d['id']}", "investor": f"investors:{self.northwind['id']}"}, format="json")
         self.assertEqual(r.status_code, 400)
         self.assertIn("already", r.json()["investor"])
         url = f"{T_URL}{t['id']}/"
@@ -272,25 +272,25 @@ class TrackerTests(DealBase):
         r = self.patch(url, {"status": "declined", "decline_reason": self.opt("decline_reasons", "Valuation mismatch").pk})
         self.assertEqual((r["stage"], r["status"]), ("nda_signed", "declined"))
         self.assertEqual(self.notes("deal_investors", t["id"])[0], "Declined at NDA signed · Valuation mismatch")
-        accel = self.investor("Accel")
-        t2 = self.track(accel, stage="teaser_sent")
+        arclight = self.investor("Arclight")
+        t2 = self.track(arclight, stage="teaser_sent")
         self.patch(f"{T_URL}{t2['id']}/", {"status": "no_response"})
         self.assertEqual(self.notes("deal_investors", t2["id"])[0], "No response at Teaser sent")
         rows = self.client.get(f"{T_URL}?deal=deals:{self.d['id']}").json()["results"]
-        self.assertEqual({r["_title"] for r in rows}, {"Blume Ventures", "Accel"})
+        self.assertEqual({r["_title"] for r in rows}, {"Northwind Ventures", "Arclight"})
 
     def test_investor_deal_history(self):
-        t = self.track(self.blume, stage="meeting_held")
+        t = self.track(self.northwind, stage="meeting_held")
         other = self.deal()
-        self.post(T_URL, {"deal": f"deals:{other['id']}", "investor": f"investors:{self.blume['id']}"})
-        history = self.client.get(f"{T_URL}?investor=investors:{self.blume['id']}").json()["results"]
+        self.post(T_URL, {"deal": f"deals:{other['id']}", "investor": f"investors:{self.northwind['id']}"})
+        history = self.client.get(f"{T_URL}?investor=investors:{self.northwind['id']}").json()["results"]
         self.assertEqual(len(history), 2)
         self.assertEqual(history[1]["deal"]["title"], "Acme Foods")
         # entries of archived deals drop out of the history, and the tracker isn't in global search
         self.client.delete(f"{D_URL}{other['id']}/")
-        history = self.client.get(f"{T_URL}?investor=investors:{self.blume['id']}").json()["results"]
+        history = self.client.get(f"{T_URL}?investor=investors:{self.northwind['id']}").json()["results"]
         self.assertEqual([h["id"] for h in history], [t["id"]])
-        modules = {r["module"] for r in self.client.get("/api/search/?q=blume").json()["results"]}
+        modules = {r["module"] for r in self.client.get("/api/search/?q=northwind").json()["results"]}
         self.assertEqual(modules, {"investors"})
         schema = self.client.get("/api/schema/").json()
         inv = next(m for m in schema["modules"] if m["key"] == "investors")
@@ -301,7 +301,7 @@ class TrackerTests(DealBase):
         viewer = self.make_user("v@firm.com", self.make_role("Viewers", {"deals": ["view"], "investors": ["view"]}))
         c = self.client_for(viewer)
         self.assertEqual(c.get(f"{T_URL}?deal=deals:{self.d['id']}").status_code, 200)
-        r = c.post(T_URL, {"deal": f"deals:{self.d['id']}", "investor": f"investors:{self.blume['id']}"}, format="json")
+        r = c.post(T_URL, {"deal": f"deals:{self.d['id']}", "investor": f"investors:{self.northwind['id']}"}, format="json")
         self.assertEqual(r.status_code, 403)
         outsider = self.make_user("o@firm.com", self.make_role("Investor desk", {"investors": ["view", "edit"]}))
         self.assertEqual(self.client_for(outsider).get(T_URL).status_code, 403)
@@ -311,10 +311,10 @@ class TrackerTests(DealBase):
         # people who can add to trackers can find investor names for the picker
         editor = self.make_user("e@firm.com", self.make_role("Deal team", {"deals": ["view", "create", "edit"]}))
         names = self.client_for(editor).get("/api/lookup/investors/?q=blu").json()
-        self.assertEqual([n["title"] for n in names], ["Blume Ventures"])
+        self.assertEqual([n["title"] for n in names], ["Northwind Ventures"])
 
     def test_purging_a_deal_removes_its_tracker(self):
-        t = self.track(self.blume)
+        t = self.track(self.northwind)
         self.assertTrue(Note.objects.filter(module="deal_investors", record_id=t["id"]).exists())
         self.client.delete(f"{D_URL}{self.d['id']}/")
         r = self.client.delete(f"/api/archive/deals/{self.d['id']}/")
@@ -323,9 +323,9 @@ class TrackerTests(DealBase):
         self.assertFalse(Note.objects.filter(module__in=["deals", "deal_investors"]).exists())
 
     def test_investor_on_a_tracker_cant_be_purged(self):
-        self.track(self.blume)
-        self.client.delete(f"/api/m/investors/{self.blume['id']}/")
-        r = self.client.delete(f"/api/archive/investors/{self.blume['id']}/")
+        self.track(self.northwind)
+        self.client.delete(f"/api/m/investors/{self.northwind['id']}/")
+        r = self.client.delete(f"/api/archive/investors/{self.northwind['id']}/")
         self.assertEqual(r.status_code, 400)
         self.assertIn("deal tracker entries", r.json()["detail"])
 
@@ -423,7 +423,7 @@ class DashboardTests(DealBase):
 class TrackerRestoreTests(DealBase):
     def test_restore_refused_when_investor_was_added_again(self):
         d = self.deal()
-        inv = self.investor("Blume Ventures")
+        inv = self.investor("Northwind Ventures")
         body = {"deal": f"deals:{d['id']}", "investor": f"investors:{inv['id']}"}
         first = self.post(T_URL, body)
         self.client.delete(f"{T_URL}{first['id']}/")

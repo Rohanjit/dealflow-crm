@@ -65,7 +65,7 @@ FIELDS = [
 ]
 
 
-# Words that don't tell two firms apart ("Blume" and "Blume Ventures" are the same firm).
+# Words that don't tell two firms apart ("Northwind" and "Northwind Ventures" are the same firm).
 _GENERIC = {
     "ventures", "venture", "capital", "partners", "partner", "advisors", "advisers", "advisory", "fund", "funds",
     "llp", "ltd", "limited", "pvt", "private", "inc", "llc", "management", "investments", "investment",

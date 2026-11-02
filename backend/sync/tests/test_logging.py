@@ -38,11 +38,11 @@ class SyncBase(APITestBase):
         ms.public_url = "https://crm.test"
         ms.save()
         a = self.admin
-        self.blume = Investor.objects.create(firm_name="Blume Ventures", created_by=a, updated_by=a)
-        self.priya = Contact.objects.create(full_name="Priya Shah", investor=self.blume, work_email="priya@blume.vc",
+        self.northwind = Investor.objects.create(firm_name="Northwind Ventures", created_by=a, updated_by=a)
+        self.priya = Contact.objects.create(full_name="Priya Shah", investor=self.northwind, work_email="priya@northwind.example",
                                             created_by=a, updated_by=a)
         self.zeta = Company.objects.create(name="Zeta Pharma", created_by=a, updated_by=a)
-        self.ravi = Contact.objects.create(full_name="Ravi Menon", company=self.zeta, work_email="ravi@zeta.in",
+        self.ravi = Contact.objects.create(full_name="Ravi Menon", company=self.zeta, work_email="ravi@zeta.example",
                                            created_by=a, updated_by=a)
         self.deal = Deal.objects.create(company=self.zeta, stage="data_collection", created_by=a, updated_by=a)
 
@@ -112,7 +112,7 @@ class ConnectTests(SyncBase):
 
     def test_disconnect_keeps_the_log(self):
         self.connect()
-        self.cloud.add_gmail("m1", mime("ravi@zeta.in", ["admin@firm.com"], "Numbers", "Here they are"))
+        self.cloud.add_gmail("m1", mime("ravi@zeta.example", ["admin@firm.com"], "Numbers", "Here they are"))
         self.run_sync()
         r = self.client.delete(f"/api/sync/connections/{self.conn().pk}/")
         self.assertEqual(r.status_code, 204)
@@ -127,7 +127,7 @@ class EmailLoggingTests(SyncBase):
         self.connect()
 
     def test_email_with_a_contact_is_logged_on_contact_firm_and_deal(self):
-        self.cloud.add_gmail("m1", mime("Ravi Menon <ravi@zeta.in>", ["admin@firm.com"], "Q3 numbers", "Attached.",
+        self.cloud.add_gmail("m1", mime("Ravi Menon <ravi@zeta.example>", ["admin@firm.com"], "Q3 numbers", "Attached.",
                                         attachments=[("Model.xlsx", "application/vnd.ms-excel", b"PK..")]))
         counts = self.run_sync()
         self.assertEqual(counts["emails"], 1)
@@ -149,21 +149,21 @@ class EmailLoggingTests(SyncBase):
     def test_only_people_in_dealflow_and_never_colleagues_only(self):
         self.cloud.add_gmail("m1", mime("colleague@firm.com", ["admin@firm.com"], "Lunch?", "x"))
         self.cloud.add_gmail("m2", mime("stranger@else.com", ["admin@firm.com"], "Hello", "x"))
-        self.cloud.add_gmail("m3", mime("spam@zeta.in", ["admin@firm.com"], "Junk", "x"))
-        self.cloud.add_gmail("m4", mime("ravi@zeta.in", ["admin@firm.com"], "Spam folder", "x"), labels=["SPAM"])
-        self.cloud.add_gmail("m5", mime("ravi@zeta.in", ["admin@firm.com"], "Draft", "x"), labels=["DRAFT"])
+        self.cloud.add_gmail("m3", mime("spam@zeta.example", ["admin@firm.com"], "Junk", "x"))
+        self.cloud.add_gmail("m4", mime("ravi@zeta.example", ["admin@firm.com"], "Spam folder", "x"), labels=["SPAM"])
+        self.cloud.add_gmail("m5", mime("ravi@zeta.example", ["admin@firm.com"], "Draft", "x"), labels=["DRAFT"])
         self.assertEqual(self.run_sync()["emails"], 0)
         self.assertFalse(Item.objects.exists())
 
     def test_nothing_from_before_connecting(self):
-        old = mime("ravi@zeta.in", ["admin@firm.com"], "Old news", "x")
+        old = mime("ravi@zeta.example", ["admin@firm.com"], "Old news", "x")
         self.cloud.add_gmail("m0", old, at=timezone.now() - dt.timedelta(days=30))
         self.assertEqual(self.run_sync()["emails"], 0)
 
     def test_several_open_deals_ask_the_owner(self):
         a = self.admin
         second = Outreach.objects.create(company=self.zeta, stage="pitched", created_by=a, updated_by=a)
-        self.cloud.add_gmail("m1", mime("ravi@zeta.in", ["admin@firm.com"], "Which one?", "x"))
+        self.cloud.add_gmail("m1", mime("ravi@zeta.example", ["admin@firm.com"], "Which one?", "x"))
         self.run_sync()
         item = Item.objects.get()
         self.assertEqual(set(item.choices), {f"deals:{self.deal.pk}", f"outreach:{second.pk}"})
@@ -181,7 +181,7 @@ class EmailLoggingTests(SyncBase):
     def test_choosing_none(self):
         a = self.admin
         Outreach.objects.create(company=self.zeta, stage="pitched", created_by=a, updated_by=a)
-        self.cloud.add_gmail("m1", mime("ravi@zeta.in", ["admin@firm.com"], "General", "x"))
+        self.cloud.add_gmail("m1", mime("ravi@zeta.example", ["admin@firm.com"], "General", "x"))
         self.run_sync()
         item = Item.objects.get()
         r = self.client.post(f"/api/sync/items/{item.pk}/file/", {"ref": None}, format="json")
@@ -190,17 +190,17 @@ class EmailLoggingTests(SyncBase):
 
     def test_investor_contact_goes_on_their_tracker_entry(self):
         a = self.admin
-        entry = DealInvestor.objects.create(deal=self.deal, investor=self.blume, created_by=a, updated_by=a)
-        self.cloud.add_gmail("m1", mime("admin@firm.com", ["priya@blume.vc"], "Teaser", "x"), labels=["SENT"])
+        entry = DealInvestor.objects.create(deal=self.deal, investor=self.northwind, created_by=a, updated_by=a)
+        self.cloud.add_gmail("m1", mime("admin@firm.com", ["priya@northwind.example"], "Teaser", "x"), labels=["SENT"])
         self.run_sync()
         item = Item.objects.get()
         self.assertIn(f"deal_investors:{entry.pk}", item.records)
-        self.assertIn(f"investors:{self.blume.pk}", item.records)
-        self.blume.refresh_from_db()
-        self.assertEqual(self.blume.last_contacted, timezone.localdate())
+        self.assertIn(f"investors:{self.northwind.pk}", item.records)
+        self.northwind.refresh_from_db()
+        self.assertEqual(self.northwind.last_contacted, timezone.localdate())
 
     def test_only_the_owner_reads_the_text(self):
-        self.cloud.add_gmail("m1", mime("ravi@zeta.in", ["admin@firm.com"], "Private", "The valuation is 400"))
+        self.cloud.add_gmail("m1", mime("ravi@zeta.example", ["admin@firm.com"], "Private", "The valuation is 400"))
         self.run_sync()
         item = Item.objects.get()
         r = self.client.get(f"/api/sync/items/{item.pk}/")
@@ -214,13 +214,13 @@ class EmailLoggingTests(SyncBase):
         log = c.get(f"/api/m/contacts/{self.ravi.pk}/notes/").json()[0]
         self.assertEqual(log["meta"]["subject"], "Private")
         self.assertFalse(log["can_open"])
-        self.assertEqual({p["email"] for p in log["meta"]["participants"]}, {"ravi@zeta.in", "admin@firm.com"})
+        self.assertEqual({p["email"] for p in log["meta"]["participants"]}, {"ravi@zeta.example", "admin@firm.com"})
         self.assertFalse(log["can_edit"])
         self.assertEqual(c.patch(f"/api/notes/{log['id']}/", {"text": "x"}, format="json").status_code, 403)
 
     def test_same_email_in_two_mailboxes_is_logged_once(self):
-        self.cloud.add_gmail("m1", mime("ravi@zeta.in", ["admin@firm.com", "vp@firm.com"], "Both of us", "x",
-                                        message_id="<shared@zeta.in>"))
+        self.cloud.add_gmail("m1", mime("ravi@zeta.example", ["admin@firm.com", "vp@firm.com"], "Both of us", "x",
+                                        message_id="<shared@zeta.example>"))
         self.run_sync()
         vp = self.make_user("vp@firm.com", self.admin_role)
         conn2 = Connection.objects.create(user=vp, kind="google", email="vp@firm.com", secret=self.conn().secret,
@@ -233,7 +233,7 @@ class EmailLoggingTests(SyncBase):
         self.assertEqual(self.client_for(vp).get(f"/api/sync/items/{Item.objects.get().pk}/").status_code, 200)
 
     def test_restricted_deal_subject_is_withheld(self):
-        self.cloud.add_gmail("m1", mime("ravi@zeta.in", ["admin@firm.com"], "Project Falcon terms", "x"))
+        self.cloud.add_gmail("m1", mime("ravi@zeta.example", ["admin@firm.com"], "Project Falcon terms", "x"))
         self.run_sync()
         Deal.objects.filter(pk=self.deal.pk).update(restricted=True)
         member = self.make_user("an@firm.com", self.make_role("Analyst+", {m: ["view"] for m in
@@ -246,7 +246,7 @@ class EmailLoggingTests(SyncBase):
     def test_hidden_email_field_hides_addresses(self):
         from accounts.models import RoleFieldAccess
 
-        self.cloud.add_gmail("m1", mime("ravi@zeta.in", ["admin@firm.com"], "Hi", "x"))
+        self.cloud.add_gmail("m1", mime("ravi@zeta.example", ["admin@firm.com"], "Hi", "x"))
         self.run_sync()
         role = self.make_role("NoEmails", {m: ["view"] for m in ("contacts", "deals", "outreach", "investors")})
         RoleFieldAccess.objects.create(role=role, module="contacts", field="work_email", level="hidden")
@@ -255,15 +255,15 @@ class EmailLoggingTests(SyncBase):
         self.assertEqual(ravi["email"], "")
 
     def test_sent_from_dealflow_isnt_logged_twice(self):
-        SentEmail.objects.create(user=self.admin, provider="gmail", from_email="admin@firm.com", to=["ravi@zeta.in"],
+        SentEmail.objects.create(user=self.admin, provider="gmail", from_email="admin@firm.com", to=["ravi@zeta.example"],
                                  subject="From the composer", message_id="m1", status="confirmed")
-        self.cloud.add_gmail("m1", mime("admin@firm.com", ["ravi@zeta.in"], "From the composer", "x"), labels=["SENT"])
+        self.cloud.add_gmail("m1", mime("admin@firm.com", ["ravi@zeta.example"], "From the composer", "x"), labels=["SENT"])
         self.run_sync()
         self.assertEqual(self.notes(f"contacts:{self.ravi.pk}"), [])
         self.assertEqual(Item.objects.get().records, [])
 
     def test_save_attachment_to_vault(self):
-        self.cloud.add_gmail("m1", mime("ravi@zeta.in", ["admin@firm.com"], "IM", "see attached",
+        self.cloud.add_gmail("m1", mime("ravi@zeta.example", ["admin@firm.com"], "IM", "see attached",
                                         attachments=[("IM.pdf", "application/pdf", PDF)]))
         self.run_sync()
         item = Item.objects.get()
@@ -299,7 +299,7 @@ class MeetingTests(SyncBase):
 
     def test_upcoming_meeting_then_logged_when_it_ends(self):
         start = self.now + dt.timedelta(minutes=10)
-        self.cloud.add_gcal("e1", start, 30, "Zeta kickoff", ["ravi@zeta.in", "vp@firm.com"], description="Agenda: data")
+        self.cloud.add_gcal("e1", start, 30, "Zeta kickoff", ["ravi@zeta.example", "vp@firm.com"], description="Agenda: data")
         self.assertEqual(self.run_sync()["meetings"], 1)
         item = Item.objects.get(kind="meeting")
         self.assertFalse(item.logged)
@@ -324,8 +324,8 @@ class MeetingTests(SyncBase):
         self.assertEqual(self.notes(f"contacts:{self.ravi.pk}")[0].created_by, self.admin)
 
     def test_cancelled_or_removed_meetings_drop_out(self):
-        self.cloud.add_gcal("e1", self.now + dt.timedelta(days=1), 30, "Call", ["ravi@zeta.in"])
-        self.cloud.add_gcal("e2", self.now + dt.timedelta(days=2), 30, "Call 2", ["ravi@zeta.in"])
+        self.cloud.add_gcal("e1", self.now + dt.timedelta(days=1), 30, "Call", ["ravi@zeta.example"])
+        self.cloud.add_gcal("e2", self.now + dt.timedelta(days=2), 30, "Call 2", ["ravi@zeta.example"])
         self.run_sync()
         self.cloud.gcal["e1"]["status"] = "cancelled"
         del self.cloud.gcal["e2"]
@@ -344,12 +344,12 @@ class MeetingTests(SyncBase):
         start = (self.now + dt.timedelta(days=2)).replace(microsecond=0)
         r = self.client.post("/api/sync/schedule/", {
             "about": f"deals:{self.deal.pk}", "title": "Data review", "start": start.isoformat(), "minutes": 45,
-            "attendees": [{"email": "ravi@zeta.in", "name": "Ravi Menon"}], "location": "Zoom", "notes": "Bring the model",
+            "attendees": [{"email": "ravi@zeta.example", "name": "Ravi Menon"}], "location": "Zoom", "notes": "Bring the model",
         }, format="json")
         self.assertEqual(r.status_code, 201, r.content)
         made = self.cloud.created[0]
         self.assertEqual(made["sendUpdates"], "all")
-        self.assertEqual(made["attendees"][0]["email"], "ravi@zeta.in")
+        self.assertEqual(made["attendees"][0]["email"], "ravi@zeta.example")
         item = Item.objects.get(kind="meeting")
         self.assertIn(f"deals:{self.deal.pk}", item.records)
         self.assertEqual(self.client.get(f"/api/sync/meetings/?about=deals:{self.deal.pk}").json()[0]["subject"],
@@ -360,14 +360,14 @@ class MeetingTests(SyncBase):
         self.assertEqual(bad.status_code, 400)
         past = self.client.post("/api/sync/schedule/", {"about": f"deals:{self.deal.pk}", "title": "x",
                                                         "start": (self.now - dt.timedelta(days=1)).isoformat(),
-                                                        "attendees": ["ravi@zeta.in"]}, format="json")
+                                                        "attendees": ["ravi@zeta.example"]}, format="json")
         self.assertEqual(past.status_code, 400)
 
     def test_schedule_needs_a_calendar(self):
         Connection.objects.all().delete()
         r = self.client.post("/api/sync/schedule/", {"about": f"deals:{self.deal.pk}", "title": "x",
                                                      "start": (self.now + dt.timedelta(days=1)).isoformat(),
-                                                     "attendees": ["ravi@zeta.in"]}, format="json")
+                                                     "attendees": ["ravi@zeta.example"]}, format="json")
         self.assertEqual(r.json()["code"], "no_calendar")
 
 
@@ -376,10 +376,10 @@ class MicrosoftTests(SyncBase):
         q = self.connect("microsoft")
         self.assertIn("Mail.Read", q["scope"])
         self.assertNotIn("Mail.Send", q["scope"])
-        self.cloud.add_graph("g1", "ravi@zeta.in", ["admin@firm.com"], "Deck", text="Body here",
+        self.cloud.add_graph("g1", "ravi@zeta.example", ["admin@firm.com"], "Deck", text="Body here",
                              attachments=[("Deck.pdf", "application/pdf", PDF)])
-        self.cloud.add_graph("g2", "ravi@zeta.in", ["admin@firm.com"], "Junk mail", folder="junkemail")
-        self.cloud.add_graph_event("ev1", timezone.now() + dt.timedelta(hours=2), 30, "Site visit", ["ravi@zeta.in"])
+        self.cloud.add_graph("g2", "ravi@zeta.example", ["admin@firm.com"], "Junk mail", folder="junkemail")
+        self.cloud.add_graph_event("ev1", timezone.now() + dt.timedelta(hours=2), 30, "Site visit", ["ravi@zeta.example"])
         counts = self.run_sync()
         self.assertEqual((counts["emails"], counts["meetings"]), (1, 1))
         item = Item.objects.get(kind="email")
@@ -416,14 +416,14 @@ class PasswordSourceTests(SyncBase):
         conn = self.conn()
         self.assertEqual(conn.calendar_cursor["calendars"][0]["name"], "Work")  # the task list was left out
         self.assertEqual(conn.mail_cursor["folders"]["INBOX"]["last"], 1)
-        self.imap.add("INBOX", mime("Ravi <ravi@zeta.in>", ["banker@icloud.com"], "=?utf-8?q?Caf=C3=A9_terms?=",
+        self.imap.add("INBOX", mime("Ravi <ravi@zeta.example>", ["banker@icloud.com"], "=?utf-8?q?Caf=C3=A9_terms?=",
                                     "Text body", attachments=[("Terms.pdf", "application/pdf", PDF)]))
-        self.imap.add("Sent Messages", mime("banker@icloud.com", ["priya@blume.vc"], "Teaser", "x"))
+        self.imap.add("Sent Messages", mime("banker@icloud.com", ["priya@northwind.example"], "Teaser", "x"))
         start = (timezone.now() + dt.timedelta(days=1)).astimezone(UTC)
         self.dav.events["/home/work/a.ics"] = "\r\n".join([
             "BEGIN:VCALENDAR", "BEGIN:VEVENT", "UID:abc-1", f"DTSTART:{start:%Y%m%dT%H%M%SZ}",
             f"DTEND:{start + dt.timedelta(hours=1):%Y%m%dT%H%M%SZ}", "SUMMARY:Lunch with Ravi",
-            "ORGANIZER;CN=Banker:mailto:banker@icloud.com", 'ATTENDEE;CN="Ravi Menon";PARTSTAT=ACCEPTED:mailto:ravi@zeta.in',
+            "ORGANIZER;CN=Banker:mailto:banker@icloud.com", 'ATTENDEE;CN="Ravi Menon";PARTSTAT=ACCEPTED:mailto:ravi@zeta.example',
             "DESCRIPTION:Discuss\\, the plan", "END:VEVENT", "END:VCALENDAR", ""])
         counts = self.run_sync()
         self.assertEqual((counts["emails"], counts["meetings"]), (2, 1), counts)
@@ -435,12 +435,12 @@ class PasswordSourceTests(SyncBase):
         # schedule on the CalDAV calendar
         r = self.client.post("/api/sync/schedule/", {"about": f"contacts:{self.ravi.pk}", "title": "Follow-up",
                                                      "start": (start + dt.timedelta(days=1)).isoformat(), "minutes": 30,
-                                                     "attendees": ["ravi@zeta.in"]}, format="json")
+                                                     "attendees": ["ravi@zeta.example"]}, format="json")
         self.assertEqual(r.status_code, 201, r.content)
         path, body = self.dav.puts[0]
         body = body.replace("\r\n ", "")  # unfold
         self.assertIn("ATTENDEE", body)
-        self.assertIn("mailto:ravi@zeta.in", body)
+        self.assertIn("mailto:ravi@zeta.example", body)
 
     def test_icloud_uses_fixed_servers(self):
         r = self.client.post("/api/sync/connect/icloud/", {"email": "banker@icloud.com", "password": "abcd-efgh-ijkl-mnop",
@@ -472,17 +472,17 @@ class IcsTests(APITestBase):
         from sync import ics
 
         text = ("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:1\r\nDTSTART;TZID=Asia/Kolkata:20261101T100000\r\n"
-                "DURATION:PT90M\r\nSUMMARY:Long \r\n title\r\nATTENDEE;CN=\"Menon, Ravi\";PARTSTAT=ACCEPTED:MAILTO:Ravi@Zeta.in\r\n"
+                "DURATION:PT90M\r\nSUMMARY:Long \r\n title\r\nATTENDEE;CN=\"Menon, Ravi\";PARTSTAT=ACCEPTED:MAILTO:Ravi@Zeta.example\r\n"
                 "BEGIN:VALARM\r\nTRIGGER:-PT15M\r\nDESCRIPTION:alarm\r\nEND:VALARM\r\nEND:VEVENT\r\n"
                 "BEGIN:VEVENT\r\nUID:2\r\nDTSTART;VALUE=DATE:20261102\r\nSUMMARY:Holiday\r\nEND:VEVENT\r\nEND:VCALENDAR")
         a, b = ics.parse(text)
         self.assertEqual(a.start, dt.datetime(2026, 11, 1, 4, 30, tzinfo=UTC))
         self.assertEqual(a.end - a.start, dt.timedelta(minutes=90))
         self.assertEqual(a.summary, "Long title")
-        self.assertEqual(a.attendees, [("Menon, Ravi", "ravi@zeta.in")])
+        self.assertEqual(a.attendees, [("Menon, Ravi", "ravi@zeta.example")])
         self.assertEqual(a.description, "")  # the alarm's description isn't the event's
         self.assertTrue(b.all_day)
-        uid, inv = ics.invitation(organizer=("Asha", "a@firm.com"), attendees=[("Ravi", "ravi@zeta.in")],
+        uid, inv = ics.invitation(organizer=("Asha", "a@firm.com"), attendees=[("Ravi", "ravi@zeta.example")],
                                   start=a.start, end=a.end, summary="Ünïcode, title; " + "long " * 30)
         back = ics.parse(inv)[0]
         self.assertEqual(back.summary, "Ünïcode, title; " + "long " * 30)
@@ -492,7 +492,7 @@ class IcsTests(APITestBase):
 class SchedulerTests(SyncBase):
     def test_tick_reads_due_connections(self):
         self.connect()
-        self.cloud.add_gmail("m1", mime("ravi@zeta.in", ["admin@firm.com"], "Hello", "x"))
+        self.cloud.add_gmail("m1", mime("ravi@zeta.example", ["admin@firm.com"], "Hello", "x"))
         self.assertEqual(engine.tick(), 1)
         self.assertEqual(engine.tick(), 0)  # read a moment ago
         self.assertEqual(Item.objects.count(), 1)

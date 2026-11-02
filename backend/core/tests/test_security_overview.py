@@ -79,7 +79,7 @@ class RestoreTestTests(APITestBase):
     def test_latest_backup_restores_into_a_separate_database(self):
         from investors.models import Investor
 
-        self.client.post("/api/m/investors/", {"firm_name": "Blume", "tags": ["a"]}, format="json")
+        self.client.post("/api/m/investors/", {"firm_name": "Northwind", "tags": ["a"]}, format="json")
         backups.create_backup("manual")
         import subprocess
         from pathlib import Path

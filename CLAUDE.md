@@ -7,7 +7,8 @@ Read this first in every session. The full product scope is in `docs/scope-v1.md
 - Shobhit (product owner, ex-investment banker) makes product decisions and answers questions. He does not write code.
 - Claude writes all code, tests it, and pushes to this repo. Each module is built on its own branch and Claude merges it into `main` once it's tested (Shobhit's call, 29 Sep 2026); no pull request review step.
 - Ask product questions **one at a time**. Technical choices are Claude's to make, but record them in this file.
-- The repo stays **private** until all six V1 modules are done.
+- The repo was private until V1 was done; Shobhit made it **public** on 2 Nov 2026. The landing page lives on the `gh-pages` branch (GitHub Pages, `rohanjit.github.io/dealflow-crm`).
+- Sample, demo and test data use **invented** firms, people, domains (`.example`) and phone numbers (`+91 90000 000NN`), never real firms (Shobhit, 2 Nov 2026).
 - Build order (finish each before the next): Foundation + Investors → Contacts → Outreach → Active Deals → Tasks & Reminders → Vault.
 - Anything outside V1 scope goes to the "Not in V1" list in `docs/scope-v1.md`. Don't build it without a decision.
 
