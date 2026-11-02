@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dealflow — the open-source CRM for dealmakers</title>
+<meta name="description" content="Dealflow is a free, open-source CRM for investment bankers. Track mandates from first approach to closing, on your own laptop or server.">
+<meta property="og:title" content="Dealflow — the open-source CRM for dealmakers">
+<meta property="og:description" content="Track mandates from first approach to closing. Self-hosted, so deal data stays with you.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='9' cy='16' r='7' fill='%23FF5FA2'/%3E%3Ccircle cx='23' cy='16' r='7' fill='%237B5CFF'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F4F5FF;
+  --ink:#1B1650;
+  --ink-soft:#4B4778;
+  --grape:#7B5CFF;
+  --bubble:#FF5FA2;
+  --tang:#FF8A1F;
+  --sun:#FFD23F;
+  --lagoon:#12C2D6;
+  --mint:#2FD58C;
+  --line:#DCDDF5;
+  --display:"Bricolage Grotesque",system-ui,sans-serif;
+  --body:"Instrument Sans",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:400 1.0625rem/1.6 var(--body);overflow-x:hidden}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--grape);outline-offset:3px;border-radius:6px}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+
+/* top bar */
+.bar{display:flex;align-items:center;justify-content:space-between;padding:22px 0}
+.mark{display:flex;align-items:center;gap:10px;font:700 1.35rem/1 var(--display);letter-spacing:-.02em;text-decoration:none}
+.mark svg{width:30px;height:30px}
+.gh{display:inline-flex;align-items:center;gap:8px;font:600 .95rem/1 var(--body);text-decoration:none;padding:10px 16px;border-radius:999px;border:2px solid var(--ink)}
+.gh:hover{background:var(--ink);color:var(--paper)}
+.gh svg{width:18px;height:18px;fill:currentColor}
+
+/* hero */
+.hero{padding:56px 0 40px;position:relative}
+.shapes{position:absolute;right:0;top:40px;width:min(38vw,440px);aspect-ratio:1;pointer-events:none}
+.shapes i{position:absolute;display:block}
+.shapes .q1{width:46%;height:46%;left:30%;top:4%;background:var(--bubble);border-radius:50%}
+.shapes .q2{width:40%;height:40%;left:52%;top:30%;background:var(--grape);border-radius:50%;mix-blend-mode:multiply}
+.shapes .q3{width:30%;height:30%;left:16%;top:42%;background:var(--sun);border-radius:0 50% 0 50%}
+.shapes .q4{width:18%;height:18%;left:74%;top:4%;background:var(--lagoon);border-radius:6px;transform:rotate(20deg)}
+.shapes .q5{width:22%;height:22%;left:44%;top:66%;background:var(--mint);border-radius:50% 50% 12% 12%}
+.shapes .q6{width:12%;height:12%;left:10%;top:16%;background:var(--tang);border-radius:50%}
+h1{font-family:var(--display);font-weight:800;font-variation-settings:"wdth" 82;font-size:clamp(3rem,9.2vw,8.4rem);line-height:.92;letter-spacing:-.032em;margin:0;max-width:11ch}
+.lede{font-size:clamp(1.1rem,1.6vw,1.3rem);color:var(--ink-soft);max-width:42ch;margin:28px 0 0}
+.ctas{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
+.btn{display:inline-flex;align-items:center;gap:10px;border:0;cursor:pointer;font:600 1rem/1 var(--body);padding:16px 24px;border-radius:999px;text-decoration:none;transition:transform .15s ease}
+.btn:active{transform:scale(.97)}
+.btn-main{background:var(--ink);color:#fff;box-shadow:5px 5px 0 var(--bubble)}
+.btn-main:hover{box-shadow:7px 7px 0 var(--grape)}
+.btn-main svg{width:20px;height:20px;fill:currentColor}
+.btn-copy{background:#fff;color:var(--ink);border:2px solid var(--line);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:500;font-size:.92rem}
+.btn-copy:hover,.btn-ghost:hover{border-color:var(--ink)}
+.btn-ghost{background:#fff;color:var(--ink);border:2px solid var(--line)}
+.btn-copy .tick{width:18px;height:18px;border-radius:50%;background:var(--mint);display:none}
+.btn-copy.done .tick{display:inline-block}
+
+/* pipeline — the one big moment */
+.pipe{margin:64px 0 0;position:relative}
+.track{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+.stage{position:relative;border-radius:22px;padding:18px 16px 92px;font:700 1.05rem/1.15 var(--display);color:var(--ink);min-height:180px;transition:transform .35s cubic-bezier(.3,1.6,.5,1)}
+.stage small{display:block;font:500 .8rem/1.3 var(--body);color:rgba(27,22,80,.66);margin-top:6px}
+.s1{background:#E7E1FF}.s2{background:#FFE0EE}.s3{background:#FFE6CF}
+.s4{background:#FFF3C4}.s5{background:#D3F5F8}.s6{background:#D2F7E5}
+.stage.pop{transform:translateY(-8px) rotate(-1.5deg)}
+.deal{position:absolute;left:0;bottom:16px;width:calc((100% - 50px)/6 - 20px);margin-left:10px;background:#fff;border-radius:16px;padding:12px 14px;box-shadow:0 2px 0 rgba(27,22,80,.08),0 10px 24px -10px rgba(27,22,80,.35);font-size:.85rem;line-height:1.35;transition:transform .55s cubic-bezier(.5,0,.25,1)}
+.deal b{display:block;font:700 .98rem/1.2 var(--display)}
+.deal .amt{display:inline-block;margin-top:6px;padding:2px 8px;border-radius:999px;background:var(--sun);font-weight:600;font-size:.78rem}
+.confetti{position:absolute;inset:0;pointer-events:none;overflow:visible}
+.confetti i{position:absolute;width:10px;height:10px;border-radius:3px;opacity:0}
+.note{margin:18px 0 0;color:var(--ink-soft);font-size:.95rem}
+
+/* modules */
+.modules{padding:120px 0 40px}
+h2{font-family:var(--display);font-weight:800;font-variation-settings:"wdth" 85;font-size:clamp(2.2rem,5vw,3.8rem);line-height:.98;letter-spacing:-.035em;margin:0 0 48px;max-width:16ch}
+.mods{list-style:none;margin:0;padding:0;border-top:2px solid var(--ink)}
+.mod{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:24px;align-items:baseline;padding:26px 0;border-bottom:1px solid var(--line)}
+.mod h3{margin:0;font:800 clamp(1.8rem,4.2vw,3.2rem)/1 var(--display);letter-spacing:-.03em;display:flex;align-items:center;gap:16px}
+.mod h3 span{flex:none;width:.62em;height:.62em;border-radius:50%}
+.mod:nth-child(2) h3 span{border-radius:30%}
+.mod:nth-child(3) h3 span{border-radius:50% 50% 50% 0}
+.mod:nth-child(4) h3 span{border-radius:0 50% 0 50%}
+.mod:nth-child(5) h3 span{border-radius:6px;transform:rotate(45deg) scale(.85)}
+.mod:nth-child(6) h3 span{border-radius:50% 50% 12% 12%}
+.mod p{margin:0;color:var(--ink-soft);max-width:46ch}
+
+/* your server */
+.own{margin:100px 0 0;background:var(--ink);color:#fff;border-radius:36px;padding:clamp(32px,6vw,72px);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:48px;align-items:center;position:relative;overflow:hidden}
+.own h2{color:#fff;margin-bottom:20px}
+.own p{color:#CFCBF2;margin:0 0 14px;max-width:44ch}
+.own ul{margin:18px 0 0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:8px}
+.own li{padding:7px 14px;border-radius:999px;font-weight:600;font-size:.88rem;color:var(--ink)}
+.own li:nth-child(1){background:var(--sun)}.own li:nth-child(2){background:var(--bubble)}
+.own li:nth-child(3){background:var(--lagoon)}.own li:nth-child(4){background:var(--mint)}
+.own li:nth-child(5){background:#B9A8FF}
+.term{background:#120E3A;border-radius:20px;padding:22px 22px 26px;font:500 .84rem/1.9 ui-monospace,SFMono-Regular,Menlo,monospace;color:#E9E6FF;overflow-x:auto;position:relative;z-index:1}
+.term .dots{display:flex;gap:7px;margin-bottom:14px}
+.term .dots i{width:11px;height:11px;border-radius:50%;background:var(--bubble)}
+.term .dots i:nth-child(2){background:var(--sun)}.term .dots i:nth-child(3){background:var(--mint)}
+.term code{white-space:pre;display:block}
+.term .c{color:#8C86C7}
+.own>div{position:relative;z-index:1}
+.blob{position:absolute;z-index:0;border-radius:50%;filter:blur(2px);opacity:.9}
+.blob.a{width:220px;height:220px;background:var(--grape);right:-70px;top:-80px}
+.blob.b{width:120px;height:120px;background:var(--tang);left:40%;bottom:-60px}
+
+/* closing */
+.end{padding:120px 0 60px;text-align:center}
+.end h2{margin:0 auto 18px;max-width:18ch}
+.end p{color:var(--ink-soft);margin:0 auto 32px;max-width:44ch}
+.end .ctas{justify-content:center}
+footer{padding:28px 0 40px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;color:var(--ink-soft);font-size:.9rem}
+
+@media (max-width:860px){
+  .track{grid-template-columns:repeat(3,1fr)}
+  .stage{min-height:120px;padding-bottom:18px}
+  .deal{display:none}
+  .mod{grid-template-columns:1fr;gap:8px}
+  .own{grid-template-columns:1fr}
+  .shapes{display:none}
+  .term{font-size:.74rem}
+}
+@media (max-width:480px){
+  .track{grid-template-columns:repeat(2,1fr)}
+  .wrap{padding:0 16px}
+  .hero{padding-top:32px}
+}
+@media (prefers-reduced-motion:reduce){
+  *{transition:none!important;animation:none!important}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="bar">
+    <a class="mark" href="#top" aria-label="Dealflow home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="11" cy="16" r="9" fill="#FF5FA2"/><circle cx="21" cy="16" r="9" fill="#7B5CFF" style="mix-blend-mode:multiply"/></svg>
+      dealflow
+    </a>
+    <a class="gh" href="https://github.com/Rohanjit/dealflow-crm">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="shapes" aria-hidden="true"><i class="q1"></i><i class="q2"></i><i class="q3"></i><i class="q4"></i><i class="q5"></i><i class="q6"></i></div>
+      <h1>Every deal, from hello to closed.</h1>
+      <p class="lede">Dealflow is a free, open-source CRM for investment bankers. It runs on your own laptop or server, so confidential deal data never leaves your hands.</p>
+      <div class="ctas">
+        <a class="btn btn-main" href="https://github.com/Rohanjit/dealflow-crm">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 .25a.75.75 0 01.67.42l1.88 3.8 4.2.61a.75.75 0 01.41 1.28l-3.04 2.96.72 4.19a.75.75 0 01-1.09.79L8 12.33l-3.75 1.97a.75.75 0 01-1.09-.79l.72-4.19L.84 6.36a.75.75 0 01.41-1.28l4.2-.61L7.33.67A.75.75 0 018 .25z"/></svg>
+          Get it on GitHub
+        </a>
+        <button class="btn btn-copy" type="button" data-copy="git clone https://github.com/Rohanjit/dealflow-crm.git &amp;&amp; cd dealflow-crm &amp;&amp; docker compose up -d">
+          <span class="tick" aria-hidden="true"></span><span class="lbl">Copy install command</span>
+        </button>
+      </div>
+
+      <div class="pipe" aria-label="A deal moving through the Dealflow pipeline">
+        <ol class="track">
+          <li class="stage s1">Identified<small>A company worth approaching</small></li>
+          <li class="stage s2">Meeting held<small>First conversation done</small></li>
+          <li class="stage s3">Mandate won<small>Moves to Active Deals</small></li>
+          <li class="stage s4">Investor outreach<small>Teasers and NDAs out</small></li>
+          <li class="stage s5">Term sheet<small>Offers on the table</small></li>
+          <li class="stage s6">Closed<small>Fee earned</small></li>
+        </ol>
+        <div class="deal" aria-hidden="true"><b>Project Kestrel</b>Series B, healthtech<br><span class="amt">₹120 Cr raise</span></div>
+        <div class="confetti" aria-hidden="true"></div>
+      </div>
+      <p class="note">Two pipelines in one place: outreach to win the mandate, then execution all the way to closing.</p>
+    </section>
+
+    <section class="modules" aria-labelledby="mods-h">
+      <h2 id="mods-h">Six modules. Everything a deal team touches.</h2>
+      <ul class="mods">
+        <li class="mod"><h3><span style="background:var(--grape)"></span>Investors</h3><p>Funds, family offices and strategics with their sectors, ticket sizes, geography and who owns the relationship.</p></li>
+        <li class="mod"><h3><span style="background:var(--bubble)"></span>Contacts</h3><p>People on the investor side and the company side, in one list, linked to their firm.</p></li>
+        <li class="mod"><h3><span style="background:var(--tang)"></span>Outreach</h3><p>A drag-and-drop board for winning mandates. Each company once, every approach logged.</p></li>
+        <li class="mod"><h3><span style="background:var(--sun)"></span>Active Deals</h3><p>Deal team, fees and a per-deal investor tracker with funnel counts and suggested investors.</p></li>
+        <li class="mod"><h3><span style="background:var(--lagoon)"></span>Tasks</h3><p>Follow-ups assigned to people, linked to any record, with in-app reminders.</p></li>
+        <li class="mod"><h3><span style="background:var(--mint)"></span>Vault</h3><p>NDAs, teasers and term sheets stored on your own server, behind a separate PIN.</p></li>
+      </ul>
+    </section>
+
+    <section class="own" aria-labelledby="own-h">
+      <span class="blob a" aria-hidden="true"></span><span class="blob b" aria-hidden="true"></span>
+      <div>
+        <h2 id="own-h">Your data, on your machine.</h2>
+        <p>Dealflow isn't a hosted service. Install it with Docker on a laptop for yourself, or on your firm's server for the whole team.</p>
+        <p>Data is encrypted at rest, uploads are virus-scanned, and backups run every day.</p>
+        <ul>
+          <li>MIT licensed</li><li>Role-based access</li><li>Excel import and export</li><li>Multi-currency</li><li>Daily backups</li>
+        </ul>
+      </div>
+      <div class="term" role="region" aria-label="Install commands">
+        <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
+<code><span class="c"># needs Docker with Compose</span>
+git clone https://github.com/Rohanjit/dealflow-crm.git
+cd dealflow-crm
+docker compose up -d
+
+<span class="c"># then open http://localhost:8000</span></code>
+      </div>
+    </section>
+
+    <section class="end">
+      <h2>Free to use. Open to improve.</h2>
+      <p>Star the repo to follow along, or open an issue with what your deal team needs next.</p>
+      <div class="ctas">
+        <a class="btn btn-main" href="https://github.com/Rohanjit/dealflow-crm">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 .25a.75.75 0 01.67.42l1.88 3.8 4.2.61a.75.75 0 01.41 1.28l-3.04 2.96.72 4.19a.75.75 0 01-1.09.79L8 12.33l-3.75 1.97a.75.75 0 01-1.09-.79l.72-4.19L.84 6.36a.75.75 0 01.41-1.28l4.2-.61L7.33.67A.75.75 0 018 .25z"/></svg>
+          Star on GitHub
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/Rohanjit/dealflow-crm/issues/new">Suggest a feature</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Dealflow is open source under the MIT licence.</span>
+    <a href="https://github.com/Rohanjit/dealflow-crm">github.com/Rohanjit/dealflow-crm</a>
+  </footer>
+</div>
+
+<script>
+(function(){
+  // copy button
+  document.querySelectorAll('[data-copy]').forEach(function(b){
+    b.addEventListener('click',function(){
+      var t=b.getAttribute('data-copy'),l=b.querySelector('.lbl');
+      var done=function(){b.classList.add('done');l.textContent='Copied';setTimeout(function(){b.classList.remove('done');l.textContent='Copy install command'},2200)};
+      if(navigator.clipboard){navigator.clipboard.writeText(t).then(done,function(){l.textContent=t})}else{l.textContent=t}
+    });
+  });
+
+  // the one moment: a deal hops through every stage and lands in Closed
+  var pipe=document.querySelector('.pipe'),deal=pipe.querySelector('.deal'),stages=pipe.querySelectorAll('.stage');
+  var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function step(i){ return (stages[0].offsetWidth+10)*i; }
+  function land(){
+    var s=stages[5];s.classList.add('pop');setTimeout(function(){s.classList.remove('pop')},450);
+    var box=pipe.querySelector('.confetti'),cols=['#FF5FA2','#7B5CFF','#FFD23F','#12C2D6','#2FD58C','#FF8A1F'];
+    var x=s.offsetLeft+s.offsetWidth/2,y=s.offsetTop+s.offsetHeight-60;
+    for(var k=0;k<34;k++){
+      var c=document.createElement('i');c.style.background=cols[k%6];c.style.left=x+'px';c.style.top=y+'px';box.appendChild(c);
+      var a=Math.random()*Math.PI*2,d=60+Math.random()*120;
+      c.animate([{transform:'translate(0,0) rotate(0)',opacity:1},{transform:'translate('+Math.cos(a)*d+'px,'+(Math.sin(a)*d-80)+'px) rotate('+(Math.random()*540)+'deg)',opacity:0}],{duration:1100+Math.random()*500,easing:'cubic-bezier(.2,.7,.3,1)',fill:'forwards'});
+    }
+  }
+  function run(){
+    if(getComputedStyle(deal).display==='none')return;
+    if(reduce){deal.style.transform='translateX('+step(5)+'px)';return;}
+    var i=0;deal.style.transform='translateX(0)';
+    var t=setInterval(function(){
+      i++;deal.style.transform='translateX('+step(i)+'px)';
+      stages[i].classList.add('pop');setTimeout(function(j){stages[j].classList.remove('pop')}.bind(null,i),350);
+      if(i===5){clearInterval(t);setTimeout(land,500);}
+    },700);
+  }
+  window.addEventListener('load',function(){setTimeout(run,600)});
+  window.addEventListener('resize',function(){if(getComputedStyle(deal).display!=='none')deal.style.transform='translateX('+step(5)+'px)'});
+  // replay on click
+  pipe.addEventListener('click',function(){if(!reduce)run()});
+})();
+</script>
+</body>
+</html>
